@@ -1,0 +1,19 @@
+name: soliplex_frontend
+description: Modular Flutter frontend framework for Soliplex
+version: 0.1.0
+
+environment:
+  sdk: ^3.6.0
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^3.1.0
+  go_router: ^17.1.0
+  signals: ^6.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
