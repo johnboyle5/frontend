@@ -87,32 +87,12 @@ ShellConfig standard() {
 
 For structural navigation (bottom nav, drawers), a navigation module accepts
 child `ModuleContribution` objects (not just routes) so their overrides are
-preserved. Feature modules stay ignorant of the navigation shell:
+preserved. Feature modules stay ignorant of the navigation shell.
 
-```dart
-ShellConfig standardWithNav() {
-  final auth = UnauthenticatedState();
-  final lobby = lobbyModule(auth: auth);
-  final chat = chatModule(auth: auth);
-  return ShellConfig(
-    appName: 'Soliplex',
-    theme: ThemeData.light(),
-    modules: [
-      authModule(auth: auth),
-      shellNavigationModule(children: [lobby, chat]),
-    ],
-  );
-}
-```
-
-`runSoliplexShell(config)` validates routes (recursive tree walk: no duplicate
-paths — parameterized segments normalized before comparison so `/:id` and
-`/:name` at the same position are duplicates; initial route exists when routes
-are non-empty; no path shadowing — a parameterized sibling route must not
-appear before a literal sibling route), builds a GoRouter, collects all
-overrides into a single root `ProviderScope`, and renders
-`MaterialApp.router`. Syntax validation (leading slashes, empty paths) is left
-to GoRouter itself.
+`runSoliplexShell(config)` validates routes (see Step 2 for details), builds a
+GoRouter, collects all overrides into a single root `ProviderScope`, and
+renders `MaterialApp.router`. Syntax validation (leading slashes, empty paths)
+is left to GoRouter itself.
 
 To disable a module, remove its call. Runtime feature flags (A/B, remote
 config) can be added to flavor functions later.
@@ -147,34 +127,22 @@ soliplex_agent (signals_core)  →  Module functions (constructor injection)  �
 - Widgets use `ref.watch` to obtain service instances, then `signal.watch(context)` to observe reactive state within them. Side effects use Signal `effect()` or `SignalsMixin`, not `ref.listen`
 - All wiring is explicit at the call site; missing deps are compile errors
 
-### Network Observability (module-level, not shell)
+### Network Observability
 
-The shell itself has no network layer. The agent module (future work) uses
-`soliplex_agent`'s `HttpObserver` / `ObservableHttpClient` for observability.
-All REST and SSE traffic flows through this stack with automatic auth-token
-redaction. Observer callbacks: `onRequest`, `onResponse`, `onError`,
-`onStreamStart`, `onStreamEnd`.
-
-```text
-DartHttpClient → ObservableHttpClient → AuthenticatedHttpClient → ...
-                        │
-                        ├── Inspector module (HttpObserver → UI panel)
-                        └── Other HttpObservers (Sentry, logging, etc.)
-```
-
-Modules implement `HttpObserver` and register with the agent's HTTP stack
-directly — no shell-level abstraction.
+Network observability comes from `soliplex_agent`'s `HttpObserver`
+infrastructure, integrated via the agent module (future work). The shell
+itself has no network layer.
 
 ## Key Design Decisions
 
 1. **Constructor injection** — explicit wiring, compile-time dependency checking
 2. **Modules are cohesive units** — routes + overrides in one `ModuleContribution`; no base class, no registry
 3. **Riverpod as widget-tree DI only** — overrides collected into single root `ProviderScope`
-4. **Signals for reactivity** — `soliplex_agent` already uses them; UI bridges via `signals` package
+4. **Signals for reactivity** — `soliplex_agent` uses `signals_core`; Flutter UI bridges via `signals` package
 5. **Interfaces, not implementations** — `AuthState` is abstract; flavors create concrete instances
-6. **Composition over configuration** — modules included/excluded by presence in flavor functions
-7. **Shell has no soliplex_agent dependency** — agent integration comes via a module
-8. **All network activity observable** — via `soliplex_agent`'s `HttpObserver` infrastructure
+6. **Providers co-located with their type** — `authStateProvider` lives alongside `AuthState` in `interfaces/`; modules import it directly. Constructor injection at the flavor level is the single cross-module dependency channel; providers deliver injected values to widgets
+7. **Composition over configuration** — modules included/excluded by presence in flavor functions
+8. **Shell has no soliplex_agent dependency** — agent integration comes via a module
 9. **App + library in one repo** — unified `ai.soliplex.client` identifiers for seamless replacement
 
 ## Package Structure
@@ -190,11 +158,23 @@ lib/
 │   │   └── router.dart                 ← route validation, GoRouter assembly
 │   │
 │   ├── interfaces/
-│   │   └── auth.dart                   ← AuthState abstract class
+│   │   └── auth_state.dart             ← AuthState abstract class + authStateProvider
+│   │
+│   ├── modules/
+│   │   ├── auth/
+│   │   │   └── auth_module.dart        ← authModule() function
+│   │   ├── lobby/                      ← future (shown for illustration)
+│   │   │   └── lobby_module.dart
+│   │   └── chat/                       ← future (shown for illustration)
+│   │       └── chat_module.dart
 │   │
 │   └── flavors/
-│       └── standard.dart               ← standard flavor function
+│       └── standard.dart               ← standard flavor + UnauthenticatedState
 ```
+
+`interfaces/` holds shared abstract types and their providers that cross module
+boundaries. `modules/` holds feature modules. `soliplex_agent` types flow
+through constructor injection without wrapper interfaces.
 
 ## Implementation Steps
 
@@ -223,14 +203,15 @@ lib/
 - [ ] Validate routes (throw `ArgumentError` on failure) → build GoRouter → ProviderScope with overrides → MaterialApp.router
 - [ ] Tests: boot with empty config, boot with test fixture modules, override collection, override precedence (last module wins)
 
-### Step 4: Interfaces
+### Step 4: Interfaces & Auth Module
 
-- [ ] `AuthState` abstract class
+- [ ] `AuthState` abstract class + `authStateProvider` in `interfaces/auth_state.dart`
+- [ ] `authModule()` function in `modules/auth/auth_module.dart`
 
 ### Step 5: Barrel Export, Flavor & App Entry Point
 
-- [ ] Fill `soliplex_frontend.dart` with public exports: `ShellConfig`, `ModuleContribution`, `runSoliplexShell`, `AuthState`. Flavors and concrete implementations stay private (`src/`)
-- [ ] `UnauthenticatedState` — concrete `AuthState` impl, flavor-private
+- [ ] Fill `soliplex_frontend.dart` with public exports: `ShellConfig`, `ModuleContribution`, `runSoliplexShell`, `AuthState`, `authStateProvider`. Flavors and concrete implementations stay private (`src/`)
+- [ ] `UnauthenticatedState` — concrete `AuthState` impl, flavor-private in `flavors/standard.dart`
 - [ ] `standard()` flavor function (empty module list initially; design examples show eventual shape)
 - [ ] Wire `main.dart` to use `runSoliplexShell` with standard flavor
 
