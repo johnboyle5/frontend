@@ -21,6 +21,9 @@ Prefer Dart MCP tools over shell commands. All tools take `root` as `file:///abs
 | Check for outdated deps | `mcp__dart__pub` (command: `outdated`) | `flutter pub outdated` |
 | Format code | `mcp__dart__dart_format` | `dart format .` |
 | Apply fixes | `mcp__dart__dart_fix` | `dart fix --apply` |
+| Lint markdown (must pass) | — | `pymarkdown scan --recurse --respect-gitignore . && { [ ! -d scratchpad ] \|\| pymarkdown scan --recurse scratchpad/; }` |
+
+**Markdown lint is mandatory.** Always run the markdown linter after creating or editing any `.md` file. Info-level issues are fatal — all diagnostics must be resolved before work is considered complete.
 
 ## Architecture
 
