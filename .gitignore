@@ -8,7 +8,6 @@
 .buildlog/
 .history
 .svn/
-migrate_working_dir/
 
 # IntelliJ related
 *.iml
@@ -20,7 +19,7 @@ migrate_working_dir/
 .classpath
 .project
 .settings/
-.vscode/
+.vscode/*
 .ccls-cache
 
 # Flutter/Dart/Pub related
@@ -35,7 +34,6 @@ migrate_working_dir/
 **/generated_plugin_registrant.dart
 /build/
 /coverage/
-/pubspec.lock
 
 # Android related
 **/android/**/gradle-wrapper.jar
@@ -114,3 +112,11 @@ app.*.symbols
 !**/ios/**/default.mode2v3
 !**/ios/**/default.pbxuser
 !**/ios/**/default.perspectivev3
+!.vscode/settings.json
+
+# Scratchpad
+scratchpad/*
+
+# Claude Code local config
+.claude/*
+!.claude/skills/
