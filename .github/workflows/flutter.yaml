@@ -43,6 +43,9 @@ jobs:
       - name: Analyze code
         run: flutter analyze --fatal-infos
 
+      - name: Check documentation
+        run: dart doc --dry-run
+
       - name: Lint markdown
         run: |
           pip install pymarkdownlnt==0.9.35
@@ -73,6 +76,24 @@ jobs:
           SEED="${{ steps.seed.outputs.value }}"
           echo "::error::Tests failed with ordering seed: $SEED"
           echo "Reproduce with: --test-randomize-ordering-seed=$SEED"
+
+      - name: Check coverage threshold
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lcov
+          COVERAGE=$(lcov --summary coverage/lcov.info 2>&1 \
+            | grep "lines" | sed 's/.*: \([0-9.]*\)%.*/\1/')
+          echo "Coverage: ${COVERAGE}%"
+          if [ -z "$COVERAGE" ]; then
+            echo "::error::Could not parse coverage from lcov.info"
+            exit 1
+          fi
+          COVERAGE_INT=${COVERAGE%.*}
+          if [ "$COVERAGE_INT" -lt 80 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below minimum 80%"
+            exit 1
+          fi
+          echo "::notice::Coverage check passed with ${COVERAGE}%"
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v6
