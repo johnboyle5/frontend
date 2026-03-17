@@ -207,7 +207,7 @@ through constructor injection without wrapper interfaces.
 
 - [ ] `runSoliplexShell()` and `SoliplexShell` widget
 - [ ] Validate routes (throw `ArgumentError` on failure) → build GoRouter → ProviderScope with overrides → MaterialApp.router
-- [ ] Tests: boot with empty config, boot with test fixture modules, override collection, override precedence (last module wins)
+- [ ] Tests: empty config throws `ArgumentError`, override composition (overrides from multiple modules compose into a single ProviderScope; each provider may only be overridden once across all modules), redirect composition (first non-null wins)
 
 ### Step 4: Interfaces & Auth Module
 
@@ -247,7 +247,7 @@ After each step:
 
 After all steps:
 
-1. App boots cleanly (empty module list is a valid state)
+1. App boots cleanly (at least one module with routes is required)
 2. Can be imported as a library from a separate Flutter project
 3. Test suite verifies composition: multi-module merging, module removal,
    route validation — using test fixtures in `test/`

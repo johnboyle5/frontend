@@ -1,4 +1,7 @@
+import 'package:flutter/widgets.dart' show BuildContext;
 import 'package:go_router/go_router.dart';
+
+import 'shell_config.dart';
 
 /// Validates route configuration and returns a list of error descriptions.
 /// An empty list means the configuration is valid.
@@ -45,6 +48,10 @@ List<String> validateRoutes({
     }
   }
 
+  if (routes.isEmpty) {
+    return ['Configuration must define at least one route'];
+  }
+
   walkRoutes(routes, '');
 
   // Check for duplicate paths
@@ -55,15 +62,12 @@ List<String> validateRoutes({
     }
   }
 
-  // Check initial route exists when routes are non-empty
-  if (routes.isNotEmpty) {
-    final normalizedInitial = _normalizePath(initialRoute);
-    if (!paths.contains(normalizedInitial)) {
-      errors.add(
-        'Initial route "$initialRoute" does not match any defined route. '
-        'Available: ${paths.join(', ')}',
-      );
-    }
+  final normalizedInitial = _normalizePath(initialRoute);
+  if (!paths.contains(normalizedInitial)) {
+    errors.add(
+      'Initial route "$initialRoute" does not match any defined route. '
+      'Available: ${paths.join(', ')}',
+    );
   }
 
   return errors;
@@ -89,3 +93,25 @@ String _normalizePath(String path) {
 }
 
 bool _isParameterized(String segment) => segment.startsWith(':');
+
+/// Creates a [GoRouter] from a validated [ShellConfig].
+///
+/// All module redirects collapse into a single GoRouter redirect slot —
+/// they are evaluated in module order and the first non-null result wins.
+///
+/// Expects routes to be non-empty (enforced by [validateRoutes]).
+GoRouter buildRouter(ShellConfig config) {
+  return GoRouter(
+    initialLocation: config.initialRoute,
+    routes: config.routes,
+    redirect: config.redirects.isEmpty
+        ? null
+        : (BuildContext context, GoRouterState state) async {
+            for (final redirect in config.redirects) {
+              final result = await redirect(context, state);
+              if (result != null) return result;
+            }
+            return null;
+          },
+  );
+}

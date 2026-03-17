@@ -18,10 +18,11 @@ void main() {
       expect(errors, isEmpty);
     });
 
-    test('returns empty list for empty routes', () {
+    test('returns error for empty routes', () {
       final errors = validateRoutes(routes: [], initialRoute: '/');
 
-      expect(errors, isEmpty);
+      expect(errors, hasLength(1));
+      expect(errors.first, contains('at least one route'));
     });
 
     test('detects duplicate paths', () {
@@ -54,10 +55,11 @@ void main() {
       expect(errors.first, contains('Initial route'));
     });
 
-    test('skips initial route check when routes are empty', () {
+    test('returns only empty-routes error when routes are empty', () {
       final errors = validateRoutes(routes: [], initialRoute: '/missing');
 
-      expect(errors, isEmpty);
+      expect(errors, hasLength(1));
+      expect(errors.first, contains('at least one route'));
     });
 
     test('validates nested routes with full absolute paths', () {
