@@ -6,14 +6,14 @@ on:
     paths-ignore:
       - "docs/**"
       - "**.md"
-      - ".pymarkdown"
+      - ".markdownlint.json"
       - "LICENSE"
   pull_request:
     branches: [main, 'feat/**', 'fix/**', 'refactor/**', 'chore/**']
     paths-ignore:
       - "docs/**"
       - "**.md"
-      - ".pymarkdown"
+      - ".markdownlint.json"
       - "LICENSE"
   workflow_dispatch:
 
@@ -47,9 +47,7 @@ jobs:
         run: dart doc --dry-run
 
       - name: Lint markdown
-        run: |
-          pip install pymarkdownlnt==0.9.35
-          pymarkdown scan --recurse --respect-gitignore .
+        run: npx markdownlint-cli2 "**/*.md" "#node_modules"
 
   test:
     runs-on: ubuntu-latest

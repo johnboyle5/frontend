@@ -163,7 +163,7 @@ cd macos && pod deintegrate && pod install && cd ..
 ## Related Files
 
 | File | Purpose |
-|------|---------|
+| ---- | ------- |
 | `macos/Runner/Configs/Local.xcconfig.template` | Template for macOS signing |
 | `macos/Runner/Configs/Local.xcconfig` | Your macOS signing config (gitignored) |
 | `ios/Runner/Configs/Local.xcconfig.template` | Template for iOS signing |

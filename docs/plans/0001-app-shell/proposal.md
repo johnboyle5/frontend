@@ -1,8 +1,8 @@
 # Proposal: Soliplex Frontend Shell — Modular Architecture
 
-**Status:** Proposed
+**Status:** Implemented
 **Date:** 2026-03-11
-**Branch:** `feat/new_frontend`
+**Branch:** `feat/shell-core`
 
 ## Context
 
@@ -18,18 +18,21 @@ functions. It serves as both a **runnable app** and an **importable library**.
 ### Module Composition
 
 Each module is a plain Dart function that receives dependencies via
-**constructor injection** and returns a `ModuleContribution` (routes +
-Riverpod overrides). The compiler enforces dependency order — you can't call
-a module function without providing its deps.
+**constructor injection** and returns a `ModuleContribution` (routes,
+Riverpod overrides, and an optional redirect). The compiler enforces
+dependency order — you can't call a module function without providing its
+deps.
 
 ```dart
 class ModuleContribution {
-  final List<RouteBase> routes;    // unmodifiable
-  final List<Override> overrides;  // unmodifiable
+  final List<RouteBase> routes;       // unmodifiable
+  final List<Override> overrides;     // unmodifiable
+  final GoRouterRedirect? redirect;   // optional
 
   ModuleContribution({
     List<RouteBase> routes = const [],
     List<Override> overrides = const [],
+    this.redirect,
   })  : routes = List.unmodifiable(routes),
         overrides = List.unmodifiable(overrides);
 }
@@ -37,9 +40,6 @@ class ModuleContribution {
 
 ```dart
 ModuleContribution authModule({required AuthState auth}) => ModuleContribution(
-  routes: [
-    GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-  ],
   overrides: [
     authStateProvider.overrideWithValue(auth),
   ],
@@ -64,6 +64,8 @@ class ShellConfig {
 
   List<RouteBase> get routes => modules.expand((m) => m.routes).toList();
   List<Override> get overrides => modules.expand((m) => m.overrides).toList();
+  List<GoRouterRedirect> get redirects =>
+      modules.map((m) => m.redirect).whereType<GoRouterRedirect>().toList();
 }
 ```
 
@@ -72,7 +74,7 @@ a module is one line:
 
 ```dart
 ShellConfig standard() {
-  final auth = UnauthenticatedState();
+  final auth = Unauthenticated();
   return ShellConfig(
     appName: 'Soliplex',
     theme: ThemeData.light(),  // plain ThemeData; no custom palette wrapper yet
@@ -90,9 +92,10 @@ child `ModuleContribution` objects (not just routes) so their overrides are
 preserved. Feature modules stay ignorant of the navigation shell.
 
 `runSoliplexShell(config)` validates routes (see Step 2 for details), builds a
-GoRouter, collects all overrides into a single root `ProviderScope`, and
-renders `MaterialApp.router`. Syntax validation (leading slashes, empty paths)
-is left to GoRouter itself.
+GoRouter with composed redirects (module order determines priority; first
+non-null result wins), collects all overrides into a single root
+`ProviderScope`, and renders `MaterialApp.router`. Syntax validation (leading
+slashes, empty paths) is left to GoRouter itself.
 
 To disable a module, remove its call. Runtime feature flags (A/B, remote
 config) can be added to flavor functions later.
@@ -136,10 +139,10 @@ itself has no network layer.
 ## Key Design Decisions
 
 1. **Constructor injection** — explicit wiring, compile-time dependency checking
-2. **Modules are cohesive units** — routes + overrides in one `ModuleContribution`; no base class, no registry
+2. **Modules are cohesive units** — routes, overrides, and an optional redirect in one `ModuleContribution`; no base class, no registry
 3. **Riverpod as widget-tree DI only** — overrides collected into single root `ProviderScope`
 4. **Signals for reactivity** — `soliplex_agent` uses `signals_core`; Flutter UI bridges via `signals` package
-5. **Interfaces, not implementations** — `AuthState` is abstract; flavors create concrete instances
+5. **Interfaces, not implementations** — `AuthState` is sealed; flavors create concrete instances
 6. **Providers co-located with their type** — `authStateProvider` lives alongside `AuthState` in `interfaces/`; modules import it directly. Constructor injection at the flavor level is the single cross-module dependency channel; providers deliver injected values to widgets
 7. **Composition over configuration** — modules included/excluded by presence in flavor functions
 8. **Shell has no soliplex_agent dependency** — agent integration comes via a module
@@ -158,7 +161,7 @@ lib/
 │   │   └── router.dart                 ← route validation, GoRouter assembly
 │   │
 │   ├── interfaces/
-│   │   └── auth_state.dart             ← AuthState abstract class + authStateProvider
+│   │   └── auth_state.dart             ← AuthState sealed class + authStateProvider
 │   │
 │   ├── modules/
 │   │   ├── auth/
@@ -169,10 +172,10 @@ lib/
 │   │       └── chat_module.dart
 │   │
 │   └── flavors/
-│       └── standard.dart               ← standard flavor + UnauthenticatedState
+│       └── standard.dart               ← standard flavor
 ```
 
-`interfaces/` holds shared abstract types and their providers that cross module
+`interfaces/` holds shared sealed types and their providers that cross module
 boundaries. `modules/` holds feature modules. `soliplex_agent` types flow
 through constructor injection without wrapper interfaces.
 
@@ -191,29 +194,28 @@ through constructor injection without wrapper interfaces.
 
 ### Step 2: Core — ModuleContribution, ShellConfig & Route Validation (TDD)
 
-- [ ] `ModuleContribution` data class (`routes`, `overrides`)
-- [ ] `ShellConfig` immutable data class (`appName`, `theme`, `modules`, `initialRoute`)
-- [ ] `ShellConfig.routes` / `ShellConfig.overrides` getters that flatten modules
-- [ ] Route validation pure function (recursive tree walk: no duplicate paths with parameterized segment normalization, initial route exists when routes are non-empty, no path shadowing — parameterized sibling before literal sibling is an error); returns list of error descriptions (empty = valid). Note: `RouteBase` is abstract — the walk must type-check `GoRoute` (has `path`), `ShellRoute` (no path, recurse into `routes`), and `StatefulShellRoute` (no path, iterate `branches` then recurse)
-- [ ] Tests: valid config, empty modules, duplicate paths (exact and normalized parameterized), missing initial route, nested route validation, path shadowing detection, module flattening
+- [x] `ModuleContribution` data class (`routes`, `overrides`, `redirect`)
+- [x] `ShellConfig` immutable data class (`appName`, `theme`, `modules`, `initialRoute`)
+- [x] `ShellConfig.routes` / `ShellConfig.overrides` / `ShellConfig.redirects` getters that flatten modules
+- [x] Route validation pure function (recursive tree walk: no duplicate paths with parameterized segment normalization, initial route exists when routes are non-empty, no path shadowing — parameterized sibling before literal sibling is an error); returns list of error descriptions (empty = valid). Note: `RouteBase` is abstract — the walk must type-check `GoRoute` (has `path`), `ShellRoute` (no path, recurse into `routes`), and `StatefulShellRoute` (no path, iterate `branches` then recurse)
+- [x] Tests: valid config, empty modules, duplicate paths (exact and normalized parameterized), missing initial route, nested route validation, path shadowing detection, module flattening
 
 ### Step 3: Core — Shell Bootstrap (TDD)
 
-- [ ] `runSoliplexShell()` and `SoliplexShell` widget
-- [ ] Validate routes (throw `ArgumentError` on failure) → build GoRouter → ProviderScope with overrides → MaterialApp.router
-- [ ] Tests: boot with empty config, boot with test fixture modules, override collection, override precedence (last module wins)
+- [x] `runSoliplexShell()` and `SoliplexShell` widget
+- [x] Validate routes (throw `ArgumentError` on failure) → build GoRouter → ProviderScope with overrides → MaterialApp.router
+- [x] Tests: empty config throws `ArgumentError`, override composition (overrides from multiple modules compose into a single ProviderScope; each provider may only be overridden once across all modules), redirect composition (first non-null wins)
 
 ### Step 4: Interfaces & Auth Module
 
-- [ ] `AuthState` abstract class + `authStateProvider` in `interfaces/auth_state.dart`
-- [ ] `authModule()` function in `modules/auth/auth_module.dart`
+- [x] `AuthState` sealed class + `authStateProvider` in `interfaces/auth_state.dart`
+- [x] `authModule()` function in `modules/auth/auth_module.dart`
 
 ### Step 5: Barrel Export, Flavor & App Entry Point
 
-- [ ] Fill `soliplex_frontend.dart` with public exports: `ShellConfig`, `ModuleContribution`, `runSoliplexShell`, `AuthState`, `authStateProvider`. Flavors and concrete implementations stay private (`src/`)
-- [ ] `UnauthenticatedState` — concrete `AuthState` impl, flavor-private in `flavors/standard.dart`
-- [ ] `standard()` flavor function (empty module list initially; design examples show eventual shape)
-- [ ] Wire `main.dart` to use `runSoliplexShell` with standard flavor
+- [x] Fill `soliplex_frontend.dart` with public exports: `ShellConfig`, `ModuleContribution`, `runSoliplexShell`, `AuthState`, `Authenticated`, `Unauthenticated`, `authStateProvider`, `authModule`. Flavors stay private (`src/`)
+- [x] `standard()` flavor function using `Unauthenticated()` directly
+- [x] Wire `main.dart` to use `runSoliplexShell` with standard flavor
 
 ## Dependencies
 
@@ -241,7 +243,7 @@ After each step:
 
 After all steps:
 
-1. App boots cleanly (empty module list is a valid state)
+1. App boots cleanly (at least one module with routes is required)
 2. Can be imported as a library from a separate Flutter project
 3. Test suite verifies composition: multi-module merging, module removal,
    route validation — using test fixtures in `test/`

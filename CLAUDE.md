@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Soliplex Flutter frontend — both a **runnable app** and an **importable library**. Uses a modular shell architecture where each module is a function returning a `ModuleContribution` (routes + Riverpod overrides). See `docs/plans/0001-app-shell/proposal.md` for the full design proposal.
+Soliplex Flutter frontend — both a **runnable app** and an **importable library**. Uses a modular shell architecture where each module is a function returning a `ModuleContribution` (routes, Riverpod overrides, and an optional redirect). See `docs/plans/0001-app-shell/proposal.md` for the full design proposal.
 
 ## Commands
 
 Prefer Dart MCP tools over shell commands. All tools take `root` as `file:///absolute/path/to/project`.
 
 | Task | MCP tool | Shell fallback |
-|------|----------|----------------|
+| ---- | -------- | -------------- |
 | Dependencies | `mcp__dart__pub` (command: `get`) | `flutter pub get` |
 | Lint (must pass with zero warnings) | `mcp__dart__analyze_files` | `flutter analyze` |
 | Run all tests | `mcp__dart__run_tests` with `testRunnerArgs.reporter: "failures-only"` | `flutter test --reporter failures-only` |
@@ -21,9 +21,11 @@ Prefer Dart MCP tools over shell commands. All tools take `root` as `file:///abs
 | Check for outdated deps | `mcp__dart__pub` (command: `outdated`) | `flutter pub outdated` |
 | Format code | `mcp__dart__dart_format` | `dart format .` |
 | Apply fixes | `mcp__dart__dart_fix` | `dart fix --apply` |
-| Lint markdown (must pass) | — | `pymarkdown scan --recurse --respect-gitignore . && { [ ! -d scratchpad ] \|\| pymarkdown scan --recurse scratchpad/; }` |
+| Lint markdown (must pass) | — | `markdownlint-cli2 "**/*.md" "#node_modules"` |
 
-**Markdown lint is mandatory.** Always run the markdown linter after creating or editing any `.md` file. Info-level issues are fatal — all diagnostics must be resolved before work is considered complete.
+**Markdown lint is mandatory.** Always run the markdown linter after creating or editing any `.md` file. All diagnostics must be resolved before work is considered complete.
+
+**After finishing any implementation step**, always run `mcp__dart__dart_format`, `mcp__dart__analyze_files` (zero warnings required), and markdown lint (if `.md` files were touched) before presenting work for review.
 
 ## Architecture
 
@@ -31,7 +33,7 @@ Prefer Dart MCP tools over shell commands. All tools take `root` as `file:///abs
 
 Entry point: `runSoliplexShell(ShellConfig)` boots the app from a `ShellConfig`.
 
-Each module is a function that takes dependencies via constructor injection and returns a `ModuleContribution` (routes + Riverpod overrides). No base class, no registry. The compiler enforces dependency ordering. Flavor functions create concrete instances, inject them into module functions, and compose `ModuleContribution` values into a `ShellConfig`. The shell flattens modules and collects overrides into a single root `ProviderScope`.
+Each module is a function that takes dependencies via constructor injection and returns a `ModuleContribution` (routes, Riverpod overrides, and an optional redirect). No base class, no registry. The compiler enforces dependency ordering. Flavor functions create concrete instances, inject them into module functions, and compose `ModuleContribution` values into a `ShellConfig`. The shell flattens modules and collects overrides into a single root `ProviderScope`.
 
 ### State Management
 
