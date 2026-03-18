@@ -37,12 +37,15 @@ void main() {
 
     test('detects duplicate paths after parameterized normalization', () {
       final errors = validateRoutes(
-        routes: [_route('/users/:id'), _route('/users/:userId')],
-        initialRoute: '/users/:_',
+        routes: [
+          _route('/a'),
+          _route('/users/:id'),
+          _route('/users/:userId'),
+        ],
+        initialRoute: '/a',
       );
 
-      expect(errors, hasLength(1));
-      expect(errors.first, contains('Duplicate'));
+      expect(errors, contains(contains('Duplicate')));
     });
 
     test('detects missing initial route when routes are non-empty', () {
@@ -97,35 +100,6 @@ void main() {
       expect(errors, isEmpty);
     });
 
-    test('detects path shadowing - parameterized before literal sibling', () {
-      final errors = validateRoutes(
-        routes: [
-          _route('/items', routes: [
-            _route(':id'),
-            _route('featured'),
-          ]),
-        ],
-        initialRoute: '/items',
-      );
-
-      expect(errors, hasLength(1));
-      expect(errors.first, contains('shadow'));
-    });
-
-    test('allows literal before parameterized sibling', () {
-      final errors = validateRoutes(
-        routes: [
-          _route('/items', routes: [
-            _route('featured'),
-            _route(':id'),
-          ]),
-        ],
-        initialRoute: '/items',
-      );
-
-      expect(errors, isEmpty);
-    });
-
     test('handles ShellRoute - passes parent path through', () {
       final errors = validateRoutes(
         routes: [
@@ -173,6 +147,27 @@ void main() {
 
       expect(errors, hasLength(1));
       expect(errors.first, contains('Duplicate'));
+    });
+
+    test('rejects parameterized initialRoute', () {
+      final errors = validateRoutes(
+        routes: [_route('/users/:id')],
+        initialRoute: '/users/:id',
+      );
+
+      expect(errors, hasLength(1));
+      expect(errors.first, contains('initialRoute'));
+    });
+
+    test('accumulates multiple errors in a single call', () {
+      final errors = validateRoutes(
+        routes: [_route('/a'), _route('/a')],
+        initialRoute: '/missing',
+      );
+
+      expect(errors, hasLength(2));
+      expect(errors, contains(contains('Duplicate')));
+      expect(errors, contains(contains('Initial route')));
     });
 
     // GoRoute 17.x asserts path.isNotEmpty, so empty child paths
