@@ -5,12 +5,15 @@ import '../core/shell_config.dart';
 import '../interfaces/auth_state.dart';
 import '../modules/auth/auth_module.dart';
 
-ShellConfig standard() {
+ShellConfig standard({
+  String appName = 'Soliplex',
+  ThemeData? theme,
+}) {
   return ShellConfig(
-    appName: 'Soliplex',
-    theme: ThemeData(),
+    appName: appName,
+    theme: theme ?? ThemeData(),
     modules: [
-      authModule(auth: Unauthenticated()),
+      authModule(auth: const Unauthenticated()),
       ModuleContribution(
         routes: [
           GoRoute(
