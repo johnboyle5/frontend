@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:soliplex_frontend/src/interfaces/auth_state.dart';
+import 'package:soliplex_frontend/src/modules/auth/auth_session.dart';
 import 'package:soliplex_frontend/src/modules/auth/auth_tokens.dart';
 import 'package:soliplex_frontend/src/modules/auth/server_manager.dart';
 import 'package:soliplex_frontend/src/modules/auth/token_storage.dart';
@@ -20,8 +21,8 @@ AuthTokens _tokens() => AuthTokens(
 
 ServerManager _createManager({InMemoryTokenStorage? storage}) {
   return ServerManager(
-    refreshClient: FakeHttpClient(),
-    inspector: FakeHttpObserver(),
+    authFactory: () => AuthSession(refreshService: FakeTokenRefreshService()),
+    clientFactory: ({getToken, tokenRefresher}) => FakeHttpClient(),
     storage: storage ?? InMemoryTokenStorage(),
   );
 }
@@ -112,19 +113,6 @@ void main() {
 
       expect(manager.servers.value, isEmpty);
       expect(manager.registry.isEmpty, isTrue);
-    });
-
-    test('closes refreshClient', () {
-      final refreshClient = FakeHttpClient();
-      final manager = ServerManager(
-        refreshClient: refreshClient,
-        inspector: FakeHttpObserver(),
-        storage: InMemoryTokenStorage(),
-      );
-
-      manager.dispose();
-
-      expect(refreshClient.closeCalled, isTrue);
     });
   });
 

@@ -6,6 +6,7 @@ import 'package:soliplex_client_native/soliplex_client_native.dart';
 import '../core/shell_config.dart';
 import '../core/signal_listenable.dart';
 import '../modules/auth/auth_module.dart';
+import '../modules/auth/auth_session.dart';
 import '../modules/auth/secure_token_storage.dart';
 import '../modules/auth/server_manager.dart';
 import '../modules/diagnostics/diagnostics_module.dart';
@@ -16,13 +17,26 @@ Future<ShellConfig> standard({
   ThemeData? theme,
 }) async {
   final inspector = NetworkInspector();
-  final refreshClient = createAgentHttpClient(
-    innerClient: createPlatformClient(),
-    observers: [inspector],
-  );
+
+  SoliplexHttpClient buildClient({
+    String? Function()? getToken,
+    TokenRefresher? tokenRefresher,
+  }) =>
+      createAgentHttpClient(
+        innerClient: createPlatformClient(),
+        observers: [inspector],
+        getToken: getToken,
+        tokenRefresher: tokenRefresher,
+      );
+
+  final refreshClient = buildClient();
+  final refreshService = TokenRefreshService(httpClient: refreshClient);
+
+  AuthSession buildAuth() => AuthSession(refreshService: refreshService);
+
   final serverManager = ServerManager(
-    refreshClient: refreshClient,
-    inspector: inspector,
+    authFactory: buildAuth,
+    clientFactory: buildClient,
     storage: SecureTokenStorage(),
   );
   await serverManager.restoreServers();
@@ -36,6 +50,7 @@ Future<ShellConfig> standard({
     onDispose: () {
       authListenable.dispose();
       serverManager.dispose();
+      refreshClient.close();
     },
     modules: [
       diagnosticsModule(inspector: inspector),

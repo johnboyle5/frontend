@@ -9,23 +9,27 @@ import 'auth_tokens.dart';
 import 'server_entry.dart';
 import 'token_storage.dart';
 
+typedef HttpClientFactory = SoliplexHttpClient Function({
+  String? Function()? getToken,
+  TokenRefresher? tokenRefresher,
+});
+
+typedef AuthSessionFactory = AuthSession Function();
+
 /// Owns the collection of per-server resources and shared infrastructure.
 /// Keeps [ServerRegistry] in sync internally.
 class ServerManager {
   ServerManager({
-    required SoliplexHttpClient refreshClient,
-    required HttpObserver inspector,
+    required AuthSessionFactory authFactory,
+    required HttpClientFactory clientFactory,
     required TokenStorage storage,
-  })  : _refreshClient = refreshClient,
-        _inspector = inspector,
-        _storage = storage {
-    _refreshService = TokenRefreshService(httpClient: _refreshClient);
-  }
+  })  : _authFactory = authFactory,
+        _clientFactory = clientFactory,
+        _storage = storage;
 
-  final SoliplexHttpClient _refreshClient;
-  final HttpObserver _inspector;
+  final AuthSessionFactory _authFactory;
+  final HttpClientFactory _clientFactory;
   final TokenStorage _storage;
-  late final TokenRefreshService _refreshService;
 
   final Signal<Map<String, ServerEntry>> servers =
       Signal<Map<String, ServerEntry>>({});
@@ -50,10 +54,9 @@ class ServerManager {
       throw StateError('Server "$serverId" already exists');
     }
 
-    final auth = AuthSession(refreshService: _refreshService);
+    final auth = _authFactory();
 
-    final httpClient = createAgentHttpClient(
-      observers: [_inspector],
+    final httpClient = _clientFactory(
       getToken: () => auth.accessToken,
       tokenRefresher: auth,
     );
@@ -133,7 +136,6 @@ class ServerManager {
     for (final id in servers.value.keys.toList()) {
       removeServer(id);
     }
-    _refreshClient.close();
   }
 
   void _onSessionChanged(String serverId, ServerEntry entry) {
