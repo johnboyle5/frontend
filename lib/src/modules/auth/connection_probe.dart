@@ -1,0 +1,126 @@
+import 'package:soliplex_agent/soliplex_agent.dart';
+
+/// Signature for the auth provider discovery function.
+///
+/// Defaults to [discoverAuthProviders] from soliplex_agent. Accepting this
+/// as a parameter lets tests supply a fake without mocking HTTP responses.
+typedef DiscoverProviders = Future<List<AuthProviderConfig>> Function(
+  Uri serverUrl,
+  SoliplexHttpClient httpClient,
+);
+
+/// Parses and normalizes a server URL string.
+///
+/// Defaults to HTTPS when no scheme is provided. Strips trailing slashes.
+/// Throws [FormatException] for empty or unparseable input.
+Uri normalizeServerUrl(String input) {
+  final candidates = _buildCandidateUrls(input);
+  return candidates.first;
+}
+
+/// Result of probing a backend URL for connectivity.
+sealed class ConnectionProbeResult {
+  const ConnectionProbeResult();
+}
+
+/// Backend was reached successfully.
+class ConnectionSuccess extends ConnectionProbeResult {
+  const ConnectionSuccess({
+    required this.serverUrl,
+    required this.providers,
+  });
+
+  final Uri serverUrl;
+  final List<AuthProviderConfig> providers;
+
+  /// Whether the connection uses HTTP (not HTTPS).
+  bool get isInsecure => serverUrl.scheme == 'http';
+}
+
+/// Backend could not be reached.
+class ConnectionFailure extends ConnectionProbeResult {
+  const ConnectionFailure(this.error);
+
+  final Object error;
+}
+
+/// Probes a backend by trying HTTPS first, falling back to HTTP on network
+/// errors.
+///
+/// If the input has an explicit scheme, only that scheme is tried.
+/// For schemeless input, tries `https://` first. If that fails with a
+/// [NetworkException], tries `http://`. Non-network errors (4xx, 5xx) are
+/// not retried since they indicate the server was reachable.
+///
+/// Pass [discover] to override the default [discoverAuthProviders] for testing.
+Future<ConnectionProbeResult> probeConnection({
+  required String input,
+  required SoliplexHttpClient httpClient,
+  DiscoverProviders discover = _defaultDiscover,
+}) async {
+  final List<Uri> candidates;
+  try {
+    candidates = _buildCandidateUrls(input);
+  } on FormatException catch (e) {
+    return ConnectionFailure(e);
+  }
+
+  NetworkException? lastNetworkError;
+  for (final uri in candidates) {
+    try {
+      final providers = await discover(uri, httpClient);
+      return ConnectionSuccess(serverUrl: uri, providers: providers);
+    } on NetworkException catch (e) {
+      lastNetworkError = e;
+    } on Exception catch (e) {
+      return ConnectionFailure(e);
+    }
+  }
+  return ConnectionFailure(lastNetworkError!);
+}
+
+/// Parses user input into candidate URIs to probe, in priority order.
+///
+/// For schemeless input, returns [https, http]. For explicit schemes,
+/// returns a single URI. Strips trailing slashes.
+List<Uri> _buildCandidateUrls(String input) {
+  final trimmed = input.trim();
+  if (trimmed.isEmpty) {
+    throw const FormatException('Server URL cannot be empty');
+  }
+
+  final parsed = Uri.tryParse(trimmed);
+  final hasScheme = parsed != null && parsed.hasScheme;
+
+  if (hasScheme) {
+    final uri = Uri.parse(trimmed);
+    if (uri.host.isEmpty) {
+      throw FormatException('Invalid server URL: $input');
+    }
+    return [_stripTrailingSlash(uri)];
+  }
+
+  final httpsUri = Uri.tryParse('https://$trimmed');
+  if (httpsUri == null || httpsUri.host.isEmpty) {
+    throw FormatException('Invalid server URL: $input');
+  }
+
+  return [
+    _stripTrailingSlash(httpsUri),
+    _stripTrailingSlash(Uri.parse('http://$trimmed')),
+  ];
+}
+
+Uri _stripTrailingSlash(Uri uri) {
+  final path = uri.path;
+  if (path.endsWith('/')) {
+    return uri.replace(path: path.substring(0, path.length - 1));
+  }
+  return uri;
+}
+
+Future<List<AuthProviderConfig>> _defaultDiscover(
+  Uri serverUrl,
+  SoliplexHttpClient httpClient,
+) =>
+    discoverAuthProviders(serverUrl: serverUrl, httpClient: httpClient);

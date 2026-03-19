@@ -1,10 +1,16 @@
-import 'package:soliplex_agent/soliplex_agent.dart';
+import 'package:soliplex_agent/soliplex_agent.dart' hide AuthException;
 
+import 'package:soliplex_frontend/src/modules/auth/platform/auth_flow.dart';
 import 'package:soliplex_frontend/src/modules/auth/token_storage.dart';
 
-/// Minimal HTTP client that throws on every call.
+/// Minimal HTTP client with configurable responses.
+///
+/// By default, throws [UnimplementedError] on every call.
+/// Set [onRequest] to return controlled responses for testing.
 class FakeHttpClient extends SoliplexHttpClient {
   bool closeCalled = false;
+
+  Future<HttpResponse> Function(String method, Uri uri)? onRequest;
 
   @override
   Future<HttpResponse> request(
@@ -14,6 +20,7 @@ class FakeHttpClient extends SoliplexHttpClient {
     Object? body,
     Duration? timeout,
   }) {
+    if (onRequest != null) return onRequest!(method, uri);
     throw UnimplementedError('FakeHttpClient.request');
   }
 
@@ -66,6 +73,35 @@ class FakeHttpObserver implements HttpObserver {
   void onStreamStart(HttpStreamStartEvent event) => events.add(event);
   @override
   void onStreamEnd(HttpStreamEndEvent event) => events.add(event);
+}
+
+/// Fake AuthFlow for testing consumers that depend on AuthFlow.
+class FakeAuthFlow implements AuthFlow {
+  AuthResult? nextResult;
+  AuthException? nextError;
+  bool endSessionCalled = false;
+  String? lastEndSessionDiscoveryUrl;
+
+  @override
+  Future<AuthResult> authenticate(
+    AuthProviderConfig provider, {
+    Uri? backendUrl,
+  }) async {
+    if (nextError != null) throw nextError!;
+    if (nextResult != null) return nextResult!;
+    throw StateError('FakeAuthFlow: set nextResult or nextError');
+  }
+
+  @override
+  Future<void> endSession({
+    required String discoveryUrl,
+    required String? endSessionEndpoint,
+    required String idToken,
+    required String clientId,
+  }) async {
+    endSessionCalled = true;
+    lastEndSessionDiscoveryUrl = discoveryUrl;
+  }
 }
 
 /// In-memory token storage for tests.
