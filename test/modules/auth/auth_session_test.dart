@@ -149,6 +149,19 @@ void main() {
       expect(result, isFalse);
     });
 
+    test('returns false when refresh service throws', () async {
+      session.login(
+        provider: _provider,
+        tokens: _tokens(expiresIn: const Duration(seconds: 30)),
+      );
+
+      // FakeTokenRefreshService with no nextResult throws StateError
+      final result = await session.tryRefresh();
+
+      expect(result, isFalse);
+      expect(session.isAuthenticated, isTrue);
+    });
+
     test('guards against session change during await', () async {
       session.login(
         provider: _provider,

@@ -13,29 +13,30 @@ class AuthSession implements TokenRefresher {
   final TokenRefreshService _refreshService;
   Future<bool>? _activeRefresh;
 
-  final Signal<SessionState> session = Signal<SessionState>(const NoSession());
+  final Signal<SessionState> _session = Signal<SessionState>(const NoSession());
+  ReadonlySignal<SessionState> get session => _session;
 
   /// Sync read for the HTTP client's getToken callback.
-  String? get accessToken => switch (session.value) {
+  String? get accessToken => switch (_session.value) {
         ActiveSession(:final tokens) => tokens.accessToken,
         NoSession() => null,
       };
 
-  bool get isAuthenticated => session.value is ActiveSession;
+  bool get isAuthenticated => _session.value is ActiveSession;
 
   void login({required OidcProvider provider, required AuthTokens tokens}) {
-    session.value = ActiveSession(provider: provider, tokens: tokens);
+    _session.value = ActiveSession(provider: provider, tokens: tokens);
   }
 
   void logout() {
-    session.value = const NoSession();
+    _session.value = const NoSession();
   }
 
   // ── TokenRefresher interface ──
 
   @override
   bool get needsRefresh {
-    final current = session.value;
+    final current = _session.value;
     if (current is! ActiveSession) return false;
     final threshold = TokenRefreshService.refreshThreshold;
     return DateTime.now().isAfter(current.tokens.expiresAt.subtract(threshold));
@@ -55,21 +56,26 @@ class AuthSession implements TokenRefresher {
   }
 
   Future<bool> _doRefresh() async {
-    final current = session.value;
+    final current = _session.value;
     if (current is! ActiveSession) return false;
 
-    final result = await _refreshService.refresh(
-      discoveryUrl: current.provider.discoveryUrl,
-      refreshToken: current.tokens.refreshToken,
-      clientId: current.provider.clientId,
-    );
+    final TokenRefreshResult result;
+    try {
+      result = await _refreshService.refresh(
+        discoveryUrl: current.provider.discoveryUrl,
+        refreshToken: current.tokens.refreshToken,
+        clientId: current.provider.clientId,
+      );
+    } catch (_) {
+      return false;
+    }
 
     // Guard: session may have changed (logout or re-login) during the await.
-    if (!identical(session.value, current)) return false;
+    if (!identical(_session.value, current)) return false;
 
     switch (result) {
       case TokenRefreshSuccess():
-        session.value = ActiveSession(
+        _session.value = ActiveSession(
           provider: current.provider,
           tokens: AuthTokens(
             accessToken: result.accessToken,
