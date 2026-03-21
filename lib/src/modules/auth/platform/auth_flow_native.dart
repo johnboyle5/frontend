@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide AuthException;
 
@@ -61,8 +62,12 @@ class NativeAuthFlow implements AuthFlow {
       );
     } on AuthException {
       rethrow;
-    } on Exception {
-      throw const AuthException('Authentication failed. Please try again.');
+    } on Exception catch (e) {
+      // TODO: Replace with structured logging once available.
+      debugPrint('NativeAuthFlow: ${e.runtimeType}: $e');
+      throw AuthException(
+        'Authentication failed (${e.runtimeType}). Please try again.',
+      );
     }
   }
 

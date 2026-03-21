@@ -19,6 +19,7 @@ class ModuleContribution {
 
 class ShellConfig {
   final String appName;
+  final Widget? logo;
   final ThemeData theme;
   final String initialRoute;
   final List<ModuleContribution> modules;
@@ -27,6 +28,7 @@ class ShellConfig {
 
   ShellConfig({
     required this.appName,
+    this.logo,
     required this.theme,
     this.initialRoute = '/',
     List<ModuleContribution> modules = const [],

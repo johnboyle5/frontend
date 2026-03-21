@@ -53,21 +53,21 @@ void main() {
       expect(manager.registry['test'], isNotNull);
     });
 
-    test('duplicate serverId throws StateError', () {
+    test('duplicate serverId returns existing entry', () {
       final manager = _createManager();
 
-      manager.addServer(
+      final first = manager.addServer(
         serverId: 'test',
         serverUrl: Uri.parse('https://api.example.com'),
       );
 
-      expect(
-        () => manager.addServer(
-          serverId: 'test',
-          serverUrl: Uri.parse('https://api2.example.com'),
-        ),
-        throwsStateError,
+      final second = manager.addServer(
+        serverId: 'test',
+        serverUrl: Uri.parse('https://api2.example.com'),
       );
+
+      expect(second, same(first));
+      expect(manager.servers.value, hasLength(1));
     });
   });
 
@@ -157,6 +157,79 @@ void main() {
 
       expect(manager.authState.value, isA<Unauthenticated>());
     });
+
+    test('authenticated when no-auth server is added', () {
+      final manager = _createManager();
+
+      manager.addServer(
+        serverId: 'local',
+        serverUrl: Uri.parse('http://localhost:8000'),
+        requiresAuth: false,
+      );
+
+      expect(manager.authState.value, isA<Authenticated>());
+    });
+  });
+
+  group('requiresAuth', () {
+    test('defaults to true', () {
+      final manager = _createManager();
+
+      final entry = manager.addServer(
+        serverId: 'test',
+        serverUrl: Uri.parse('https://api.example.com'),
+      );
+
+      expect(entry.requiresAuth, isTrue);
+    });
+
+    test('can be set to false', () {
+      final manager = _createManager();
+
+      final entry = manager.addServer(
+        serverId: 'test',
+        serverUrl: Uri.parse('http://localhost:8000'),
+        requiresAuth: false,
+      );
+
+      expect(entry.requiresAuth, isFalse);
+    });
+
+    test('isConnected is true when requiresAuth is false', () {
+      final manager = _createManager();
+
+      final entry = manager.addServer(
+        serverId: 'test',
+        serverUrl: Uri.parse('http://localhost:8000'),
+        requiresAuth: false,
+      );
+
+      expect(entry.isConnected, isTrue);
+    });
+
+    test('isConnected is false when requiresAuth is true and not authenticated',
+        () {
+      final manager = _createManager();
+
+      final entry = manager.addServer(
+        serverId: 'test',
+        serverUrl: Uri.parse('https://api.example.com'),
+      );
+
+      expect(entry.isConnected, isFalse);
+    });
+
+    test('isConnected is true when requiresAuth is true and authenticated', () {
+      final manager = _createManager();
+
+      final entry = manager.addServer(
+        serverId: 'test',
+        serverUrl: Uri.parse('https://api.example.com'),
+      );
+      entry.auth.login(provider: _provider, tokens: _tokens());
+
+      expect(entry.isConnected, isTrue);
+    });
   });
 
   group('persistence', () {
@@ -177,7 +250,7 @@ void main() {
       expect(stored['test']!.serverUrl, Uri.parse('https://api.example.com'));
     });
 
-    test('logout deletes from storage', () async {
+    test('logout persists server without tokens', () async {
       final storage = InMemoryTokenStorage();
       final manager = _createManager(storage: storage);
 
@@ -190,7 +263,9 @@ void main() {
 
       await Future<void>.delayed(Duration.zero);
       final stored = await storage.loadAll();
-      expect(stored, isEmpty);
+      expect(stored, hasLength(1));
+      expect(stored['test']!.serverUrl, Uri.parse('https://api.example.com'));
+      expect(stored['test'], isA<KnownServer>());
     });
 
     test('removeServer deletes from storage', () async {
@@ -219,7 +294,7 @@ void main() {
       // Pre-populate storage
       await storage.save(
         'restored',
-        PersistedServer(
+        AuthenticatedServer(
           serverUrl: Uri.parse('https://restored.example.com'),
           provider: _provider,
           tokens: tokens,
@@ -242,7 +317,7 @@ void main() {
 
       await storage.save(
         'restored',
-        PersistedServer(
+        AuthenticatedServer(
           serverUrl: Uri.parse('https://restored.example.com'),
           provider: _provider,
           tokens: _tokens(),
@@ -255,6 +330,44 @@ void main() {
 
       await Future<void>.delayed(Duration.zero);
       expect(storage.saveCount, 0);
+    });
+
+    test('restores logged-out server without authentication', () async {
+      final storage = InMemoryTokenStorage();
+
+      await storage.save(
+        'logged-out',
+        KnownServer(
+          serverUrl: Uri.parse('https://logged-out.example.com'),
+        ),
+      );
+
+      final manager = _createManager(storage: storage);
+      await manager.restoreServers();
+
+      expect(manager.servers.value, hasLength(1));
+      final entry = manager.servers.value['logged-out']!;
+      expect(entry.auth.isAuthenticated, isFalse);
+      expect(entry.serverUrl, Uri.parse('https://logged-out.example.com'));
+    });
+
+    test('restores requiresAuth flag', () async {
+      final storage = InMemoryTokenStorage();
+
+      await storage.save(
+        'no-auth',
+        KnownServer(
+          serverUrl: Uri.parse('http://localhost:8000'),
+          requiresAuth: false,
+        ),
+      );
+
+      final manager = _createManager(storage: storage);
+      await manager.restoreServers();
+
+      final entry = manager.servers.value['no-auth']!;
+      expect(entry.requiresAuth, isFalse);
+      expect(entry.isConnected, isTrue);
     });
   });
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:soliplex_agent/soliplex_agent.dart';
 
 /// Signature for the auth provider discovery function.
@@ -57,6 +59,7 @@ Future<ConnectionProbeResult> probeConnection({
   required String input,
   required SoliplexHttpClient httpClient,
   DiscoverProviders discover = _defaultDiscover,
+  Duration probeTimeout = const Duration(seconds: 5),
 }) async {
   final List<Uri> candidates;
   try {
@@ -68,10 +71,15 @@ Future<ConnectionProbeResult> probeConnection({
   NetworkException? lastNetworkError;
   for (final uri in candidates) {
     try {
-      final providers = await discover(uri, httpClient);
+      final providers = await discover(uri, httpClient).timeout(probeTimeout);
       return ConnectionSuccess(serverUrl: uri, providers: providers);
     } on NetworkException catch (e) {
       lastNetworkError = e;
+    } on TimeoutException {
+      lastNetworkError = const NetworkException(
+        message: 'Connection timed out',
+        isTimeout: true,
+      );
     } on Exception catch (e) {
       return ConnectionFailure(e);
     }
@@ -89,8 +97,7 @@ List<Uri> _buildCandidateUrls(String input) {
     throw const FormatException('Server URL cannot be empty');
   }
 
-  final parsed = Uri.tryParse(trimmed);
-  final hasScheme = parsed != null && parsed.hasScheme;
+  final hasScheme = trimmed.contains('://');
 
   if (hasScheme) {
     final uri = Uri.parse(trimmed);

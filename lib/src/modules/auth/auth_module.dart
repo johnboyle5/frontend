@@ -9,17 +9,22 @@ import 'consent_notice.dart';
 import 'platform/auth_flow.dart';
 import 'platform/callback_params.dart';
 import 'server_manager.dart';
+import 'ui/auth_callback_screen.dart';
+import 'ui/home_screen.dart';
+import 'ui/server_list_screen.dart';
 
 /// Public routes that don't require authentication.
-const _publicPaths = {'/', '/servers/add', '/auth/callback'};
+const _publicPaths = {'/', '/servers', '/auth/callback'};
 
 ModuleContribution authModule({
   required ServerManager serverManager,
   required AuthFlow authFlow,
   required SoliplexHttpClient probeClient,
+  required String appName,
   CallbackParams? callbackParams,
   ConsentNotice? consentNotice,
   Widget? logo,
+  String? defaultBackendUrl,
 }) {
   return ModuleContribution(
     overrides: [
@@ -30,26 +35,25 @@ ModuleContribution authModule({
         callbackParamsProvider.overrideWithValue(callbackParams),
       if (consentNotice != null)
         consentNoticeProvider.overrideWithValue(consentNotice),
-      if (logo != null) logoProvider.overrideWithValue(logo),
     ],
     routes: [
       GoRoute(
         path: '/',
-        builder: (_, __) => const Scaffold(
-          body: Center(child: Text('Home (placeholder)')),
+        builder: (_, state) => HomeScreen(
+          serverManager: serverManager,
+          appName: appName,
+          logo: logo,
+          defaultBackendUrl: defaultBackendUrl,
+          autoConnectUrl: state.uri.queryParameters['url'],
         ),
       ),
       GoRoute(
-        path: '/servers/add',
-        builder: (_, __) => const Scaffold(
-          body: Center(child: Text('Add Server (placeholder)')),
-        ),
+        path: '/servers',
+        builder: (_, __) => ServerListScreen(serverManager: serverManager),
       ),
       GoRoute(
         path: '/auth/callback',
-        builder: (_, __) => const Scaffold(
-          body: Center(child: Text('Auth Callback (placeholder)')),
-        ),
+        builder: (_, __) => const AuthCallbackScreen(),
       ),
     ],
     redirect: (_, state) {

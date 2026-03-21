@@ -56,6 +56,27 @@ void main() {
       );
     });
 
+    test('adds https scheme to host:port input', () {
+      expect(
+        normalizeServerUrl('localhost:8000'),
+        Uri.parse('https://localhost:8000'),
+      );
+    });
+
+    test('adds https scheme to IP:port input', () {
+      expect(
+        normalizeServerUrl('192.168.1.1:8000'),
+        Uri.parse('https://192.168.1.1:8000'),
+      );
+    });
+
+    test('adds https scheme to domain:port input', () {
+      expect(
+        normalizeServerUrl('example.com:443'),
+        Uri.parse('https://example.com:443'),
+      );
+    });
+
     test('throws FormatException for empty input', () {
       expect(() => normalizeServerUrl(''), throwsFormatException);
     });
@@ -105,6 +126,24 @@ void main() {
       expect(result, isA<ConnectionSuccess>());
       final success = result as ConnectionSuccess;
       expect(success.serverUrl, Uri.parse('http://example.com'));
+      expect(success.isInsecure, isTrue);
+    });
+
+    test('falls back to HTTP for host:port schemeless input', () async {
+      final result = await probeConnection(
+        input: 'localhost:8000',
+        httpClient: httpClient,
+        discover: (serverUrl, _) async {
+          if (serverUrl.scheme == 'https') {
+            throw const NetworkException(message: 'connection refused');
+          }
+          return [_provider];
+        },
+      );
+
+      expect(result, isA<ConnectionSuccess>());
+      final success = result as ConnectionSuccess;
+      expect(success.serverUrl, Uri.parse('http://localhost:8000'));
       expect(success.isInsecure, isTrue);
     });
 
@@ -192,6 +231,47 @@ void main() {
       );
 
       expect(result, isA<ConnectionFailure>());
+    });
+
+    test('times out and falls back to HTTP for schemeless input', () async {
+      var callCount = 0;
+      final result = await probeConnection(
+        input: 'example.com',
+        httpClient: httpClient,
+        probeTimeout: const Duration(milliseconds: 100),
+        discover: (serverUrl, _) async {
+          callCount++;
+          if (serverUrl.scheme == 'https') {
+            // Simulate a hanging HTTPS connection.
+            await Future<void>.delayed(const Duration(seconds: 10));
+            throw StateError('should have timed out');
+          }
+          return [_provider];
+        },
+      );
+
+      expect(callCount, 2);
+      expect(result, isA<ConnectionSuccess>());
+      final success = result as ConnectionSuccess;
+      expect(success.serverUrl, Uri.parse('http://example.com'));
+      expect(success.isInsecure, isTrue);
+    });
+
+    test('times out and returns failure for explicit scheme', () async {
+      final result = await probeConnection(
+        input: 'https://example.com',
+        httpClient: httpClient,
+        probeTimeout: const Duration(milliseconds: 100),
+        discover: (serverUrl, _) async {
+          await Future<void>.delayed(const Duration(seconds: 10));
+          throw StateError('should have timed out');
+        },
+      );
+
+      expect(result, isA<ConnectionFailure>());
+      final failure = result as ConnectionFailure;
+      expect(failure.error, isA<NetworkException>());
+      expect((failure.error as NetworkException).isTimeout, isTrue);
     });
 
     test('normalizes URL in success result (strips trailing slash)', () async {

@@ -79,6 +79,7 @@ class FakeHttpObserver implements HttpObserver {
 class FakeAuthFlow implements AuthFlow {
   AuthResult? nextResult;
   AuthException? nextError;
+  bool throwRedirectInitiated = false;
   bool endSessionCalled = false;
   String? lastEndSessionDiscoveryUrl;
 
@@ -87,6 +88,7 @@ class FakeAuthFlow implements AuthFlow {
     AuthProviderConfig provider, {
     Uri? backendUrl,
   }) async {
+    if (throwRedirectInitiated) throw const AuthRedirectInitiated();
     if (nextError != null) throw nextError!;
     if (nextResult != null) return nextResult!;
     throw StateError('FakeAuthFlow: set nextResult or nextError');
@@ -101,6 +103,35 @@ class FakeAuthFlow implements AuthFlow {
   }) async {
     endSessionCalled = true;
     lastEndSessionDiscoveryUrl = discoveryUrl;
+  }
+}
+
+/// AuthFlow that calls a callback during endSession for order verification.
+class RecordingAuthFlow implements AuthFlow {
+  RecordingAuthFlow({this.onEndSession});
+
+  final void Function()? onEndSession;
+  bool endSessionCalled = false;
+  String? lastEndSessionEndpoint;
+
+  @override
+  Future<AuthResult> authenticate(
+    AuthProviderConfig provider, {
+    Uri? backendUrl,
+  }) async {
+    throw StateError('RecordingAuthFlow: authenticate not configured');
+  }
+
+  @override
+  Future<void> endSession({
+    required String discoveryUrl,
+    required String? endSessionEndpoint,
+    required String idToken,
+    required String clientId,
+  }) async {
+    endSessionCalled = true;
+    lastEndSessionEndpoint = endSessionEndpoint;
+    onEndSession?.call();
   }
 }
 

@@ -19,17 +19,18 @@ ServerManager _createServerManager() => ServerManager(
 
 void main() {
   group('authModule', () {
-    test('contributes routes for /, /servers/add, /auth/callback', () {
+    test('contributes routes for /, /servers, /auth/callback', () {
       final serverManager = _createServerManager();
       final contribution = authModule(
         serverManager: serverManager,
         authFlow: FakeAuthFlow(),
         probeClient: FakeHttpClient(),
+        appName: 'Soliplex',
       );
 
       final paths =
           contribution.routes.whereType<GoRoute>().map((r) => r.path).toList();
-      expect(paths, containsAll(['/', '/servers/add', '/auth/callback']));
+      expect(paths, containsAll(['/', '/servers', '/auth/callback']));
     });
 
     test('contributes a redirect', () {
@@ -38,6 +39,7 @@ void main() {
         serverManager: serverManager,
         authFlow: FakeAuthFlow(),
         probeClient: FakeHttpClient(),
+        appName: 'Soliplex',
       );
 
       expect(contribution.redirect, isNotNull);
@@ -49,6 +51,7 @@ void main() {
         serverManager: serverManager,
         authFlow: FakeAuthFlow(),
         probeClient: FakeHttpClient(),
+        appName: 'Soliplex',
       );
 
       // At minimum: serverManager, authFlow, probeClient.
@@ -66,6 +69,7 @@ void main() {
         serverManager: serverManager,
         authFlow: FakeAuthFlow(),
         probeClient: FakeHttpClient(),
+        appName: 'Soliplex',
       );
 
       router = GoRouter(
@@ -94,7 +98,7 @@ void main() {
       await tester.pumpWidget(buildApp());
       await tester.pumpAndSettle();
 
-      expect(find.text('Home (placeholder)'), findsOneWidget);
+      expect(find.text('Soliplex'), findsOneWidget);
     });
 
     testWidgets('redirects /chat to / when unauthenticated', (tester) async {
@@ -104,8 +108,34 @@ void main() {
       router.go('/chat');
       await tester.pumpAndSettle();
 
-      expect(find.text('Home (placeholder)'), findsOneWidget);
+      expect(find.text('Soliplex'), findsOneWidget);
       expect(find.text('Chat'), findsNothing);
+    });
+
+    testWidgets('allows /auth/callback when unauthenticated', (tester) async {
+      final contribution = authModule(
+        serverManager: serverManager,
+        authFlow: FakeAuthFlow(),
+        probeClient: FakeHttpClient(),
+        appName: 'Soliplex',
+      );
+
+      router = GoRouter(
+        initialLocation: '/auth/callback',
+        routes: contribution.routes,
+        redirect: contribution.redirect,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: contribution.overrides,
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Should show callback screen (with error since no params), not redirect to /
+      expect(find.text('No callback parameters received.'), findsOneWidget);
     });
 
     testWidgets('allows /chat when authenticated', (tester) async {
@@ -133,16 +163,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Chat'), findsOneWidget);
-    });
-
-    testWidgets('allows /servers/add when unauthenticated', (tester) async {
-      await tester.pumpWidget(buildApp());
-      await tester.pumpAndSettle();
-
-      router.go('/servers/add');
-      await tester.pumpAndSettle();
-
-      expect(find.text('Add Server (placeholder)'), findsOneWidget);
     });
   });
 }

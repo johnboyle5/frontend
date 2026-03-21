@@ -3,8 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_frontend/src/modules/auth/auth_tokens.dart';
 import 'package:soliplex_frontend/src/modules/auth/token_storage.dart';
 
-import '../../helpers/fakes.dart';
-
 const _provider = OidcProvider(
   discoveryUrl: 'https://auth.example.com/.well-known/openid-configuration',
   clientId: 'test-client',
@@ -19,8 +17,8 @@ final _tokens = AuthTokens(
 
 void main() {
   group('PersistedServer', () {
-    test('toJson/fromJson round-trip', () {
-      final original = PersistedServer(
+    test('AuthenticatedServer toJson/fromJson round-trip', () {
+      final original = AuthenticatedServer(
         serverUrl: Uri.parse('https://api.example.com'),
         provider: _provider,
         tokens: _tokens,
@@ -29,97 +27,41 @@ void main() {
       final json = original.toJson();
       final restored = PersistedServer.fromJson(json);
 
+      expect(restored, isA<AuthenticatedServer>());
+      final auth = restored as AuthenticatedServer;
+      expect(auth.serverUrl, original.serverUrl);
+      expect(auth.provider.discoveryUrl, original.provider.discoveryUrl);
+      expect(auth.provider.clientId, original.provider.clientId);
+      expect(auth.tokens.accessToken, original.tokens.accessToken);
+      expect(auth.tokens.refreshToken, original.tokens.refreshToken);
+      expect(auth.tokens.expiresAt, original.tokens.expiresAt);
+      expect(auth.tokens.idToken, original.tokens.idToken);
+    });
+
+    test('KnownServer toJson/fromJson round-trip', () {
+      final original = KnownServer(
+        serverUrl: Uri.parse('http://localhost:8000'),
+      );
+
+      final json = original.toJson();
+      final restored = PersistedServer.fromJson(json);
+
+      expect(restored, isA<KnownServer>());
       expect(restored.serverUrl, original.serverUrl);
-      expect(restored.provider.discoveryUrl, original.provider.discoveryUrl);
-      expect(restored.provider.clientId, original.provider.clientId);
-      expect(restored.tokens.accessToken, original.tokens.accessToken);
-      expect(restored.tokens.refreshToken, original.tokens.refreshToken);
-      expect(restored.tokens.expiresAt, original.tokens.expiresAt);
-      expect(restored.tokens.idToken, original.tokens.idToken);
-    });
-  });
-
-  group('InMemoryTokenStorage', () {
-    late InMemoryTokenStorage storage;
-
-    setUp(() {
-      storage = InMemoryTokenStorage();
+      expect(restored.requiresAuth, isTrue);
     });
 
-    test('loadAll returns empty map initially', () async {
-      final result = await storage.loadAll();
-      expect(result, isEmpty);
-    });
-
-    test('save and loadAll', () async {
-      final server = PersistedServer(
-        serverUrl: Uri.parse('https://api.example.com'),
-        provider: _provider,
-        tokens: _tokens,
+    test('KnownServer toJson/fromJson with requiresAuth false', () {
+      final original = KnownServer(
+        serverUrl: Uri.parse('http://localhost:8000'),
+        requiresAuth: false,
       );
 
-      await storage.save('server-1', server);
+      final json = original.toJson();
+      final restored = PersistedServer.fromJson(json);
 
-      final result = await storage.loadAll();
-      expect(result, hasLength(1));
-      expect(result['server-1']!.serverUrl, server.serverUrl);
-    });
-
-    test('save overwrites existing entry', () async {
-      final server1 = PersistedServer(
-        serverUrl: Uri.parse('https://api1.example.com'),
-        provider: _provider,
-        tokens: _tokens,
-      );
-      final server2 = PersistedServer(
-        serverUrl: Uri.parse('https://api2.example.com'),
-        provider: _provider,
-        tokens: _tokens,
-      );
-
-      await storage.save('server-1', server1);
-      await storage.save('server-1', server2);
-
-      final result = await storage.loadAll();
-      expect(result, hasLength(1));
-      expect(
-          result['server-1']!.serverUrl, Uri.parse('https://api2.example.com'));
-    });
-
-    test('delete removes entry', () async {
-      final server = PersistedServer(
-        serverUrl: Uri.parse('https://api.example.com'),
-        provider: _provider,
-        tokens: _tokens,
-      );
-
-      await storage.save('server-1', server);
-      await storage.delete('server-1');
-
-      final result = await storage.loadAll();
-      expect(result, isEmpty);
-    });
-
-    test('delete is no-op for missing key', () async {
-      await storage.delete('nonexistent');
-      final result = await storage.loadAll();
-      expect(result, isEmpty);
-    });
-
-    test('loadAll returns unmodifiable map', () async {
-      final server = PersistedServer(
-        serverUrl: Uri.parse('https://api.example.com'),
-        provider: _provider,
-        tokens: _tokens,
-      );
-
-      await storage.save('server-1', server);
-
-      final result = await storage.loadAll();
-      expect(
-        () => (result as Map)['new-key'] = server,
-        throwsUnsupportedError,
-      );
+      expect(restored, isA<KnownServer>());
+      expect(restored.requiresAuth, isFalse);
     });
   });
 }

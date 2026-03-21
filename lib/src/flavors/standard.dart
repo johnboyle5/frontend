@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 import 'package:soliplex_client_native/soliplex_client_native.dart';
@@ -5,23 +6,31 @@ import 'package:soliplex_client_native/soliplex_client_native.dart';
 import '../core/shell_config.dart';
 import '../core/signal_listenable.dart';
 import '../modules/auth/auth_module.dart';
+import '../modules/auth/default_backend_url.dart';
 import '../modules/auth/auth_session.dart';
 import '../modules/auth/consent_notice.dart';
 import '../modules/auth/platform/auth_flow.dart';
 import '../modules/auth/platform/callback_params.dart';
 import '../modules/auth/secure_token_storage.dart';
 import '../modules/auth/server_manager.dart';
+import '../modules/auth/token_storage.dart';
 import '../modules/diagnostics/diagnostics_module.dart';
 import '../modules/diagnostics/network_inspector.dart';
+import '../modules/lobby_placeholder.dart';
+
+const _defaultLogoAsset = 'assets/branding/soliplex/logo_1024.png';
+const _logoSize = 64.0;
 
 Future<ShellConfig> standard({
   String appName = 'Soliplex',
   ThemeData? theme,
   String redirectScheme = 'ai.soliplex.client',
+  String defaultBackendUrl = 'http://localhost:8000',
   CallbackParams callbackParams = const NoCallbackParams(),
   ConsentNotice? consentNotice,
   Widget? logo,
 }) async {
+  logo ??= Image.asset(_defaultLogoAsset, width: _logoSize, height: _logoSize);
   final inspector = NetworkInspector();
 
   SoliplexHttpClient buildClient({
@@ -40,19 +49,32 @@ Future<ShellConfig> standard({
 
   AuthSession buildAuth() => AuthSession(refreshService: refreshService);
 
+  final tokenStorage = SecureTokenStorage();
+  await clearTokensIfFreshInstall(tokenStorage);
+
   final serverManager = ServerManager(
     authFactory: buildAuth,
     clientFactory: buildClient,
-    storage: SecureTokenStorage(),
+    storage: tokenStorage,
   );
   await serverManager.restoreServers();
+
+  final savedUrl = await DefaultBackendUrlStorage.load();
+  final resolvedUrl = savedUrl ??
+      platformDefaultBackendUrl(
+        configUrl: defaultBackendUrl,
+        isWeb: kIsWeb,
+        webOrigin: kIsWeb ? Uri.base : null,
+      );
 
   final authListenable = SignalListenable(serverManager.authState);
   final authFlow = createAuthFlow(redirectScheme: redirectScheme);
 
   return ShellConfig(
     appName: appName,
+    logo: logo,
     theme: theme ?? ThemeData(),
+    initialRoute: callbackParams is WebCallbackParams ? '/auth/callback' : '/',
     refreshListenable: authListenable,
     onDispose: () {
       authListenable.dispose();
@@ -61,13 +83,16 @@ Future<ShellConfig> standard({
     },
     modules: [
       diagnosticsModule(inspector: inspector),
+      lobbyPlaceholder(),
       authModule(
         serverManager: serverManager,
         authFlow: authFlow,
         probeClient: refreshClient,
+        appName: appName,
         callbackParams: callbackParams,
         consentNotice: consentNotice,
         logo: logo,
+        defaultBackendUrl: resolvedUrl,
       ),
     ],
   );

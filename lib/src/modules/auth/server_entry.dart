@@ -2,6 +2,12 @@ import 'package:soliplex_agent/soliplex_agent.dart';
 
 import 'auth_session.dart';
 
+/// Formats a server URL for display: always includes scheme, hides default port.
+String formatServerUrl(Uri url) {
+  final port = url.hasPort ? ':${url.port}' : '';
+  return '${url.scheme}://${url.host}$port';
+}
+
 /// Groups everything that lives and dies with a server.
 class ServerEntry {
   const ServerEntry({
@@ -10,6 +16,7 @@ class ServerEntry {
     required this.auth,
     required this.httpClient,
     required this.connection,
+    this.requiresAuth = true,
   });
 
   final String serverId;
@@ -17,4 +24,7 @@ class ServerEntry {
   final AuthSession auth;
   final SoliplexHttpClient httpClient;
   final ServerConnection connection;
+  final bool requiresAuth;
+
+  bool get isConnected => !requiresAuth || auth.isAuthenticated;
 }

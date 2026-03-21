@@ -7,5 +7,5 @@ export 'src/interfaces/auth_state.dart'
     show AuthState, Authenticated, Unauthenticated;
 export 'src/modules/auth/auth_providers.dart' show serverManagerProvider;
 export 'src/modules/auth/platform/callback_service.dart'
-    show CallbackParamsCapture;
+    show CallbackParamsCapture, clearCallbackUrl;
 export 'src/modules/auth/server_manager.dart' show ServerManager;

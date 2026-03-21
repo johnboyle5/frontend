@@ -1,0 +1,118 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../auth_providers.dart';
+import '../auth_tokens.dart';
+import '../platform/callback_params.dart';
+import '../pre_auth_state.dart';
+import '../server_entry.dart';
+
+class AuthCallbackScreen extends ConsumerStatefulWidget {
+  const AuthCallbackScreen({super.key});
+
+  @override
+  ConsumerState<AuthCallbackScreen> createState() => _AuthCallbackScreenState();
+}
+
+class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
+  String? _error;
+  bool _processing = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _processCallback();
+  }
+
+  Future<void> _processCallback() async {
+    final params = ref.read(callbackParamsProvider);
+
+    if (params is NoCallbackParams) {
+      _fail('No callback parameters received.');
+      return;
+    }
+
+    if (params.hasError) {
+      _fail('Authentication failed: ${params.error}');
+      return;
+    }
+
+    final webParams = params as WebCallbackParams;
+    final accessToken = webParams.accessToken;
+    if (accessToken == null) {
+      _fail('No access token in callback.');
+      return;
+    }
+
+    final preAuth = await PreAuthStateStorage.load();
+    if (preAuth == null) {
+      _fail('Authentication session expired or missing. Please try again.');
+      return;
+    }
+
+    await PreAuthStateStorage.clear();
+
+    final serverManager = ref.read(serverManagerProvider);
+    final serverId = formatServerUrl(preAuth.serverUrl);
+    final entry = serverManager.addServer(
+      serverId: serverId,
+      serverUrl: preAuth.serverUrl,
+    );
+
+    entry.auth.login(
+      provider: OidcProvider(
+        discoveryUrl: preAuth.discoveryUrl,
+        clientId: preAuth.clientId,
+      ),
+      tokens: AuthTokens(
+        accessToken: accessToken,
+        refreshToken: webParams.refreshToken ?? '',
+        expiresAt: webParams.expiresIn != null
+            ? DateTime.now().add(Duration(seconds: webParams.expiresIn!))
+            : DateTime.now().add(const Duration(hours: 1)),
+        idToken: null,
+      ),
+    );
+
+    if (mounted) context.go('/lobby');
+  }
+
+  void _fail(String message) {
+    if (!mounted) return;
+    setState(() {
+      _error = message;
+      _processing = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_processing && _error == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(_error ?? 'An error occurred'),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => context.go('/'),
+                child: const Text('Back to home'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
