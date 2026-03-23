@@ -101,6 +101,9 @@ abstract final class PreAuthStateStorage {
     } on TypeError {
       await clear();
       return null;
+    } catch (_) {
+      await clear();
+      return null;
     }
   }
 

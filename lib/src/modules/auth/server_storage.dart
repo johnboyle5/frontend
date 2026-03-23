@@ -77,9 +77,13 @@ Future<void> clearServersIfFreshInstall(ServerStorage storage) async {
   final prefs = await SharedPreferences.getInstance();
   if (prefs.getBool(_freshInstallKey) == true) return;
 
-  final all = await storage.loadAll();
-  for (final serverId in all.keys) {
-    await storage.delete(serverId);
+  try {
+    final all = await storage.loadAll();
+    for (final serverId in all.keys) {
+      await storage.delete(serverId);
+    }
+  } catch (_) {
+    // Best-effort: corrupted keychain shouldn't prevent app startup.
   }
   await prefs.setBool(_freshInstallKey, true);
 }
