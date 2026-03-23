@@ -1,3 +1,5 @@
+import 'dart:developer' as dev;
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth_tokens.dart';
@@ -18,6 +20,9 @@ sealed class PersistedServer {
         provider: OidcProvider.fromJson(providerJson),
         tokens: AuthTokens.fromJson(tokensJson),
       );
+    }
+    if (providerJson != null || tokensJson != null) {
+      dev.log('Partial auth data for $serverUrl — treating as unauthenticated');
     }
     return KnownServer(serverUrl: serverUrl, requiresAuth: requiresAuth);
   }
@@ -82,8 +87,9 @@ Future<void> clearServersIfFreshInstall(ServerStorage storage) async {
     for (final serverId in all.keys) {
       await storage.delete(serverId);
     }
-  } catch (_) {
-    // Best-effort: corrupted keychain shouldn't prevent app startup.
+  } catch (e, st) {
+    dev.log('Failed to clear servers on fresh install',
+        error: e, stackTrace: st);
   }
   await prefs.setBool(_freshInstallKey, true);
 }

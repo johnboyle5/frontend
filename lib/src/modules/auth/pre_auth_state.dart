@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as dev;
 
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -95,13 +96,8 @@ abstract final class PreAuthStateStorage {
         return null;
       }
       return state;
-    } on FormatException {
-      await clear();
-      return null;
-    } on TypeError {
-      await clear();
-      return null;
-    } catch (_) {
+    } catch (e, st) {
+      dev.log('Failed to load pre-auth state', error: e, stackTrace: st);
       await clear();
       return null;
     }

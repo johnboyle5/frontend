@@ -32,22 +32,18 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
     try {
       final params = ref.read(callbackParamsProvider);
 
-      if (params is NoCallbackParams) {
-        _fail('No callback parameters received.');
-        return;
+      switch (params) {
+        case NoCallbackParams():
+          _fail('No callback parameters received.');
+          return;
+        case WebCallbackError(:final error):
+          _fail('Authentication failed: $error');
+          return;
+        case WebCallbackSuccess():
+          break;
       }
 
-      if (params.hasError) {
-        _fail('Authentication failed: ${params.error}');
-        return;
-      }
-
-      final webParams = params as WebCallbackParams;
-      final accessToken = webParams.accessToken;
-      if (accessToken == null) {
-        _fail('No access token in callback.');
-        return;
-      }
+      final accessToken = params.accessToken;
 
       final preAuth = await PreAuthStateStorage.load();
       if (!mounted) return;
@@ -72,9 +68,9 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
         ),
         tokens: AuthTokens(
           accessToken: accessToken,
-          refreshToken: webParams.refreshToken ?? '',
-          expiresAt: webParams.expiresIn != null
-              ? DateTime.now().add(Duration(seconds: webParams.expiresIn!))
+          refreshToken: params.refreshToken ?? '',
+          expiresAt: params.expiresIn != null
+              ? DateTime.now().add(Duration(seconds: params.expiresIn!))
               : DateTime.now().add(AuthTokens.defaultLifetime),
           idToken: null,
         ),

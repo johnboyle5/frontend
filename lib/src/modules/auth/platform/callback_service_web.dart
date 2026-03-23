@@ -29,16 +29,19 @@ CallbackParams _extractParamsFromUrl() {
   if (params.isEmpty) return const NoCallbackParams();
 
   final error = params['error'];
-  final errorDescription = params['error_description'];
-  final accessToken = params['token'] ?? params['access_token'];
+  if (error != null) {
+    return WebCallbackError(
+      error: error,
+      errorDescription: params['error_description'],
+    );
+  }
 
-  if (accessToken != null || error != null) {
-    return WebCallbackParams(
+  final accessToken = params['token'] ?? params['access_token'];
+  if (accessToken != null) {
+    return WebCallbackSuccess(
       accessToken: accessToken,
       refreshToken: params['refresh_token'],
       expiresIn: _parseIntOrNull(params['expires_in']),
-      error: error,
-      errorDescription: errorDescription,
     );
   }
 

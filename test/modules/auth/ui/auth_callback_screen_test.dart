@@ -85,7 +85,7 @@ void main() {
       final serverManager = _createServerManager();
       await tester.pumpWidget(_buildApp(
         serverManager: serverManager,
-        callbackParams: const WebCallbackParams(
+        callbackParams: const WebCallbackError(
           error: 'access_denied',
           errorDescription: 'User denied access',
         ),
@@ -99,7 +99,7 @@ void main() {
       final serverManager = _createServerManager();
       await tester.pumpWidget(_buildApp(
         serverManager: serverManager,
-        callbackParams: const WebCallbackParams(
+        callbackParams: const WebCallbackSuccess(
           accessToken: 'access',
           refreshToken: 'refresh',
           expiresIn: 3600,
@@ -118,7 +118,7 @@ void main() {
 
       await tester.pumpWidget(_buildApp(
         serverManager: serverManager,
-        callbackParams: const WebCallbackParams(
+        callbackParams: const WebCallbackSuccess(
           accessToken: 'access',
           refreshToken: 'refresh',
           expiresIn: 3600,
@@ -144,7 +144,7 @@ void main() {
 
       await tester.pumpWidget(_buildApp(
         serverManager: serverManager,
-        callbackParams: const WebCallbackParams(
+        callbackParams: const WebCallbackSuccess(
           accessToken: 'access',
           refreshToken: 'refresh',
           expiresIn: 3600,
@@ -167,7 +167,7 @@ void main() {
 
       await tester.pumpWidget(_buildApp(
         serverManager: serverManager,
-        callbackParams: const WebCallbackParams(
+        callbackParams: const WebCallbackSuccess(
           accessToken: 'access',
           refreshToken: 'refresh',
           expiresIn: 3600,

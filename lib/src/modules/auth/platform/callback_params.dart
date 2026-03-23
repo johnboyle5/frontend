@@ -1,49 +1,43 @@
 /// Callback parameters extracted from the auth callback URL.
 sealed class CallbackParams {
   const CallbackParams();
-
-  /// The error message if authentication failed.
-  String? get error;
-
-  /// Whether an error occurred.
-  bool get hasError => error != null;
 }
 
-/// Callback parameters for web BFF OAuth flow.
-///
-/// The backend exchanges the authorization code for tokens and redirects
-/// back with tokens in the URL query parameters.
-class WebCallbackParams extends CallbackParams {
-  const WebCallbackParams({
-    this.accessToken,
+/// Successful web BFF OAuth callback with tokens.
+class WebCallbackSuccess extends CallbackParams {
+  const WebCallbackSuccess({
+    required this.accessToken,
     this.refreshToken,
     this.expiresIn,
-    this.error,
-    this.errorDescription,
   });
 
-  final String? accessToken;
+  final String accessToken;
   final String? refreshToken;
   final int? expiresIn;
 
   @override
-  final String? error;
+  String toString() => 'WebCallbackSuccess('
+      'hasRefreshToken: ${refreshToken != null}, '
+      'expiresIn: $expiresIn)';
+}
+
+/// Failed web BFF OAuth callback.
+class WebCallbackError extends CallbackParams {
+  const WebCallbackError({
+    required this.error,
+    this.errorDescription,
+  });
+
+  final String error;
   final String? errorDescription;
 
   @override
-  String toString() => 'WebCallbackParams('
-      'hasAccessToken: ${accessToken != null}, '
-      'hasRefreshToken: ${refreshToken != null}, '
-      'expiresIn: $expiresIn, '
-      'error: $error)';
+  String toString() => 'WebCallbackError(error: $error)';
 }
 
 /// No callback parameters detected.
 class NoCallbackParams extends CallbackParams {
   const NoCallbackParams();
-
-  @override
-  String? get error => null;
 
   @override
   String toString() => 'NoCallbackParams()';

@@ -74,7 +74,7 @@ Future<ShellConfig> standard({
     appName: appName,
     logo: logo,
     theme: theme ?? ThemeData(),
-    initialRoute: callbackParams is WebCallbackParams ? '/auth/callback' : '/',
+    initialRoute: callbackParams is! NoCallbackParams ? '/auth/callback' : '/',
     refreshListenable: authListenable,
     onDispose: () {
       authListenable.dispose();
