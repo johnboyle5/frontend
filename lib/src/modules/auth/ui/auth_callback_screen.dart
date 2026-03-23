@@ -7,9 +7,12 @@ import '../auth_tokens.dart';
 import '../platform/callback_params.dart';
 import '../pre_auth_state.dart';
 import '../server_entry.dart';
+import '../server_manager.dart';
 
 class AuthCallbackScreen extends ConsumerStatefulWidget {
-  const AuthCallbackScreen({super.key});
+  const AuthCallbackScreen({super.key, required this.serverManager});
+
+  final ServerManager serverManager;
 
   @override
   ConsumerState<AuthCallbackScreen> createState() => _AuthCallbackScreenState();
@@ -53,9 +56,8 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
 
     await PreAuthStateStorage.clear();
 
-    final serverManager = ref.read(serverManagerProvider);
     final serverId = serverIdFromUrl(preAuth.serverUrl);
-    final entry = serverManager.addServer(
+    final entry = widget.serverManager.addServer(
       serverId: serverId,
       serverUrl: preAuth.serverUrl,
     );

@@ -53,7 +53,7 @@ ModuleContribution authModule({
       ),
       GoRoute(
         path: '/auth/callback',
-        builder: (_, __) => const AuthCallbackScreen(),
+        builder: (_, __) => AuthCallbackScreen(serverManager: serverManager),
       ),
     ],
     redirect: (_, state) {

@@ -41,14 +41,13 @@ Widget _buildApp({
       ),
       GoRoute(
         path: '/auth/callback',
-        builder: (_, __) => const AuthCallbackScreen(),
+        builder: (_, __) => AuthCallbackScreen(serverManager: serverManager),
       ),
     ],
   );
 
   return ProviderScope(
     overrides: [
-      serverManagerProvider.overrideWithValue(serverManager),
       authFlowProvider.overrideWithValue(FakeAuthFlow()),
       callbackParamsProvider.overrideWithValue(callbackParams),
     ],
