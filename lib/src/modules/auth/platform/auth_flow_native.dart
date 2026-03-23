@@ -62,9 +62,9 @@ class NativeAuthFlow implements AuthFlow {
       );
     } on AuthException {
       rethrow;
-    } on Exception catch (e) {
+    } on Exception catch (e, st) {
       // TODO: Replace with structured logging once available.
-      debugPrint('NativeAuthFlow: ${e.runtimeType}: $e');
+      debugPrint('NativeAuthFlow: ${e.runtimeType}: $e\n$st');
       throw AuthException(
         'Authentication failed (${e.runtimeType}). Please try again.',
       );
@@ -86,8 +86,9 @@ class NativeAuthFlow implements AuthFlow {
           postLogoutRedirectUrl: _redirectUri,
         ),
       );
-    } on Exception {
+    } on Exception catch (e) {
       // IdP session cleanup is best-effort; local logout already handled.
+      debugPrint('NativeAuthFlow.endSession: $e');
     }
   }
 }
