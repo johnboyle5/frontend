@@ -3,11 +3,14 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// State saved before OAuth redirect (web BFF flow).
+/// State saved before OAuth redirect.
 ///
 /// On web, the callback URL only includes tokens, not provider metadata.
 /// We save this before redirect and retrieve it after callback to know
 /// which server and provider the tokens belong to.
+///
+/// On Android, the OS may kill the app while the user is in the system
+/// browser. This state enables recovery when the app restarts via deep link.
 ///
 /// Includes [createdAt] for expiry — states older than [maxAge] are rejected.
 @immutable
