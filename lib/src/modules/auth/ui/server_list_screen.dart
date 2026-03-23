@@ -1,3 +1,5 @@
+import 'dart:developer' as dev;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -129,9 +131,11 @@ class _ServerListScreenState extends ConsumerState<ServerListScreen> {
           httpClient,
         );
         endSessionEndpoint = discovery.endSessionEndpoint?.toString();
-      } catch (_) {
-        // Non-fatal: local logout already succeeded.
+      } catch (e, st) {
+        dev.log('OIDC discovery failed during logout',
+            error: e, stackTrace: st);
       }
+      if (!mounted) return;
       await authFlow.endSession(
         discoveryUrl: session.provider.discoveryUrl,
         endSessionEndpoint: endSessionEndpoint,

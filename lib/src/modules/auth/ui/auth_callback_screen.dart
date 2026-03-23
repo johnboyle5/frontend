@@ -1,3 +1,5 @@
+import 'dart:developer' as dev;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -77,7 +79,8 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
       );
 
       if (mounted) context.go('/lobby');
-    } catch (e) {
+    } catch (e, st) {
+      dev.log('Auth callback failed', error: e, stackTrace: st);
       _fail('Something went wrong. Please try again.');
     }
   }
