@@ -4,7 +4,7 @@ import 'package:soliplex_frontend/src/interfaces/auth_state.dart';
 import 'package:soliplex_frontend/src/modules/auth/auth_session.dart';
 import 'package:soliplex_frontend/src/modules/auth/auth_tokens.dart';
 import 'package:soliplex_frontend/src/modules/auth/server_manager.dart';
-import 'package:soliplex_frontend/src/modules/auth/token_storage.dart';
+import 'package:soliplex_frontend/src/modules/auth/server_storage.dart';
 
 import '../../helpers/fakes.dart';
 
@@ -19,11 +19,11 @@ AuthTokens _tokens() => AuthTokens(
       expiresAt: DateTime.now().add(const Duration(hours: 1)),
     );
 
-ServerManager _createManager({InMemoryTokenStorage? storage}) {
+ServerManager _createManager({InMemoryServerStorage? storage}) {
   return ServerManager(
     authFactory: () => AuthSession(refreshService: FakeTokenRefreshService()),
     clientFactory: ({getToken, tokenRefresher}) => FakeHttpClient(),
-    storage: storage ?? InMemoryTokenStorage(),
+    storage: storage ?? InMemoryServerStorage(),
   );
 }
 
@@ -234,7 +234,7 @@ void main() {
 
   group('persistence', () {
     test('login saves to storage', () async {
-      final storage = InMemoryTokenStorage();
+      final storage = InMemoryServerStorage();
       final manager = _createManager(storage: storage);
 
       final entry = manager.addServer(
@@ -251,7 +251,7 @@ void main() {
     });
 
     test('logout persists server without tokens', () async {
-      final storage = InMemoryTokenStorage();
+      final storage = InMemoryServerStorage();
       final manager = _createManager(storage: storage);
 
       final entry = manager.addServer(
@@ -269,7 +269,7 @@ void main() {
     });
 
     test('removeServer deletes from storage', () async {
-      final storage = InMemoryTokenStorage();
+      final storage = InMemoryServerStorage();
       final manager = _createManager(storage: storage);
 
       final entry = manager.addServer(
@@ -288,7 +288,7 @@ void main() {
 
   group('restoreServers', () {
     test('recreates entries from storage', () async {
-      final storage = InMemoryTokenStorage();
+      final storage = InMemoryServerStorage();
       final tokens = _tokens();
 
       // Pre-populate storage
@@ -313,7 +313,7 @@ void main() {
     });
 
     test('does not re-persist restored data', () async {
-      final storage = InMemoryTokenStorage();
+      final storage = InMemoryServerStorage();
 
       await storage.save(
         'restored',
@@ -333,7 +333,7 @@ void main() {
     });
 
     test('restores logged-out server without authentication', () async {
-      final storage = InMemoryTokenStorage();
+      final storage = InMemoryServerStorage();
 
       await storage.save(
         'logged-out',
@@ -352,7 +352,7 @@ void main() {
     });
 
     test('restores requiresAuth flag', () async {
-      final storage = InMemoryTokenStorage();
+      final storage = InMemoryServerStorage();
 
       await storage.save(
         'no-auth',

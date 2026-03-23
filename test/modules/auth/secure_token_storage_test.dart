@@ -1,16 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:soliplex_frontend/src/modules/auth/token_storage.dart';
+import 'package:soliplex_frontend/src/modules/auth/server_storage.dart';
 
 import '../../helpers/fakes.dart';
 
 void main() {
-  group('clearTokensIfFreshInstall', () {
-    late InMemoryTokenStorage storage;
+  group('clearServersIfFreshInstall', () {
+    late InMemoryServerStorage storage;
 
     setUp(() {
-      storage = InMemoryTokenStorage();
+      storage = InMemoryServerStorage();
     });
 
     test('clears stored tokens on first launch', () async {
@@ -24,7 +24,7 @@ void main() {
         ),
       );
 
-      await clearTokensIfFreshInstall(storage);
+      await clearServersIfFreshInstall(storage);
 
       final entries = await storage.loadAll();
       expect(entries, isEmpty);
@@ -43,7 +43,7 @@ void main() {
         ),
       );
 
-      await clearTokensIfFreshInstall(storage);
+      await clearServersIfFreshInstall(storage);
 
       final entries = await storage.loadAll();
       expect(entries, hasLength(1));
@@ -52,7 +52,7 @@ void main() {
     test('sets flag after clearing', () async {
       SharedPreferences.setMockInitialValues({});
 
-      await clearTokensIfFreshInstall(storage);
+      await clearServersIfFreshInstall(storage);
 
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool('soliplex_has_launched'), isTrue);

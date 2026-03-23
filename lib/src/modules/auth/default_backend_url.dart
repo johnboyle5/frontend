@@ -9,10 +9,10 @@ String platformDefaultBackendUrl({
   bool isWeb = false,
   Uri? webOrigin,
 }) {
-  if (!isWeb) return configUrl;
-  final host = webOrigin?.host ?? '';
+  if (!isWeb || webOrigin == null) return configUrl;
+  final host = webOrigin.host;
   if (host == 'localhost' || host == '127.0.0.1') return configUrl;
-  return webOrigin!.origin;
+  return webOrigin.origin;
 }
 
 /// Persists and retrieves the user's last-connected backend URL.

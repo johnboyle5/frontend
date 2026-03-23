@@ -7,7 +7,7 @@ import '../../interfaces/auth_state.dart';
 import 'auth_session.dart';
 import 'auth_tokens.dart';
 import 'server_entry.dart';
-import 'token_storage.dart';
+import 'server_storage.dart';
 
 typedef HttpClientFactory = SoliplexHttpClient Function({
   String? Function()? getToken,
@@ -22,14 +22,14 @@ class ServerManager {
   ServerManager({
     required AuthSessionFactory authFactory,
     required HttpClientFactory clientFactory,
-    required TokenStorage storage,
+    required ServerStorage storage,
   })  : _authFactory = authFactory,
         _clientFactory = clientFactory,
         _storage = storage;
 
   final AuthSessionFactory _authFactory;
   final HttpClientFactory _clientFactory;
-  final TokenStorage _storage;
+  final ServerStorage _storage;
 
   final Signal<Map<String, ServerEntry>> _servers =
       Signal<Map<String, ServerEntry>>({});

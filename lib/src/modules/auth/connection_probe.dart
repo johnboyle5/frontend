@@ -11,15 +11,6 @@ typedef DiscoverProviders = Future<List<AuthProviderConfig>> Function(
   SoliplexHttpClient httpClient,
 );
 
-/// Parses and normalizes a server URL string.
-///
-/// Defaults to HTTPS when no scheme is provided. Strips trailing slashes.
-/// Throws [FormatException] for empty or unparseable input.
-Uri normalizeServerUrl(String input) {
-  final candidates = _buildCandidateUrls(input);
-  return candidates.first;
-}
-
 /// Result of probing a backend URL for connectivity.
 sealed class ConnectionProbeResult {
   const ConnectionProbeResult();
@@ -97,6 +88,8 @@ List<Uri> _buildCandidateUrls(String input) {
     throw const FormatException('Server URL cannot be empty');
   }
 
+  // Use string check instead of Uri.hasScheme to avoid Dart's parser treating
+  // `localhost:8000` as scheme `localhost` with path `8000`.
   final hasScheme = trimmed.contains('://');
 
   if (hasScheme) {

@@ -1,7 +1,7 @@
 import 'package:soliplex_agent/soliplex_agent.dart' hide AuthException;
 
 import 'package:soliplex_frontend/src/modules/auth/platform/auth_flow.dart';
-import 'package:soliplex_frontend/src/modules/auth/token_storage.dart';
+import 'package:soliplex_frontend/src/modules/auth/server_storage.dart';
 
 /// Minimal HTTP client with configurable responses.
 ///
@@ -135,8 +135,8 @@ class RecordingAuthFlow implements AuthFlow {
   }
 }
 
-/// In-memory token storage for tests.
-class InMemoryTokenStorage implements TokenStorage {
+/// In-memory server storage for tests.
+class InMemoryServerStorage implements ServerStorage {
   final Map<String, PersistedServer> _store = {};
   int saveCount = 0;
 

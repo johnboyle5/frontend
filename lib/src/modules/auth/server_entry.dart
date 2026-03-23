@@ -2,7 +2,7 @@ import 'package:soliplex_agent/soliplex_agent.dart';
 
 import 'auth_session.dart';
 
-/// Formats a server URL for display: always includes scheme, hides default port.
+/// Formats a server URL for display: always includes scheme, omits unspecified port.
 String formatServerUrl(Uri url) {
   final port = url.hasPort ? ':${url.port}' : '';
   return '${url.scheme}://${url.host}$port';

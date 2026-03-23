@@ -14,7 +14,7 @@ ServerManager _createServerManager() => ServerManager(
         refreshService: FakeTokenRefreshService(),
       ),
       clientFactory: ({getToken, tokenRefresher}) => FakeHttpClient(),
-      storage: InMemoryTokenStorage(),
+      storage: InMemoryServerStorage(),
     );
 
 void main() {

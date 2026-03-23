@@ -60,8 +60,8 @@ class KnownServer extends PersistedServer {
       };
 }
 
-/// Abstraction for persisting auth tokens per server.
-abstract class TokenStorage {
+/// Abstraction for persisting server session data.
+abstract class ServerStorage {
   Future<void> save(String serverId, PersistedServer data);
   Future<void> delete(String serverId);
   Future<Map<String, PersistedServer>> loadAll();
@@ -69,11 +69,11 @@ abstract class TokenStorage {
 
 const _freshInstallKey = 'soliplex_has_launched';
 
-/// Clears stored tokens on first launch after a fresh install.
+/// Clears stored servers on first launch after a fresh install.
 ///
 /// iOS/macOS Keychain persists across app uninstalls. SharedPreferences
 /// does not, so a missing flag means this is a fresh install.
-Future<void> clearTokensIfFreshInstall(TokenStorage storage) async {
+Future<void> clearServersIfFreshInstall(ServerStorage storage) async {
   final prefs = await SharedPreferences.getInstance();
   if (prefs.getBool(_freshInstallKey) == true) return;
 

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:soliplex_frontend/src/modules/auth/auth_tokens.dart';
-import 'package:soliplex_frontend/src/modules/auth/token_storage.dart';
+import 'package:soliplex_frontend/src/modules/auth/server_storage.dart';
 
 const _provider = OidcProvider(
   discoveryUrl: 'https://auth.example.com/.well-known/openid-configuration',

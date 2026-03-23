@@ -11,9 +11,9 @@ import '../modules/auth/auth_session.dart';
 import '../modules/auth/consent_notice.dart';
 import '../modules/auth/platform/auth_flow.dart';
 import '../modules/auth/platform/callback_params.dart';
-import '../modules/auth/secure_token_storage.dart';
+import '../modules/auth/secure_server_storage.dart';
 import '../modules/auth/server_manager.dart';
-import '../modules/auth/token_storage.dart';
+import '../modules/auth/server_storage.dart';
 import '../modules/diagnostics/diagnostics_module.dart';
 import '../modules/diagnostics/network_inspector.dart';
 import '../modules/lobby_placeholder.dart';
@@ -49,13 +49,13 @@ Future<ShellConfig> standard({
 
   AuthSession buildAuth() => AuthSession(refreshService: refreshService);
 
-  final tokenStorage = SecureTokenStorage();
-  await clearTokensIfFreshInstall(tokenStorage);
+  final serverStorage = SecureServerStorage();
+  await clearServersIfFreshInstall(serverStorage);
 
   final serverManager = ServerManager(
     authFactory: buildAuth,
     clientFactory: buildClient,
-    storage: tokenStorage,
+    storage: serverStorage,
   );
   await serverManager.restoreServers();
 
