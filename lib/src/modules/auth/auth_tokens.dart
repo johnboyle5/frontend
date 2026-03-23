@@ -23,6 +23,8 @@ class OidcProvider {
 
 /// In-memory token cache.
 class AuthTokens {
+  /// Assumed token lifetime when the server doesn't provide an expiry.
+  static const defaultLifetime = Duration(hours: 1);
   const AuthTokens({
     required this.accessToken,
     required this.refreshToken,
@@ -34,7 +36,7 @@ class AuthTokens {
     return AuthTokens(
       accessToken: json['accessToken'] as String,
       refreshToken: json['refreshToken'] as String,
-      expiresAt: DateTime.parse(json['expiresAt'] as String),
+      expiresAt: DateTime.parse(json['expiresAt'] as String).toUtc(),
       idToken: json['idToken'] as String?,
     );
   }
@@ -47,7 +49,7 @@ class AuthTokens {
   Map<String, dynamic> toJson() => {
         'accessToken': accessToken,
         'refreshToken': refreshToken,
-        'expiresAt': expiresAt.toIso8601String(),
+        'expiresAt': expiresAt.toUtc().toIso8601String(),
         if (idToken != null) 'idToken': idToken,
       };
 }

@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'token_storage.dart';
+import 'server_storage.dart';
 
-/// Persists auth tokens using platform secure storage.
-class SecureTokenStorage implements TokenStorage {
-  SecureTokenStorage({
+/// Persists server sessions using platform secure storage.
+class SecureServerStorage implements ServerStorage {
+  SecureServerStorage({
     FlutterSecureStorage? storage,
   }) : _storage = storage ?? const FlutterSecureStorage();
 

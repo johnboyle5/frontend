@@ -7,7 +7,7 @@ import '../../interfaces/auth_state.dart';
 import 'auth_session.dart';
 import 'auth_tokens.dart';
 import 'server_entry.dart';
-import 'token_storage.dart';
+import 'server_storage.dart';
 
 typedef HttpClientFactory = SoliplexHttpClient Function({
   String? Function()? getToken,
@@ -22,14 +22,14 @@ class ServerManager {
   ServerManager({
     required AuthSessionFactory authFactory,
     required HttpClientFactory clientFactory,
-    required TokenStorage storage,
+    required ServerStorage storage,
   })  : _authFactory = authFactory,
         _clientFactory = clientFactory,
         _storage = storage;
 
   final AuthSessionFactory _authFactory;
   final HttpClientFactory _clientFactory;
-  final TokenStorage _storage;
+  final ServerStorage _storage;
 
   final Signal<Map<String, ServerEntry>> _servers =
       Signal<Map<String, ServerEntry>>({});
@@ -47,15 +47,18 @@ class ServerManager {
 
   /// Aggregate auth state derived from all server sessions.
   late final ReadonlySignal<AuthState> authState = computed(() {
-    return _servers.value.values.any((e) => e.auth.isAuthenticated)
+    return _servers.value.values.any((e) => e.isConnected)
         ? const Authenticated()
         : const Unauthenticated();
   });
 
-  ServerEntry addServer({required String serverId, required Uri serverUrl}) {
-    if (_servers.value.containsKey(serverId)) {
-      throw StateError('Server "$serverId" already exists');
-    }
+  ServerEntry addServer({
+    required String serverId,
+    required Uri serverUrl,
+    bool requiresAuth = true,
+  }) {
+    final existing = _servers.value[serverId];
+    if (existing != null) return existing;
 
     final auth = _authFactory();
 
@@ -76,6 +79,7 @@ class ServerManager {
       auth: auth,
       httpClient: httpClient,
       connection: connection,
+      requiresAuth: requiresAuth,
     );
 
     registry.add(connection);
@@ -126,11 +130,12 @@ class ServerManager {
           final server = addServer(
             serverId: entry.key,
             serverUrl: entry.value.serverUrl,
+            requiresAuth: entry.value.requiresAuth,
           );
-          server.auth.login(
-            provider: entry.value.provider,
-            tokens: entry.value.tokens,
-          );
+          if (entry.value
+              case AuthenticatedServer(:final provider, :final tokens)) {
+            server.auth.login(provider: provider, tokens: tokens);
+          }
         } catch (e, st) {
           debugPrint('Failed to restore server ${entry.key}: $e\n$st');
         }
@@ -141,9 +146,13 @@ class ServerManager {
   }
 
   void dispose() {
-    for (final id in _servers.value.keys.toList()) {
-      removeServer(id);
+    for (final entry in _servers.value.entries) {
+      _subscriptions.remove(entry.key)?.call();
+      entry.value.connection.close();
+      entry.value.httpClient.close();
+      registry.remove(entry.key);
     }
+    _servers.value = {};
   }
 
   void _onSessionChanged(String serverId, ServerEntry entry) {
@@ -153,14 +162,21 @@ class ServerManager {
         case ActiveSession(:final provider, :final tokens):
           await _storage.save(
             serverId,
-            PersistedServer(
+            AuthenticatedServer(
               serverUrl: entry.serverUrl,
+              requiresAuth: entry.requiresAuth,
               provider: provider,
               tokens: tokens,
             ),
           );
         case NoSession():
-          await _storage.delete(serverId);
+          await _storage.save(
+            serverId,
+            KnownServer(
+              serverUrl: entry.serverUrl,
+              requiresAuth: entry.requiresAuth,
+            ),
+          );
       }
     }
 

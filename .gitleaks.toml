@@ -13,4 +13,5 @@ paths = [
     '''.venv''',
     '''\.venv''',
     '''\.pytest_cache''',
+    '''(ios|macos)/Podfile\.lock''',
 ]
