@@ -32,7 +32,12 @@ final class InsecureWarning extends ConnectState {
 }
 
 final class Consent extends ConnectState {
-  const Consent({required this.probeResult, required this.providers});
+  const Consent({
+    required this.notice,
+    required this.probeResult,
+    required this.providers,
+  });
+  final ConsentNotice notice;
   final ConnectionSuccess probeResult;
   final List<AuthProviderConfig> providers;
 }
@@ -151,7 +156,11 @@ class ConnectFlow {
     List<AuthProviderConfig> providers,
   ) {
     if (consentNotice != null) {
-      state.value = Consent(probeResult: probeResult, providers: providers);
+      state.value = Consent(
+        notice: consentNotice!,
+        probeResult: probeResult,
+        providers: providers,
+      );
     } else {
       _proceedAfterConsent(probeResult, providers);
     }

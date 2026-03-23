@@ -6,6 +6,7 @@ import 'package:soliplex_agent/soliplex_agent.dart' hide AuthException;
 
 import '../auth_providers.dart';
 import '../connect_flow.dart';
+import '../consent_notice.dart';
 import '../connection_probe.dart';
 import '../server_entry.dart';
 import '../server_manager.dart';
@@ -61,7 +62,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     _unsubscribeFlow = _flow.state.subscribe((state) {
       if (state is Connected && mounted) {
-        context.go('/lobby');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) context.go('/lobby');
+        });
         return;
       }
       if (mounted) setState(() {});
@@ -102,11 +105,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
+    _unsubscribeFlow();
+    _unsubscribeServers();
     _flow.dispose();
     HardwareKeyboard.instance.removeHandler(_handleKey);
     _urlController.removeListener(_onUrlChanged);
-    _unsubscribeFlow();
-    _unsubscribeServers();
     _urlFocusNode.dispose();
     _urlController.dispose();
     super.dispose();
@@ -142,8 +145,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 Probing() => _buildProbing(context),
                 InsecureWarning(:final probeResult) =>
                   _buildInsecureWarning(context, probeResult),
-                Consent(:final probeResult, :final providers) =>
-                  _buildConsent(context, probeResult, providers),
+                Consent(:final notice, :final probeResult, :final providers) =>
+                  _buildConsent(context, notice, probeResult, providers),
                 ProviderSelection(:final providers) =>
                   _buildProviderSelection(context, providers),
                 Authenticating() => _buildAuthenticating(context),
@@ -303,10 +306,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   List<Widget> _buildConsent(
     BuildContext context,
+    ConsentNotice notice,
     ConnectionSuccess probeResult,
     List<AuthProviderConfig> providers,
   ) {
-    final notice = _flow.consentNotice!;
     return [
       ..._buildHeader(context, 'Sign in to continue'),
       Text(notice.title, style: Theme.of(context).textTheme.titleLarge),
