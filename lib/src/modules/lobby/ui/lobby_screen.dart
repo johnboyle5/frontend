@@ -41,6 +41,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   void _onRoomTap(String serverId, String roomId) {
     final entry = widget.serverManager.servers.value[serverId];
+    assert(entry != null, 'Room tap for unknown serverId: $serverId');
     if (entry == null) return;
     context.go('/room/${entry.alias}/$roomId');
   }
