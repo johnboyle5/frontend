@@ -24,6 +24,7 @@ String formatServerUrl(Uri url) {
 class ServerEntry {
   const ServerEntry({
     required this.serverId,
+    required this.alias,
     required this.serverUrl,
     required this.auth,
     required this.httpClient,
@@ -32,6 +33,7 @@ class ServerEntry {
   });
 
   final String serverId;
+  final String alias;
   final Uri serverUrl;
   final AuthSession auth;
   final SoliplexHttpClient httpClient;

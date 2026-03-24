@@ -69,6 +69,17 @@ void main() {
       expect(second, same(first));
       expect(manager.servers.value, hasLength(1));
     });
+
+    test('assigns alias from server URL', () {
+      final manager = _createManager();
+
+      final entry = manager.addServer(
+        serverId: 'http://localhost:8000',
+        serverUrl: Uri.parse('http://localhost:8000'),
+      );
+
+      expect(entry.alias, 'localhost-8000');
+    });
   });
 
   group('removeServer', () {

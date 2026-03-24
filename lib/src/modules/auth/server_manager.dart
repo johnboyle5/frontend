@@ -43,6 +43,9 @@ class ServerManager {
   /// Serializes persistence operations per server to prevent race conditions.
   final Map<String, Future<void>> _persistQueue = {};
 
+  /// Tracks in-use aliases to ensure uniqueness.
+  final Set<String> _aliases = {};
+
   bool _restoring = false;
 
   /// Aggregate auth state derived from all server sessions.
@@ -52,6 +55,15 @@ class ServerManager {
         : const Unauthenticated();
   });
 
+  String _uniqueAlias(Uri serverUrl) {
+    final base = aliasFromUrl(serverUrl);
+    if (_aliases.add(base)) return base;
+    for (var i = 2;; i++) {
+      final candidate = '$base-$i';
+      if (_aliases.add(candidate)) return candidate;
+    }
+  }
+
   ServerEntry addServer({
     required String serverId,
     required Uri serverUrl,
@@ -60,6 +72,7 @@ class ServerManager {
     final existing = _servers.value[serverId];
     if (existing != null) return existing;
 
+    final alias = _uniqueAlias(serverUrl);
     final auth = _authFactory();
 
     final httpClient = _clientFactory(
@@ -75,6 +88,7 @@ class ServerManager {
 
     final entry = ServerEntry(
       serverId: serverId,
+      alias: alias,
       serverUrl: serverUrl,
       auth: auth,
       httpClient: httpClient,
@@ -98,6 +112,7 @@ class ServerManager {
       throw StateError('No server entry for "$serverId"');
     }
 
+    _aliases.remove(entry.alias);
     _subscriptions.remove(serverId)?.call();
 
     entry.connection.close();
@@ -152,6 +167,7 @@ class ServerManager {
       entry.value.httpClient.close();
       registry.remove(entry.key);
     }
+    _aliases.clear();
     _servers.value = {};
   }
 
