@@ -64,6 +64,13 @@ class ServerManager {
     }
   }
 
+  ServerEntry? entryByAlias(String alias) {
+    for (final entry in _servers.value.values) {
+      if (entry.alias == alias) return entry;
+    }
+    return null;
+  }
+
   ServerEntry addServer({
     required String serverId,
     required Uri serverUrl,

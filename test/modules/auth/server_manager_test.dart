@@ -69,7 +69,9 @@ void main() {
       expect(second, same(first));
       expect(manager.servers.value, hasLength(1));
     });
+  });
 
+  group('alias', () {
     test('assigns alias from server URL', () {
       final manager = _createManager();
 
@@ -79,6 +81,55 @@ void main() {
       );
 
       expect(entry.alias, 'localhost-8000');
+    });
+
+    test('appends suffix on collision', () {
+      final manager = _createManager();
+
+      final first = manager.addServer(
+        serverId: 'http://example.com',
+        serverUrl: Uri.parse('http://example.com'),
+      );
+      final second = manager.addServer(
+        serverId: 'https://example.com',
+        serverUrl: Uri.parse('https://example.com'),
+      );
+
+      expect(first.alias, 'example-com');
+      expect(second.alias, 'example-com-2');
+    });
+
+    test('entryByAlias returns matching entry', () {
+      final manager = _createManager();
+
+      final entry = manager.addServer(
+        serverId: 'http://localhost:8000',
+        serverUrl: Uri.parse('http://localhost:8000'),
+      );
+
+      expect(manager.entryByAlias('localhost-8000'), same(entry));
+    });
+
+    test('entryByAlias returns null for unknown alias', () {
+      final manager = _createManager();
+      expect(manager.entryByAlias('nonexistent'), isNull);
+    });
+
+    test('removeServer frees alias for reuse', () {
+      final manager = _createManager();
+
+      manager.addServer(
+        serverId: 'http://example.com',
+        serverUrl: Uri.parse('http://example.com'),
+      );
+      manager.removeServer('http://example.com');
+
+      final reused = manager.addServer(
+        serverId: 'https://example.com',
+        serverUrl: Uri.parse('https://example.com'),
+      );
+
+      expect(reused.alias, 'example-com');
     });
   });
 
