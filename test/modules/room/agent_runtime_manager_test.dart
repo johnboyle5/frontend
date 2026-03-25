@@ -20,18 +20,6 @@ void main() {
     await manager.dispose();
   });
 
-  test('creates AgentRuntime for a connection', () {
-    final connection = ServerConnection(
-      serverId: 'server-1',
-      api: FakeSoliplexApi(),
-      agUiStreamClient: FakeAgUiStreamClient(),
-    );
-
-    final runtime = manager.getRuntime(connection);
-    expect(runtime, isA<AgentRuntime>());
-    expect(runtime.serverId, 'server-1');
-  });
-
   test('caches runtime by serverId', () {
     final connection = ServerConnection(
       serverId: 'server-1',
@@ -61,5 +49,23 @@ void main() {
     expect(identical(rt1, rt2), isFalse);
     expect(rt1.serverId, 'server-1');
     expect(rt2.serverId, 'server-2');
+  });
+
+  test('replaces runtime when connection changes for same serverId', () {
+    final conn1 = ServerConnection(
+      serverId: 'server-1',
+      api: FakeSoliplexApi(),
+      agUiStreamClient: FakeAgUiStreamClient(),
+    );
+    final conn2 = ServerConnection(
+      serverId: 'server-1',
+      api: FakeSoliplexApi(),
+      agUiStreamClient: FakeAgUiStreamClient(),
+    );
+
+    final rt1 = manager.getRuntime(conn1);
+    final rt2 = manager.getRuntime(conn2);
+    expect(identical(rt1, rt2), isFalse);
+    expect(rt2.serverId, 'server-1');
   });
 }

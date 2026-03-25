@@ -31,6 +31,7 @@ class ThreadViewState {
   CancelToken? _cancelToken;
   AgentSession? _activeSession;
   void Function()? _runStateUnsub;
+  bool _isDisposed = false;
 
   final Signal<ThreadViewStatus> _messages =
       Signal<ThreadViewStatus>(MessagesLoading());
@@ -52,8 +53,10 @@ class ThreadViewState {
         prompt: prompt,
         threadId: threadId,
       );
+      if (_isDisposed) return;
       _attachSession(session);
     } on Object catch (error) {
+      if (_isDisposed) return;
       _messages.value = MessagesFailed(error);
     }
   }
@@ -67,6 +70,9 @@ class ThreadViewState {
   }
 
   void _attachSession(AgentSession session) {
+    if (_isDisposed) return;
+    _detachSession();
+    _cancelToken?.cancel('session attached');
     _activeSession = session;
     _sessionState.value = session.state;
     _runStateUnsub = session.runState.subscribe(_onRunState);
@@ -101,11 +107,14 @@ class ThreadViewState {
   }
 
   void _fetch() {
+    if (_isDisposed) return;
     _cancelToken?.cancel('re-fetch');
     final token = CancelToken();
     _cancelToken = token;
 
-    _messages.value = MessagesLoading();
+    if (_messages.value is! MessagesLoaded) {
+      _messages.value = MessagesLoading();
+    }
 
     _connection.api
         .getThreadHistory(_roomId, threadId, cancelToken: token)
@@ -124,6 +133,7 @@ class ThreadViewState {
   }
 
   void dispose() {
+    _isDisposed = true;
     _cancelToken?.cancel('disposed');
     _detachSession();
   }

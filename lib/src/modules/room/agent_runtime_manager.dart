@@ -17,30 +17,46 @@ class AgentRuntimeManager {
   final PlatformConstraints _platform;
   final ToolRegistryResolver _toolRegistryResolver;
   final Logger _logger;
-  final Map<String, AgentRuntime> _runtimes = {};
+  final Map<String, ({ServerConnection connection, AgentRuntime runtime})>
+      _cache = {};
 
-  /// Returns the cached [AgentRuntime] for [connection], creating it if needed.
+  /// Returns the cached [AgentRuntime] for [connection], creating it if
+  /// needed.
+  ///
+  /// If the same server ID appears with a different [ServerConnection]
+  /// (e.g., after server removal and re-addition), the stale runtime is
+  /// disposed and replaced.
   AgentRuntime getRuntime(ServerConnection connection) {
-    return _runtimes.putIfAbsent(connection.serverId, () {
-      final llmProvider = AgUiLlmProvider(
-        api: connection.api,
-        agUiStreamClient: connection.agUiStreamClient,
-      );
-      return AgentRuntime(
-        connection: connection,
-        llmProvider: llmProvider,
-        toolRegistryResolver: _toolRegistryResolver,
-        platform: _platform,
-        logger: _logger,
-      );
-    });
+    final existing = _cache[connection.serverId];
+    if (existing != null && identical(existing.connection, connection)) {
+      return existing.runtime;
+    }
+    existing?.runtime.dispose();
+    final runtime = _createRuntime(connection);
+    _cache[connection.serverId] = (connection: connection, runtime: runtime);
+    return runtime;
+  }
+
+  AgentRuntime _createRuntime(ServerConnection connection) {
+    final llmProvider = AgUiLlmProvider(
+      api: connection.api,
+      agUiStreamClient: connection.agUiStreamClient,
+    );
+    return AgentRuntime(
+      connection: connection,
+      llmProvider: llmProvider,
+      toolRegistryResolver: _toolRegistryResolver,
+      platform: _platform,
+      logger: _logger,
+    );
   }
 
   /// Disposes all cached runtimes and clears the cache.
   Future<void> dispose() async {
-    for (final runtime in _runtimes.values) {
-      await runtime.dispose();
+    final entries = _cache.values.toList();
+    _cache.clear();
+    for (final entry in entries) {
+      await entry.runtime.dispose();
     }
-    _runtimes.clear();
   }
 }

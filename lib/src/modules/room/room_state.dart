@@ -25,6 +25,7 @@ class RoomState {
 
   final ThreadListState threadList;
   ThreadViewState? _activeThreadView;
+  bool _isDisposed = false;
 
   ThreadViewState? get activeThreadView => _activeThreadView;
 
@@ -43,6 +44,7 @@ class RoomState {
   /// Explicit thread creation (the "+" button path).
   Future<String> createThread() async {
     final (threadInfo, _) = await _connection.api.createThread(_roomId);
+    if (_isDisposed) return threadInfo.id;
     threadList.refresh();
     selectThread(threadInfo.id);
     onNavigateToThread?.call(threadInfo.id);
@@ -58,6 +60,7 @@ class RoomState {
       roomId: _roomId,
       prompt: prompt,
     );
+    if (_isDisposed) return;
     final newThreadId = session.threadKey.threadId;
     threadList.refresh();
 
@@ -72,6 +75,7 @@ class RoomState {
   }
 
   void dispose() {
+    _isDisposed = true;
     threadList.dispose();
     _activeThreadView?.dispose();
   }
