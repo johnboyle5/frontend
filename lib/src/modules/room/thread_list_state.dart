@@ -43,8 +43,9 @@ class ThreadListState {
     _connection.api.getThreads(_roomId, cancelToken: token).then((threads) {
       if (token.isCancelled) return;
       _cancelToken = null;
-      threads.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      _threads.value = ThreadsLoaded(threads);
+      final sorted = threads.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _threads.value = ThreadsLoaded(sorted);
     }).catchError((Object error) {
       if (token.isCancelled) return;
       _cancelToken = null;

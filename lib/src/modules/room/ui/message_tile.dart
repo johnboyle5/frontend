@@ -13,12 +13,15 @@ class MessageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return switch (message) {
-      final TextMessage m => TextMessageTile(message: m),
-      final ToolCallMessage m => ToolCallTile(message: m),
-      final ErrorMessage m => ErrorMessageTile(message: m),
-      final GenUiMessage m => GenUiTile(message: m),
-      LoadingMessage() => const LoadingMessageTile(),
-    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: switch (message) {
+        final TextMessage m => TextMessageTile(message: m),
+        final ToolCallMessage m => ToolCallTile(message: m),
+        final ErrorMessage m => ErrorMessageTile(message: m),
+        final GenUiMessage m => GenUiTile(message: m),
+        LoadingMessage() => const LoadingMessageTile(),
+      },
+    );
   }
 }

@@ -81,7 +81,9 @@ class _RoomScreenState extends State<RoomScreen> {
       return;
     }
 
+    final targetState = _state;
     _autoSelectUnsub = _state.threadList.threads.subscribe((status) {
+      if (!mounted || targetState != _state) return;
       if (status is ThreadsLoaded && status.threads.isNotEmpty) {
         _cancelAutoSelect();
         _state.selectThread(status.threads.first.id);
@@ -105,8 +107,6 @@ class _RoomScreenState extends State<RoomScreen> {
   void _onBackToLobby() => context.go('/lobby');
 
   void _onThreadSelected(String threadId) {
-    _state.selectThread(threadId);
-    setState(() {});
     context.go(
       '/room/${widget.serverEntry.alias}/${widget.roomId}/$threadId',
     );
@@ -152,7 +152,21 @@ class _RoomScreenState extends State<RoomScreen> {
               selectedThreadId != null ? 'Thread' : widget.roomId,
             ),
           ),
-          drawer: Drawer(child: SafeArea(child: sidebar)),
+          drawer: Drawer(
+            child: Builder(
+              builder: (drawerContext) => SafeArea(
+                child: ThreadSidebar(
+                  threadListStatus: threadListStatus,
+                  selectedThreadId: selectedThreadId,
+                  onThreadSelected: (threadId) {
+                    Navigator.pop(drawerContext);
+                    _onThreadSelected(threadId);
+                  },
+                  onBackToLobby: _onBackToLobby,
+                ),
+              ),
+            ),
+          ),
           body: content,
         );
       },

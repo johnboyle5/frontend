@@ -22,6 +22,7 @@ class MessageTimeline extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       itemCount: messages.length,
       itemBuilder: (context, index) => MessageTile(
+        key: ValueKey(messages[index].id),
         message: messages[index],
       ),
     );

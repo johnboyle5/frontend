@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/shell_config.dart';
@@ -10,56 +9,31 @@ ModuleContribution roomModule({
 }) {
   return ModuleContribution(
     routes: [
-      GoRoute(
-        path: '/room/:serverAlias/:roomId',
-        pageBuilder: (context, state) {
-          final alias = state.pathParameters['serverAlias']!;
-          final entry = serverManager.entryByAlias(alias);
-          if (entry == null || !entry.isConnected) {
-            return const NoTransitionPage(
-              child: _RedirectToLobby(),
-            );
-          }
-          return NoTransitionPage(
-            child: RoomScreen(
-              serverEntry: entry,
-              roomId: state.pathParameters['roomId']!,
-              threadId: null,
-            ),
-          );
-        },
-      ),
-      GoRoute(
-        path: '/room/:serverAlias/:roomId/:threadId',
-        pageBuilder: (context, state) {
-          final alias = state.pathParameters['serverAlias']!;
-          final entry = serverManager.entryByAlias(alias);
-          if (entry == null || !entry.isConnected) {
-            return const NoTransitionPage(
-              child: _RedirectToLobby(),
-            );
-          }
-          return NoTransitionPage(
-            child: RoomScreen(
-              serverEntry: entry,
-              roomId: state.pathParameters['roomId']!,
-              threadId: state.pathParameters['threadId'],
-            ),
-          );
-        },
-      ),
+      _buildRoute('/room/:serverAlias/:roomId', serverManager),
+      _buildRoute('/room/:serverAlias/:roomId/:threadId', serverManager),
     ],
   );
 }
 
-class _RedirectToLobby extends StatelessWidget {
-  const _RedirectToLobby();
-
-  @override
-  Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.go('/lobby');
-    });
-    return const SizedBox.shrink();
-  }
+GoRoute _buildRoute(String path, ServerManager serverManager) {
+  return GoRoute(
+    path: path,
+    redirect: (context, state) {
+      final alias = state.pathParameters['serverAlias']!;
+      final entry = serverManager.entryByAlias(alias);
+      if (entry == null || !entry.isConnected) return '/lobby';
+      return null;
+    },
+    pageBuilder: (context, state) {
+      final alias = state.pathParameters['serverAlias']!;
+      final entry = serverManager.entryByAlias(alias)!;
+      return NoTransitionPage(
+        child: RoomScreen(
+          serverEntry: entry,
+          roomId: state.pathParameters['roomId']!,
+          threadId: state.pathParameters['threadId'],
+        ),
+      );
+    },
+  );
 }

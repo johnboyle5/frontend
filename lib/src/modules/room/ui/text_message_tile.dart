@@ -10,34 +10,31 @@ class TextMessageTile extends StatelessWidget {
     final theme = Theme.of(context);
     final isUser = message.user == ChatUser.user;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            isUser ? 'You' : 'Assistant',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          isUser ? 'You' : 'Assistant',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
           ),
+        ),
+        const SizedBox(height: 4),
+        if (message.hasThinkingText) ...[
+          _ThinkingBlock(text: message.thinkingText),
           const SizedBox(height: 4),
-          if (message.hasThinkingText) ...[
-            _ThinkingBlock(text: message.thinkingText),
-            const SizedBox(height: 4),
-          ],
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: isUser
-                  ? theme.colorScheme.primaryContainer
-                  : theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: SelectableText(message.text),
-          ),
         ],
-      ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isUser
+                ? theme.colorScheme.primaryContainer
+                : theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: SelectableText(message.text),
+        ),
+      ],
     );
   }
 }

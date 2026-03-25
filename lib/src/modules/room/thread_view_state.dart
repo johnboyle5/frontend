@@ -19,19 +19,16 @@ class ThreadViewState {
   ThreadViewState({
     required ServerConnection connection,
     required String roomId,
-    required String threadId,
+    required this.threadId,
   })  : _connection = connection,
-        _roomId = roomId,
-        _threadId = threadId {
+        _roomId = roomId {
     _fetch();
   }
 
   final ServerConnection _connection;
   final String _roomId;
-  final String _threadId;
+  final String threadId;
   CancelToken? _cancelToken;
-
-  String get threadId => _threadId;
 
   final Signal<ThreadViewStatus> _messages =
       Signal<ThreadViewStatus>(MessagesLoading());
@@ -47,7 +44,7 @@ class ThreadViewState {
     _messages.value = MessagesLoading();
 
     _connection.api
-        .getThreadHistory(_roomId, _threadId, cancelToken: token)
+        .getThreadHistory(_roomId, threadId, cancelToken: token)
         .then((history) {
       if (token.isCancelled) return;
       _cancelToken = null;

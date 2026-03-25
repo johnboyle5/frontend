@@ -7,15 +7,12 @@ class ToolCallTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final toolCall in message.toolCalls)
-            _ToolCallCard(toolCall: toolCall),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final toolCall in message.toolCalls)
+          _ToolCallCard(toolCall: toolCall),
+      ],
     );
   }
 }
@@ -33,10 +30,14 @@ class _ToolCallCard extends StatelessWidget {
         leading: Icon(Icons.bolt, color: theme.colorScheme.primary, size: 18),
         title: Row(
           children: [
-            Text(
-              toolCall.name,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.w500),
+            Flexible(
+              child: Text(
+                toolCall.name,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w500),
+              ),
             ),
             const SizedBox(width: 8),
             Text(
