@@ -126,5 +126,46 @@ void main() {
 
       state.dispose();
     });
+
+    test('spawn error preserves existing messages', () async {
+      final message = TextMessage(
+        id: 'msg-1',
+        user: ChatUser.user,
+        createdAt: DateTime(2026, 3, 1),
+        text: 'Existing',
+      );
+      api.nextThreadHistory = ThreadHistory(messages: [message]);
+
+      // Use a ThreadViewState with no threadId so that sendMessage
+      // triggers spawn without a threadId. This forces _resolveThread
+      // to call createThread, which we make fail.
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      expect(state.messages.value, isA<MessagesLoaded>());
+
+      // Dispose the runtime so spawn throws.
+      await runtimeManager.dispose();
+      await state.sendMessage('Hello', runtime);
+
+      // Let the error propagate.
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      // Messages should still be the original loaded state.
+      final status = state.messages.value;
+      expect(status, isA<MessagesLoaded>());
+      expect((status as MessagesLoaded).messages.length, 1);
+
+      // The error should be surfaced via lastSendError.
+      expect(state.lastSendError.value, isNotNull);
+
+      state.dispose();
+    });
   });
 }

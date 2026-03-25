@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
@@ -80,7 +81,7 @@ void main() {
     sessionState.dispose();
   });
 
-  testWidgets('text field disabled during active run', (tester) async {
+  testWidgets('text field readOnly during active run', (tester) async {
     final sessionState = signal<AgentSessionState?>(AgentSessionState.running);
 
     await tester.pumpWidget(MaterialApp(
@@ -94,7 +95,32 @@ void main() {
     ));
 
     final textField = tester.widget<TextField>(find.byType(TextField));
-    expect(textField.enabled, isFalse);
+    expect(textField.readOnly, isTrue);
+
+    sessionState.dispose();
+  });
+
+  testWidgets('Enter key sends message', (tester) async {
+    String? sentText;
+    final sessionState = signal<AgentSessionState?>(null);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ChatInput(
+          onSend: (text) => sentText = text,
+          onCancel: () {},
+          sessionState: sessionState,
+        ),
+      ),
+    ));
+
+    await tester.enterText(find.byType(TextField), 'Hello');
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(sentText, 'Hello');
 
     sessionState.dispose();
   });

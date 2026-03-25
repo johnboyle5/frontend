@@ -44,9 +44,13 @@ class ThreadViewState {
       Signal<AgentSessionState?>(null);
   ReadonlySignal<AgentSessionState?> get sessionState => _sessionState;
 
+  final Signal<Object?> _lastSendError = Signal<Object?>(null);
+  ReadonlySignal<Object?> get lastSendError => _lastSendError;
+
   void refresh() => _fetch();
 
   Future<void> sendMessage(String prompt, AgentRuntime runtime) async {
+    _lastSendError.value = null;
     try {
       final session = await runtime.spawn(
         roomId: _roomId,
@@ -57,7 +61,7 @@ class ThreadViewState {
       _attachSession(session);
     } on Object catch (error) {
       if (_isDisposed) return;
-      _messages.value = MessagesFailed(error);
+      _lastSendError.value = error;
     }
   }
 
@@ -90,8 +94,13 @@ class ThreadViewState {
       case CompletedState():
       case FailedState():
       case CancelledState():
-        _detachSession();
-        _fetch();
+        _runStateUnsub?.call();
+        _runStateUnsub = null;
+        _activeSession = null;
+        _sessionState.value = null;
+        // Keep _streamingState visible until fetch completes to avoid
+        // a flicker between streaming end and new data arriving.
+        _fetchThenClearStreaming();
       case IdleState():
       case ToolYieldingState():
         break;
@@ -104,6 +113,30 @@ class ThreadViewState {
     _activeSession = null;
     _streamingState.value = null;
     _sessionState.value = null;
+  }
+
+  void _fetchThenClearStreaming() {
+    if (_isDisposed) return;
+    _cancelToken?.cancel('re-fetch');
+    final token = CancelToken();
+    _cancelToken = token;
+
+    _connection.api
+        .getThreadHistory(_roomId, threadId, cancelToken: token)
+        .then((history) {
+      if (token.isCancelled) return;
+      _cancelToken = null;
+      _messages.value = MessagesLoaded(
+        messages: history.messages,
+        messageStates: history.messageStates,
+      );
+      _streamingState.value = null;
+    }).catchError((Object error) {
+      if (token.isCancelled) return;
+      _cancelToken = null;
+      _streamingState.value = null;
+      _messages.value = MessagesFailed(error);
+    });
   }
 
   void _fetch() {

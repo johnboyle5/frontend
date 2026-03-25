@@ -68,4 +68,37 @@ void main() {
 
     state.dispose();
   });
+
+  test('refresh error preserves loaded threads', () async {
+    api.nextThreads = [
+      ThreadInfo(
+        id: 'thread-1',
+        roomId: 'room-1',
+        name: 'Test thread',
+        createdAt: DateTime(2026, 3, 1),
+      ),
+    ];
+
+    final state = ThreadListState(
+      connection: connection,
+      roomId: 'room-1',
+    );
+
+    await Future<void>.delayed(Duration.zero);
+    expect(state.threads.value, isA<ThreadsLoaded>());
+
+    // Now make refresh fail.
+    api.nextThreads = null;
+    api.nextThreadsError = Exception('refresh error');
+    state.refresh();
+
+    await Future<void>.delayed(Duration.zero);
+
+    // Should still show the loaded threads, not replace with error.
+    final status = state.threads.value;
+    expect(status, isA<ThreadsLoaded>());
+    expect((status as ThreadsLoaded).threads.length, 1);
+
+    state.dispose();
+  });
 }

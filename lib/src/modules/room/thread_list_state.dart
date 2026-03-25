@@ -53,7 +53,10 @@ class ThreadListState {
     }).catchError((Object error) {
       if (token.isCancelled) return;
       _cancelToken = null;
-      _threads.value = ThreadsFailed(error);
+      // Preserve existing loaded threads on refresh failure.
+      if (_threads.value is! ThreadsLoaded) {
+        _threads.value = ThreadsFailed(error);
+      }
     });
   }
 
