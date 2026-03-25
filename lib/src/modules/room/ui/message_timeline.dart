@@ -26,15 +26,16 @@ class MessageTimeline extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       itemCount: itemCount,
       itemBuilder: (context, index) {
-        if (index < messages.length) {
-          return MessageTile(
-            key: ValueKey(messages[index].id),
-            message: messages[index],
+        final isStreamingItem = index == messages.length;
+        if (isStreamingItem) {
+          return StreamingTile(
+            key: const ValueKey('streaming'),
+            streamingState: streamingState!,
           );
         }
-        return StreamingTile(
-          key: const ValueKey('streaming'),
-          streamingState: streamingState!,
+        return MessageTile(
+          key: ValueKey(messages[index].id),
+          message: messages[index],
         );
       },
     );
