@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
 import '../../auth/server_entry.dart';
 import '../agent_runtime_manager.dart';
 import '../room_state.dart';
 import '../thread_list_state.dart';
 import '../thread_view_state.dart';
+import 'chat_input.dart';
 import 'message_timeline.dart';
 import 'thread_sidebar.dart';
 
@@ -32,6 +34,8 @@ class RoomScreen extends StatefulWidget {
 }
 
 class _RoomScreenState extends State<RoomScreen> {
+  static final _idleSessionState = signal<AgentSessionState?>(null);
+
   late RoomState _state;
   void Function()? _autoSelectUnsub;
 
@@ -42,6 +46,13 @@ class _RoomScreenState extends State<RoomScreen> {
       connection: widget.serverEntry.connection,
       roomId: widget.roomId,
       runtimeManager: widget.runtimeManager,
+      onNavigateToThread: (threadId) {
+        if (mounted) {
+          context.go(
+            '/room/${widget.serverEntry.alias}/${widget.roomId}/$threadId',
+          );
+        }
+      },
     );
     if (widget.threadId != null) {
       _state.selectThread(widget.threadId!);
@@ -61,6 +72,13 @@ class _RoomScreenState extends State<RoomScreen> {
         connection: widget.serverEntry.connection,
         roomId: widget.roomId,
         runtimeManager: widget.runtimeManager,
+        onNavigateToThread: (threadId) {
+          if (mounted) {
+            context.go(
+              '/room/${widget.serverEntry.alias}/${widget.roomId}/$threadId',
+            );
+          }
+        },
       );
       if (widget.threadId != null) {
         _state.selectThread(widget.threadId!);
@@ -181,16 +199,43 @@ class _RoomScreenState extends State<RoomScreen> {
   Widget _buildContent() {
     final threadView = _state.activeThreadView;
     if (threadView == null) {
-      return const Center(child: Text('Select a thread'));
+      return Column(
+        children: [
+          const Expanded(child: Center(child: Text('Select a thread'))),
+          ChatInput(
+            onSend: (text) => _state.sendToNewThread(text),
+            onCancel: () {},
+            sessionState: _idleSessionState,
+          ),
+        ],
+      );
     }
     final status = threadView.messages.watch(context);
-    return switch (status) {
-      MessagesLoading() => const Center(child: CircularProgressIndicator()),
-      MessagesFailed(:final error) => Center(
-          child: Text('Failed to load messages: $error'),
+    final streaming = threadView.streamingState.watch(context);
+    return Column(
+      children: [
+        Expanded(
+          child: switch (status) {
+            MessagesLoading() => const Center(
+                child: CircularProgressIndicator(),
+              ),
+            MessagesFailed(:final error) => Center(
+                child: Text('Failed to load messages: $error'),
+              ),
+            MessagesLoaded(:final messages, :final messageStates) =>
+              MessageTimeline(
+                messages: messages,
+                messageStates: messageStates,
+                streamingState: streaming,
+              ),
+          },
         ),
-      MessagesLoaded(:final messages, :final messageStates) =>
-        MessageTimeline(messages: messages, messageStates: messageStates),
-    };
+        ChatInput(
+          onSend: (text) => threadView.sendMessage(text, _state.runtime),
+          onCancel: threadView.cancelRun,
+          sessionState: threadView.sessionState,
+        ),
+      ],
+    );
   }
 }
