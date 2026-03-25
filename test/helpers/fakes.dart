@@ -2,6 +2,7 @@ import 'package:soliplex_agent/soliplex_agent.dart' hide AuthException;
 // ignore: depend_on_referenced_packages
 import 'package:soliplex_client/soliplex_client.dart'
     show HttpTransport, SoliplexApi, UrlBuilder;
+import 'package:soliplex_logging/soliplex_logging.dart';
 
 import 'package:soliplex_frontend/src/modules/auth/platform/auth_flow.dart';
 import 'package:soliplex_frontend/src/modules/auth/server_storage.dart';
@@ -197,6 +198,23 @@ class FakeAgUiStreamClient extends AgUiStreamClient {
           httpTransport: HttpTransport(client: FakeHttpClient()),
           urlBuilder: UrlBuilder('https://fake.example.com/api/v1'),
         );
+}
+
+/// Logger for tests. Uses soliplex_logging's LogManager.
+Logger testLogger() {
+  return LogManager.instance.getLogger('test');
+}
+
+/// PlatformConstraints for tests (native-like behavior).
+class TestPlatformConstraints implements PlatformConstraints {
+  @override
+  bool get supportsParallelExecution => true;
+  @override
+  bool get supportsAsyncMode => false;
+  @override
+  int get maxConcurrentBridges => 10;
+  @override
+  bool get supportsReentrantInterpreter => true;
 }
 
 /// In-memory server storage for tests.

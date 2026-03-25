@@ -24,6 +24,11 @@ dependencies:
       url: https://github.com/runyaga/flutter.git
       ref: main
       path: packages/soliplex_agent
+  soliplex_logging:
+    git:
+      url: https://github.com/runyaga/flutter.git
+      ref: "583bb976bc5817f1fb0004216859b16762c07206"
+      path: packages/soliplex_logging
   soliplex_client_native:
     git:
       url: https://github.com/runyaga/flutter.git
