@@ -21,9 +21,47 @@ import '../modules/diagnostics/network_inspector.dart';
 import '../modules/lobby/lobby_module.dart';
 import '../modules/room/agent_runtime_manager.dart';
 import '../modules/room/room_module.dart';
+import '../modules/room/ui/markdown/markdown_theme_extension.dart';
 
 const _defaultLogoAsset = 'assets/branding/soliplex/logo_1024.png';
 const _logoSize = 64.0;
+
+ThemeData _defaultTheme() {
+  final base = ThemeData();
+  final colorScheme = base.colorScheme;
+  final textTheme = base.textTheme;
+  return base.copyWith(
+    extensions: [
+      MarkdownThemeExtension(
+        h1: textTheme.titleLarge,
+        h2: textTheme.titleMedium,
+        h3: textTheme.titleSmall,
+        body: textTheme.bodyLarge,
+        code: textTheme.bodyMedium?.copyWith(
+          backgroundColor: colorScheme.surfaceContainerHigh,
+        ),
+        link: TextStyle(
+          color: colorScheme.primary,
+          decoration: TextDecoration.underline,
+          decorationColor: colorScheme.primary,
+        ),
+        codeBlockDecoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        blockquoteDecoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHigh,
+          border: Border(
+            left: BorderSide(
+              color: colorScheme.outlineVariant,
+              width: 3,
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
 
 Future<ShellConfig> standard({
   String appName = 'Soliplex',
@@ -85,7 +123,7 @@ Future<ShellConfig> standard({
   return ShellConfig(
     appName: appName,
     logo: logo,
-    theme: theme ?? ThemeData(),
+    theme: theme ?? _defaultTheme(),
     initialRoute: callbackParams is! NoCallbackParams
         ? '/auth/callback'
         : (serverManager.authState.value is Authenticated ? '/lobby' : '/'),
