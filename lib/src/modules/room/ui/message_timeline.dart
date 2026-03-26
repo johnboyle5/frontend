@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
 import '../execution_tracker.dart';
+import '../run_id_resolver.dart';
 import 'message_tile.dart';
 import 'room_welcome.dart';
 import 'streaming_tile.dart';
@@ -15,6 +16,7 @@ class MessageTimeline extends StatelessWidget {
     this.executionTracker,
     this.room,
     this.onSuggestionTapped,
+    this.onFeedbackSubmit,
     this.scrollController,
   });
 
@@ -24,6 +26,8 @@ class MessageTimeline extends StatelessWidget {
   final ExecutionTracker? executionTracker;
   final Room? room;
   final void Function(String suggestion)? onSuggestionTapped;
+  final void Function(String runId, FeedbackType feedback, String? reason)?
+      onFeedbackSubmit;
   final ScrollController? scrollController;
 
   @override
@@ -37,6 +41,7 @@ class MessageTimeline extends StatelessWidget {
         fallback: _emptyFallback(context),
       );
     }
+    final runIdMap = buildRunIdMap(messages, messageStates);
     return ListView.builder(
       controller: scrollController,
       reverse: true,
@@ -56,6 +61,8 @@ class MessageTimeline extends StatelessWidget {
         return MessageTile(
           key: ValueKey(messages[messageIndex].id),
           message: messages[messageIndex],
+          runId: runIdMap[messages[messageIndex].id],
+          onFeedbackSubmit: onFeedbackSubmit,
         );
       },
     );
