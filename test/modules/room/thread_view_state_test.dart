@@ -201,5 +201,54 @@ void main() {
 
       state.dispose();
     });
+
+    test('creates executionTracker on sendMessage', () async {
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      expect(state.executionTracker, isNull);
+
+      await state.sendMessage('Hello', runtime);
+
+      // Give the session time to start
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      // After terminal state (FakeAgUiStreamClient fails fast), tracker is cleaned up
+      expect(state.executionTracker, isNull);
+
+      state.dispose();
+    });
+
+    test('executionTracker is null after session ends', () async {
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+      );
+
+      await Future<void>.delayed(Duration.zero);
+
+      await state.sendMessage('Hello', runtime);
+
+      // Wait for terminal state
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(state.executionTracker, isNull);
+      expect(state.streamingState.value, isNull);
+
+      state.dispose();
+    });
   });
 }
