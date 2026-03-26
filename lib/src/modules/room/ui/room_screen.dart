@@ -13,7 +13,7 @@ import 'chat_input.dart';
 import 'message_timeline.dart';
 import 'thread_sidebar.dart';
 
-const double _sidebarWidth = 260;
+const double _sidebarWidth = 300;
 const double _wideBreakpoint = 600;
 
 final ReadonlySignal<AgentSessionState?> _noSessionState =
@@ -167,6 +167,7 @@ class _RoomScreenState extends State<RoomScreen> {
             selectedThreadId: selectedThreadId,
             onThreadSelected: _onThreadSelected,
             onBackToLobby: _onBackToLobby,
+            onCreateThread: _state.createThread,
           );
           final content = _buildContent();
 
@@ -203,6 +204,10 @@ class _RoomScreenState extends State<RoomScreen> {
                       _onThreadSelected(threadId);
                     },
                     onBackToLobby: _onBackToLobby,
+                    onCreateThread: () {
+                      Navigator.pop(drawerContext);
+                      _state.createThread();
+                    },
                   ),
                 ),
               ),
