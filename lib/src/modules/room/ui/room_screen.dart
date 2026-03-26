@@ -232,6 +232,19 @@ class _RoomScreenState extends State<RoomScreen> {
     }
     final status = threadView.messages.watch(context);
     final streaming = threadView.streamingState.watch(context);
+    final sendError = threadView.lastSendError.watch(context);
+
+    final unsentText = sendError?.unsentText;
+    if (unsentText != null && _chatController.text.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _chatController.text = unsentText;
+        _chatController.selection = TextSelection.collapsed(
+          offset: _chatController.text.length,
+        );
+      });
+    }
+
     return Column(
       children: [
         Expanded(
@@ -250,6 +263,11 @@ class _RoomScreenState extends State<RoomScreen> {
               ),
           },
         ),
+        if (sendError != null)
+          _SendErrorBanner(
+            error: sendError,
+            onDismiss: () => threadView.clearSendError(),
+          ),
         ChatInput(
           onSend: (text) => threadView.sendMessage(text, _state.runtime),
           onCancel: threadView.cancelRun,
@@ -258,6 +276,45 @@ class _RoomScreenState extends State<RoomScreen> {
           focusNode: _chatFocusNode,
         ),
       ],
+    );
+  }
+}
+
+class _SendErrorBanner extends StatelessWidget {
+  const _SendErrorBanner({required this.error, required this.onDismiss});
+
+  final SendError error;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: theme.colorScheme.errorContainer,
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, size: 16, color: theme.colorScheme.error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              error.error.toString(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onErrorContainer,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16),
+            onPressed: onDismiss,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
     );
   }
 }

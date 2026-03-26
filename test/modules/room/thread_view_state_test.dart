@@ -160,8 +160,10 @@ void main() {
       expect(status, isA<MessagesLoaded>());
       expect((status as MessagesLoaded).messages.length, 1);
 
-      // The error should be surfaced via lastSendError.
-      expect(state.lastSendError.value, isNotNull);
+      // The error should be surfaced via lastSendError with unsent text.
+      final sendError = state.lastSendError.value;
+      expect(sendError, isNotNull);
+      expect(sendError!.unsentText, 'Hello');
 
       state.dispose();
     });

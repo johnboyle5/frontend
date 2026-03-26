@@ -15,6 +15,12 @@ class MessagesFailed extends ThreadViewStatus {
   final Object error;
 }
 
+class SendError {
+  const SendError(this.error, {this.unsentText});
+  final Object error;
+  final String? unsentText;
+}
+
 class ThreadViewState {
   ThreadViewState({
     required ServerConnection connection,
@@ -44,8 +50,10 @@ class ThreadViewState {
       Signal<AgentSessionState?>(null);
   ReadonlySignal<AgentSessionState?> get sessionState => _sessionState;
 
-  final Signal<Object?> _lastSendError = Signal<Object?>(null);
-  ReadonlySignal<Object?> get lastSendError => _lastSendError;
+  final Signal<SendError?> _lastSendError = Signal<SendError?>(null);
+  ReadonlySignal<SendError?> get lastSendError => _lastSendError;
+
+  void clearSendError() => _lastSendError.value = null;
 
   void refresh() => _fetch();
 
@@ -69,7 +77,7 @@ class ThreadViewState {
       _attachSession(session);
     } on Object catch (error) {
       if (_isDisposed) return;
-      _lastSendError.value = error;
+      _lastSendError.value = SendError(error, unsentText: prompt);
     }
   }
 
@@ -99,7 +107,12 @@ class ThreadViewState {
       case CompletedState(:final conversation):
         _detachSession();
         _messages.value = _loadedFrom(conversation);
-      case FailedState(:final conversation):
+      case FailedState(:final conversation, :final error):
+        _detachSession();
+        _lastSendError.value = SendError(error);
+        if (conversation != null) {
+          _messages.value = _loadedFrom(conversation);
+        }
       case CancelledState(:final conversation):
         _detachSession();
         if (conversation != null) {
