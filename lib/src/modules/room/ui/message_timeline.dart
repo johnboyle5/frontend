@@ -41,7 +41,6 @@ class _MessageTimelineState extends State<MessageTimeline> {
 
   final Map<String, GlobalKey> _messageKeys = {};
   String? _lastUserMessageId;
-  String? _scrollTargetId;
   bool _needsInitialScroll = true;
 
   @override
@@ -60,14 +59,7 @@ class _MessageTimelineState extends State<MessageTimeline> {
     if (lastUserMsg != null && lastUserMsg.id != _lastUserMessageId) {
       _lastUserMessageId = lastUserMsg.id;
       _needsInitialScroll = false;
-      _scrollTargetId = lastUserMsg.id;
       _scrollToMessage(lastUserMsg.id, animate: true);
-    } else if (_scrollTargetId != null) {
-      _scrollToMessage(_scrollTargetId!);
-    }
-
-    if (widget.streamingState == null && oldWidget.streamingState != null) {
-      _scrollTargetId = null;
     }
 
     final activeIds = widget.messages.map((m) => m.id).toSet();
@@ -138,7 +130,6 @@ class _MessageTimelineState extends State<MessageTimeline> {
   }
 
   void _onScrollToBottom() {
-    _scrollTargetId = null;
     _scrollController.clearAnchor();
     _scrollController.animateTo(
       _scrollController.position.maxScrollExtent,
@@ -146,15 +137,6 @@ class _MessageTimelineState extends State<MessageTimeline> {
       curve: Curves.easeOutCubic,
     );
     _scrollToBottomController.hide();
-  }
-
-  bool _onScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollStartNotification &&
-        notification.dragDetails != null &&
-        _scrollTargetId != null) {
-      _scrollTargetId = null;
-    }
-    return false;
   }
 
   GlobalKey _keyFor(String id) {
@@ -184,41 +166,38 @@ class _MessageTimelineState extends State<MessageTimeline> {
 
     return Stack(
       children: [
-        NotificationListener<ScrollNotification>(
-          onNotification: _onScrollNotification,
-          child: CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.all(16),
-                sliver: SliverList.builder(
-                  itemCount: itemCount,
-                  itemBuilder: (context, index) {
-                    if (hasStreaming && index == widget.messages.length) {
-                      return Padding(
-                        key: const ValueKey('streaming'),
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: StreamingTile(
-                          streamingState: widget.streamingState!,
-                          executionTracker: widget.executionTracker,
-                        ),
-                      );
-                    }
-                    final message = widget.messages[index];
+        CustomScrollView(
+          controller: _scrollController,
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverList.builder(
+                itemCount: itemCount,
+                itemBuilder: (context, index) {
+                  if (hasStreaming && index == widget.messages.length) {
                     return Padding(
-                      key: _keyFor(message.id),
+                      key: const ValueKey('streaming'),
                       padding: const EdgeInsets.only(bottom: 16),
-                      child: MessageTile(
-                        message: message,
-                        runId: runIdMap[message.id],
-                        onFeedbackSubmit: widget.onFeedbackSubmit,
+                      child: StreamingTile(
+                        streamingState: widget.streamingState!,
+                        executionTracker: widget.executionTracker,
                       ),
                     );
-                  },
-                ),
+                  }
+                  final message = widget.messages[index];
+                  return Padding(
+                    key: _keyFor(message.id),
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: MessageTile(
+                      message: message,
+                      runId: runIdMap[message.id],
+                      onFeedbackSubmit: widget.onFeedbackSubmit,
+                    ),
+                  );
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
         Positioned(
           right: 16,
