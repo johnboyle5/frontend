@@ -51,6 +51,16 @@ void main() {
     expect(rt2.serverId, 'server-2');
   });
 
+  test('getRuntime throws after dispose', () async {
+    await manager.dispose();
+    final connection = ServerConnection(
+      serverId: 'server-1',
+      api: FakeSoliplexApi(),
+      agUiStreamClient: FakeAgUiStreamClient(),
+    );
+    expect(() => manager.getRuntime(connection), throwsStateError);
+  });
+
   test('replaces runtime when connection changes for same serverId', () {
     final conn1 = ServerConnection(
       serverId: 'server-1',

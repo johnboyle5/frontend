@@ -63,6 +63,40 @@ void main() {
     state.dispose();
   });
 
+  test('refresh error preserves loaded messages', () async {
+    api.nextThreadHistory = ThreadHistory(messages: [
+      TextMessage(
+        id: 'msg-1',
+        user: ChatUser.user,
+        createdAt: DateTime(2026, 3, 1),
+        text: 'Hello',
+      ),
+    ]);
+
+    final state = ThreadViewState(
+      connection: connection,
+      roomId: 'room-1',
+      threadId: 'thread-1',
+    );
+
+    await Future<void>.delayed(Duration.zero);
+    expect(state.messages.value, isA<MessagesLoaded>());
+
+    // Make refresh fail.
+    api.nextThreadHistory = null;
+    api.nextThreadHistoryError = Exception('refresh error');
+    state.refresh();
+
+    await Future<void>.delayed(Duration.zero);
+
+    // Should still show loaded messages.
+    final status = state.messages.value;
+    expect(status, isA<MessagesLoaded>());
+    expect((status as MessagesLoaded).messages.length, 1);
+
+    state.dispose();
+  });
+
   test('streamingState and sessionState are null when idle', () async {
     api.nextThreadHistory = ThreadHistory(messages: const []);
 

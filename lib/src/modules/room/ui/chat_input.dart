@@ -8,14 +8,14 @@ class ChatInput extends StatefulWidget {
     super.key,
     required this.onSend,
     required this.onCancel,
-    required this.sessionState,
+    this.sessionState,
     this.controller,
     this.focusNode,
   });
 
   final void Function(String text) onSend;
   final void Function() onCancel;
-  final ReadonlySignal<AgentSessionState?> sessionState;
+  final ReadonlySignal<AgentSessionState?>? sessionState;
   final TextEditingController? controller;
   final FocusNode? focusNode;
 
@@ -89,7 +89,7 @@ class _ChatInputState extends State<ChatInput> {
 
   @override
   Widget build(BuildContext context) {
-    final state = widget.sessionState.watch(context);
+    final state = widget.sessionState?.watch(context);
     final active = _isActive(state);
 
     return Padding(

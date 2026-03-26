@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
-import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
 import '../../auth/server_entry.dart';
 import '../agent_runtime_manager.dart';
@@ -15,9 +14,6 @@ import 'thread_sidebar.dart';
 
 const double _sidebarWidth = 300;
 const double _wideBreakpoint = 600;
-
-final ReadonlySignal<AgentSessionState?> _noSessionState =
-    signal<AgentSessionState?>(null);
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({
@@ -221,14 +217,31 @@ class _RoomScreenState extends State<RoomScreen> {
 
   Widget _buildContent() {
     final threadView = _state.activeThreadView;
+    final roomError = _state.lastError.watch(context);
     if (threadView == null) {
+      final roomUnsentText = roomError?.unsentText;
+      if (roomUnsentText != null && _chatController.text.isEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _chatController.text = roomUnsentText;
+          _chatController.selection = TextSelection.collapsed(
+            offset: _chatController.text.length,
+          );
+          _state.clearError();
+        });
+      }
       return Column(
         children: [
           const Expanded(child: Center(child: Text('Select a thread'))),
+          if (roomError != null)
+            _SendErrorBanner(
+              error: roomError,
+              onDismiss: _state.clearError,
+            ),
           ChatInput(
             onSend: (text) => _state.sendToNewThread(text),
             onCancel: () {},
-            sessionState: _noSessionState,
+            sessionState: null,
             controller: _chatController,
             focusNode: _chatFocusNode,
           ),
@@ -247,6 +260,7 @@ class _RoomScreenState extends State<RoomScreen> {
         _chatController.selection = TextSelection.collapsed(
           offset: _chatController.text.length,
         );
+        threadView.clearSendError();
       });
     }
 

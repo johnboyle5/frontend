@@ -160,7 +160,9 @@ class ThreadViewState {
     }).catchError((Object error) {
       if (token.isCancelled) return;
       _cancelToken = null;
-      _messages.value = MessagesFailed(error);
+      if (_messages.value is! MessagesLoaded) {
+        _messages.value = MessagesFailed(error);
+      }
     });
   }
 

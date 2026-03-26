@@ -69,6 +69,47 @@ void main() {
     state.dispose();
   });
 
+  test('createThread error surfaces lastError', () async {
+    api.nextThreads = [];
+    api.nextCreateThreadError = Exception('server error');
+
+    final state = RoomState(
+      connection: connection,
+      roomId: 'room-1',
+      runtimeManager: runtimeManager,
+    );
+
+    await Future<void>.delayed(Duration.zero);
+
+    await state.createThread();
+
+    expect(state.lastError.value, isNotNull);
+    expect(state.lastError.value!.error, isA<Exception>());
+
+    state.dispose();
+  });
+
+  test('sendToNewThread error surfaces lastError with unsent text', () async {
+    api.nextThreads = [];
+
+    final state = RoomState(
+      connection: connection,
+      roomId: 'room-1',
+      runtimeManager: runtimeManager,
+    );
+
+    await Future<void>.delayed(Duration.zero);
+
+    // Dispose runtime so spawn throws.
+    await runtimeManager.dispose();
+    await state.sendToNewThread('Hello');
+
+    expect(state.lastError.value, isNotNull);
+    expect(state.lastError.value!.unsentText, 'Hello');
+
+    state.dispose();
+  });
+
   test('createThread calls API, refreshes list, and selects thread', () async {
     final createdThread = ThreadInfo(
       id: 'new-thread',

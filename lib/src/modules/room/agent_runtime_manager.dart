@@ -19,6 +19,7 @@ class AgentRuntimeManager {
   final Logger _logger;
   final Map<String, ({ServerConnection connection, AgentRuntime runtime})>
       _cache = {};
+  bool _isDisposed = false;
 
   /// Returns the cached [AgentRuntime] for [connection], creating it if
   /// needed.
@@ -27,6 +28,9 @@ class AgentRuntimeManager {
   /// (e.g., after server removal and re-addition), the stale runtime is
   /// disposed and replaced.
   AgentRuntime getRuntime(ServerConnection connection) {
+    if (_isDisposed) {
+      throw StateError('AgentRuntimeManager has been disposed');
+    }
     final existing = _cache[connection.serverId];
     if (existing != null && identical(existing.connection, connection)) {
       return existing.runtime;
@@ -53,10 +57,16 @@ class AgentRuntimeManager {
 
   /// Disposes all cached runtimes and clears the cache.
   Future<void> dispose() async {
+    _isDisposed = true;
     final entries = _cache.values.toList();
     _cache.clear();
     for (final entry in entries) {
-      await entry.runtime.dispose();
+      try {
+        await entry.runtime.dispose();
+      } on Object catch (e) {
+        _logger.warning(
+            'Failed to dispose runtime ${entry.connection.serverId}: $e');
+      }
     }
   }
 }
