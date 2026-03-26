@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
-
 import '../../auth/server_entry.dart';
 import '../agent_runtime_manager.dart';
 import '../room_state.dart';
 import '../thread_list_state.dart';
 import '../thread_view_state.dart';
 import 'chat_input.dart';
+import 'error_retry_panel.dart';
 import 'message_timeline.dart';
+import 'room_welcome.dart';
 import 'thread_sidebar.dart';
 
 const double _sidebarWidth = 300;
@@ -164,6 +165,7 @@ class _RoomScreenState extends State<RoomScreen> {
             onThreadSelected: _onThreadSelected,
             onBackToLobby: _onBackToLobby,
             onCreateThread: _state.createThread,
+            onRetryThreads: () => _state.threadList.refresh(),
           );
           final content = _buildContent();
 
@@ -204,6 +206,7 @@ class _RoomScreenState extends State<RoomScreen> {
                       Navigator.pop(drawerContext);
                       _state.createThread();
                     },
+                    onRetryThreads: () => _state.threadList.refresh(),
                   ),
                 ),
               ),
@@ -215,54 +218,71 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
+  void _restoreUnsentText(String? unsentText, VoidCallback clearError) {
+    if (unsentText == null || _chatController.text.isNotEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _chatController.text = unsentText;
+      _chatController.selection =
+          TextSelection.collapsed(offset: _chatController.text.length);
+      clearError();
+    });
+  }
+
   Widget _buildContent() {
     final threadView = _state.activeThreadView;
-    final roomError = _state.lastError.watch(context);
     if (threadView == null) {
-      final roomUnsentText = roomError?.unsentText;
-      if (roomUnsentText != null && _chatController.text.isEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          _chatController.text = roomUnsentText;
-          _chatController.selection = TextSelection.collapsed(
-            offset: _chatController.text.length,
-          );
-          _state.clearError();
-        });
-      }
-      return Column(
-        children: [
-          const Expanded(child: Center(child: Text('Select a thread'))),
-          if (roomError != null)
-            _SendErrorBanner(
-              error: roomError,
-              onDismiss: _state.clearError,
-            ),
-          ChatInput(
-            onSend: (text) => _state.sendToNewThread(text),
-            onCancel: () {},
-            sessionState: null,
-            controller: _chatController,
-            focusNode: _chatFocusNode,
-          ),
-        ],
-      );
+      return _buildNoThreadContent();
     }
+    return _buildThreadContent(threadView);
+  }
+
+  Widget _buildNoThreadContent() {
+    final roomError = _state.lastError.watch(context);
+    final isSpawning = _state.isSpawning.watch(context);
+    _restoreUnsentText(roomError?.unsentText, _state.clearError);
+
+    return Column(
+      children: [
+        Expanded(
+          child: Builder(
+            builder: (context) {
+              final roomStatus = _state.room.watch(context);
+              final room = roomStatus is RoomLoaded ? roomStatus.room : null;
+              return RoomWelcome(
+                room: room,
+                onSuggestionTapped: isSpawning
+                    ? null
+                    : (suggestion) => _state.sendToNewThread(suggestion),
+                fallback: const Center(child: Text('Select a thread')),
+              );
+            },
+          ),
+        ),
+        if (roomError != null)
+          _SendErrorBanner(
+            error: roomError,
+            onDismiss: _state.clearError,
+          ),
+        ChatInput(
+          onSend: (text) => _state.sendToNewThread(text),
+          onCancel: () {},
+          sessionState: null,
+          controller: _chatController,
+          focusNode: _chatFocusNode,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThreadContent(ThreadViewState threadView) {
     final status = threadView.messages.watch(context);
     final streaming = threadView.streamingState.watch(context);
+    final roomStatus = _state.room.watch(context);
+    final room = roomStatus is RoomLoaded ? roomStatus.room : null;
     final sendError = threadView.lastSendError.watch(context);
 
-    final unsentText = sendError?.unsentText;
-    if (unsentText != null && _chatController.text.isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _chatController.text = unsentText;
-        _chatController.selection = TextSelection.collapsed(
-          offset: _chatController.text.length,
-        );
-        threadView.clearSendError();
-      });
-    }
+    _restoreUnsentText(sendError?.unsentText, threadView.clearSendError);
 
     return Column(
       children: [
@@ -271,14 +291,20 @@ class _RoomScreenState extends State<RoomScreen> {
             MessagesLoading() => const Center(
                 child: CircularProgressIndicator(),
               ),
-            MessagesFailed(:final error) => Center(
-                child: Text('Failed to load messages: $error'),
+            MessagesFailed(:final error) => ErrorRetryPanel(
+                title: 'Failed to load messages',
+                error: error,
+                onRetry: threadView.refresh,
               ),
             MessagesLoaded(:final messages, :final messageStates) =>
               MessageTimeline(
                 messages: messages,
                 messageStates: messageStates,
                 streamingState: streaming,
+                executionTracker: threadView.executionTracker,
+                room: room,
+                onSuggestionTapped: (suggestion) =>
+                    threadView.sendMessage(suggestion, _state.runtime),
               ),
           },
         ),

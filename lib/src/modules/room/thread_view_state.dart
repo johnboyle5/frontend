@@ -1,5 +1,10 @@
 import 'package:soliplex_agent/soliplex_agent.dart';
 
+import 'execution_tracker.dart';
+import 'send_error.dart';
+
+export 'send_error.dart';
+
 sealed class ThreadViewStatus {}
 
 class MessagesLoading extends ThreadViewStatus {}
@@ -13,12 +18,6 @@ class MessagesLoaded extends ThreadViewStatus {
 class MessagesFailed extends ThreadViewStatus {
   MessagesFailed(this.error);
   final Object error;
-}
-
-class SendError {
-  const SendError(this.error, {this.unsentText});
-  final Object error;
-  final String? unsentText;
 }
 
 class ThreadViewState {
@@ -52,6 +51,9 @@ class ThreadViewState {
 
   final Signal<SendError?> _lastSendError = Signal<SendError?>(null);
   ReadonlySignal<SendError?> get lastSendError => _lastSendError;
+
+  ExecutionTracker? _executionTracker;
+  ExecutionTracker? get executionTracker => _executionTracker;
 
   void clearSendError() => _lastSendError.value = null;
 
@@ -96,6 +98,9 @@ class ThreadViewState {
     _activeSession = session;
     _sessionState.value = session.state;
     _runStateUnsub = session.runState.subscribe(_onRunState);
+    _executionTracker?.dispose();
+    _executionTracker =
+        ExecutionTracker(executionEvents: session.lastExecutionEvent);
   }
 
   void _onRunState(RunState runState) {
@@ -170,5 +175,7 @@ class ThreadViewState {
     _isDisposed = true;
     _cancelToken?.cancel('disposed');
     _detachSession();
+    _executionTracker?.dispose();
+    _executionTracker = null;
   }
 }

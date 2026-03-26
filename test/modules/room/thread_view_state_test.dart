@@ -201,5 +201,57 @@ void main() {
 
       state.dispose();
     });
+
+    test('creates executionTracker on sendMessage', () async {
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      expect(state.executionTracker, isNull);
+
+      await state.sendMessage('Hello', runtime);
+
+      // Give the session time to start
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      // Tracker survives session end so UI can show final step log
+      expect(state.executionTracker, isNotNull);
+
+      state.dispose();
+    });
+
+    test('executionTracker survives session end for UI display', () async {
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+      );
+
+      await Future<void>.delayed(Duration.zero);
+
+      await state.sendMessage('Hello', runtime);
+
+      // Wait for terminal state
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      // Tracker persists after session ends; streaming state is cleared
+      expect(state.executionTracker, isNotNull);
+      expect(state.streamingState.value, isNull);
+
+      state.dispose();
+      // Tracker is cleaned up on view disposal
+      expect(state.executionTracker, isNull);
+    });
   });
 }
