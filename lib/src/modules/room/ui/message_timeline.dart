@@ -15,6 +15,7 @@ class MessageTimeline extends StatelessWidget {
     this.executionTracker,
     this.room,
     this.onSuggestionTapped,
+    this.scrollController,
   });
 
   final List<ChatMessage> messages;
@@ -23,10 +24,12 @@ class MessageTimeline extends StatelessWidget {
   final ExecutionTracker? executionTracker;
   final Room? room;
   final void Function(String suggestion)? onSuggestionTapped;
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
-    final itemCount = messages.length + (streamingState != null ? 1 : 0);
+    final hasStreaming = streamingState != null;
+    final itemCount = messages.length + (hasStreaming ? 1 : 0);
     if (itemCount == 0) {
       return RoomWelcome(
         room: room,
@@ -35,20 +38,24 @@ class MessageTimeline extends StatelessWidget {
       );
     }
     return ListView.builder(
+      controller: scrollController,
+      reverse: true,
       padding: const EdgeInsets.all(16),
       itemCount: itemCount,
-      itemBuilder: (context, index) {
-        final isStreamingItem = index == messages.length;
-        if (isStreamingItem) {
+      itemBuilder: (context, reversedIndex) {
+        if (hasStreaming && reversedIndex == 0) {
           return StreamingTile(
             key: const ValueKey('streaming'),
             streamingState: streamingState!,
             executionTracker: executionTracker,
           );
         }
+        final messageIndex = hasStreaming
+            ? messages.length - reversedIndex
+            : messages.length - 1 - reversedIndex;
         return MessageTile(
-          key: ValueKey(messages[index].id),
-          message: messages[index],
+          key: ValueKey(messages[messageIndex].id),
+          message: messages[messageIndex],
         );
       },
     );
