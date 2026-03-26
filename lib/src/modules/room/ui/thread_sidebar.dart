@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../thread_list_state.dart';
+import 'error_retry_panel.dart';
 import 'thread_tile.dart';
 
 class ThreadSidebar extends StatelessWidget {
@@ -61,31 +62,12 @@ class ThreadSidebar extends StatelessWidget {
   Widget _buildContent(BuildContext context) {
     return switch (threadListStatus) {
       ThreadsLoading() => const Center(child: CircularProgressIndicator()),
-      ThreadsFailed(:final error) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Failed to load threads',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  error.toString(),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                FilledButton.tonal(
-                  onPressed: onRetryThreads,
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
+      ThreadsFailed(:final error) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: ErrorRetryPanel(
+            title: 'Failed to load threads',
+            error: error,
+            onRetry: onRetryThreads,
           ),
         ),
       ThreadsLoaded(:final threads) => threads.isEmpty

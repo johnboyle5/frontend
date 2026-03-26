@@ -17,8 +17,8 @@ class ExecutionTracker {
       Signal<List<ExecutionStep>>(const []);
   ReadonlySignal<List<ExecutionStep>> get steps => _steps;
 
-  final Signal<String> _thinkingText = Signal<String>('');
-  ReadonlySignal<String> get thinkingText => _thinkingText;
+  final Signal<List<String>> _thinkingBlocks = Signal<List<String>>(const []);
+  ReadonlySignal<List<String>> get thinkingBlocks => _thinkingBlocks;
 
   final Signal<bool> _isThinkingStreaming = Signal<bool>(false);
   ReadonlySignal<bool> get isThinkingStreaming => _isThinkingStreaming;
@@ -28,24 +28,34 @@ class ExecutionTracker {
     switch (event) {
       case ThinkingStarted():
         _completeActiveStep();
-        _addStep('Thinking');
+        _addStep('Thinking', StepType.thinking);
+        _thinkingBlocks.value = [..._thinkingBlocks.value, ''];
         _isThinkingStreaming.value = true;
       case ThinkingContent(:final delta):
-        _thinkingText.value += delta;
+        final blocks = _thinkingBlocks.value;
+        if (blocks.isNotEmpty) {
+          _thinkingBlocks.value = [
+            ...blocks.sublist(0, blocks.length - 1),
+            blocks.last + delta,
+          ];
+        }
       case ServerToolCallStarted(:final toolName):
         _completeActiveStep();
         _isThinkingStreaming.value = false;
-        _addStep(toolName);
-      case ServerToolCallCompleted(:final toolCallId):
-        _completeStepByToolCallId(toolCallId);
+        _addStep(toolName, StepType.toolCall);
+      case ServerToolCallCompleted():
+        _completeActiveStep();
       case ClientToolExecuting(:final toolName):
         _completeActiveStep();
         _isThinkingStreaming.value = false;
-        _addStep(toolName);
-      case ClientToolCompleted(:final toolCallId):
-        _completeStepByToolCallId(toolCallId);
-      case RunCompleted() || RunFailed() || RunCancelled():
-        _completeAllSteps();
+        _addStep(toolName, StepType.toolCall);
+      case ClientToolCompleted():
+        _completeActiveStep();
+      case RunCompleted():
+        _completeAllSteps(StepStatus.completed);
+        _isThinkingStreaming.value = false;
+      case RunFailed() || RunCancelled():
+        _completeAllSteps(StepStatus.failed);
         _isThinkingStreaming.value = false;
       case TextDelta() ||
             StateUpdated() ||
@@ -56,13 +66,14 @@ class ExecutionTracker {
     }
   }
 
-  void _addStep(String label) {
+  void _addStep(String label, StepType type) {
     _steps.value = [
       ..._steps.value,
       ExecutionStep(
         label: label,
+        type: type,
         status: StepStatus.active,
-        elapsed: _stopwatch.elapsed,
+        timestamp: _stopwatch.elapsed,
       ),
     ];
   }
@@ -76,22 +87,18 @@ class ExecutionTracker {
         ...current.sublist(0, current.length - 1),
         last.copyWith(
           status: StepStatus.completed,
-          elapsed: _stopwatch.elapsed,
+          timestamp: _stopwatch.elapsed,
         ),
       ];
     }
   }
 
-  void _completeStepByToolCallId(String toolCallId) {
-    _completeActiveStep();
-  }
-
-  void _completeAllSteps() {
-    final elapsed = _stopwatch.elapsed;
+  void _completeAllSteps(StepStatus status) {
+    final now = _stopwatch.elapsed;
     _steps.value = [
       for (final step in _steps.value)
         step.status == StepStatus.active
-            ? step.copyWith(status: StepStatus.completed, elapsed: elapsed)
+            ? step.copyWith(status: status, timestamp: now)
             : step,
     ];
   }

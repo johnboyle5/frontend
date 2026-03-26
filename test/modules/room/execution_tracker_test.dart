@@ -17,7 +17,7 @@ void main() {
 
   test('starts with empty steps and no thinking', () {
     expect(tracker.steps.value, isEmpty);
-    expect(tracker.thinkingText.value, isEmpty);
+    expect(tracker.thinkingBlocks.value, isEmpty);
     expect(tracker.isThinkingStreaming.value, isFalse);
   });
 
@@ -30,12 +30,29 @@ void main() {
     expect(tracker.isThinkingStreaming.value, isTrue);
   });
 
-  test('ThinkingContent accumulates thinking text', () {
+  test('ThinkingContent accumulates in current thinking block', () {
     events.value = const ThinkingStarted();
     events.value = const ThinkingContent(delta: 'Hello ');
     events.value = const ThinkingContent(delta: 'world');
 
-    expect(tracker.thinkingText.value, 'Hello world');
+    expect(tracker.thinkingBlocks.value, ['Hello world']);
+  });
+
+  test('multiple thinking phases create separate blocks', () {
+    events.value = const ThinkingStarted();
+    events.value = const ThinkingContent(delta: 'first');
+    events.value = const ServerToolCallStarted(
+      toolName: 'search',
+      toolCallId: 'tc-1',
+    );
+    events.value = const ServerToolCallCompleted(
+      toolCallId: 'tc-1',
+      result: 'done',
+    );
+    events.value = const ThinkingStarted();
+    events.value = const ThinkingContent(delta: 'second');
+
+    expect(tracker.thinkingBlocks.value, ['first', 'second']);
   });
 
   test('ServerToolCallStarted completes previous step and adds new', () {
@@ -106,21 +123,21 @@ void main() {
     expect(tracker.isThinkingStreaming.value, isFalse);
   });
 
-  test('RunFailed marks all steps completed', () {
+  test('RunFailed marks all active steps as failed', () {
     events.value = const ThinkingStarted();
     events.value = const RunFailed(error: 'oops');
 
     for (final step in tracker.steps.value) {
-      expect(step.status, StepStatus.completed);
+      expect(step.status, StepStatus.failed);
     }
   });
 
-  test('RunCancelled marks all steps completed', () {
+  test('RunCancelled marks all active steps as failed', () {
     events.value = const ThinkingStarted();
     events.value = const RunCancelled();
 
     for (final step in tracker.steps.value) {
-      expect(step.status, StepStatus.completed);
+      expect(step.status, StepStatus.failed);
     }
   });
 

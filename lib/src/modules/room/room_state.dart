@@ -4,7 +4,7 @@ import 'agent_runtime_manager.dart';
 import 'thread_list_state.dart';
 import 'thread_view_state.dart';
 
-export 'thread_view_state.dart' show SendError;
+export 'send_error.dart';
 
 sealed class RoomStatus {}
 
@@ -43,10 +43,14 @@ class RoomState {
 
   final ThreadListState threadList;
   ThreadViewState? _activeThreadView;
+  CancelToken? _roomFetchToken;
   bool _isDisposed = false;
 
   final Signal<RoomStatus> _room = Signal<RoomStatus>(RoomLoading());
   ReadonlySignal<RoomStatus> get room => _room;
+
+  final Signal<bool> _isSpawning = Signal<bool>(false);
+  ReadonlySignal<bool> get isSpawning => _isSpawning;
 
   final Signal<SendError?> _lastError = Signal<SendError?>(null);
   ReadonlySignal<SendError?> get lastError => _lastError;
@@ -54,8 +58,11 @@ class RoomState {
   void clearError() => _lastError.value = null;
 
   void _fetchRoom() {
-    _connection.api.getRooms().then((rooms) {
-      if (_isDisposed) return;
+    final token = CancelToken();
+    _roomFetchToken = token;
+    _connection.api.getRooms(cancelToken: token).then((rooms) {
+      if (token.isCancelled) return;
+      _roomFetchToken = null;
       final match = rooms.where((r) => r.id == _roomId).firstOrNull;
       if (match != null) {
         _room.value = RoomLoaded(match);
@@ -63,7 +70,8 @@ class RoomState {
         _room.value = RoomFailed(StateError('Room $_roomId not found'));
       }
     }).catchError((Object error) {
-      if (_isDisposed) return;
+      if (token.isCancelled) return;
+      _roomFetchToken = null;
       _room.value = RoomFailed(error);
     });
   }
@@ -104,7 +112,9 @@ class RoomState {
   /// Spawns a session which creates the thread server-side, then creates a
   /// [ThreadViewState] and attaches the session to it.
   Future<void> sendToNewThread(String prompt) async {
+    if (_isSpawning.value) return;
     _lastError.value = null;
+    _isSpawning.value = true;
     try {
       final session = await runtime.spawn(
         roomId: _roomId,
@@ -113,23 +123,20 @@ class RoomState {
       if (_isDisposed) return;
       final newThreadId = session.threadKey.threadId;
       threadList.refresh();
-
-      _activeThreadView?.dispose();
-      _activeThreadView = ThreadViewState(
-        connection: _connection,
-        roomId: _roomId,
-        threadId: newThreadId,
-      );
+      selectThread(newThreadId);
       _activeThreadView!.attachSession(session);
       onNavigateToThread?.call(newThreadId);
     } on Object catch (error) {
       if (_isDisposed) return;
       _lastError.value = SendError(error, unsentText: prompt);
+    } finally {
+      if (!_isDisposed) _isSpawning.value = false;
     }
   }
 
   void dispose() {
     _isDisposed = true;
+    _roomFetchToken?.cancel('disposed');
     threadList.dispose();
     _activeThreadView?.dispose();
   }

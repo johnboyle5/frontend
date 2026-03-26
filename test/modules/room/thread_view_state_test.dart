@@ -221,13 +221,13 @@ void main() {
         await Future<void>.delayed(Duration.zero);
       }
 
-      // After terminal state (FakeAgUiStreamClient fails fast), tracker is cleaned up
-      expect(state.executionTracker, isNull);
+      // Tracker survives session end so UI can show final step log
+      expect(state.executionTracker, isNotNull);
 
       state.dispose();
     });
 
-    test('executionTracker is null after session ends', () async {
+    test('executionTracker survives session end for UI display', () async {
       api.nextThreadHistory = ThreadHistory(messages: const []);
 
       final state = ThreadViewState(
@@ -245,10 +245,13 @@ void main() {
         await Future<void>.delayed(Duration.zero);
       }
 
-      expect(state.executionTracker, isNull);
+      // Tracker persists after session ends; streaming state is cleared
+      expect(state.executionTracker, isNotNull);
       expect(state.streamingState.value, isNull);
 
       state.dispose();
+      // Tracker is cleaned up on view disposal
+      expect(state.executionTracker, isNull);
     });
   });
 }

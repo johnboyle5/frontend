@@ -1,23 +1,28 @@
 import 'package:flutter/foundation.dart';
 
-enum StepStatus { active, completed }
+enum StepStatus { active, completed, failed }
+
+enum StepType { thinking, toolCall }
 
 @immutable
 class ExecutionStep {
   const ExecutionStep({
     required this.label,
+    required this.type,
     required this.status,
-    required this.elapsed,
+    required this.timestamp,
   });
 
   final String label;
+  final StepType type;
   final StepStatus status;
-  final Duration elapsed;
+  final Duration timestamp;
 
-  ExecutionStep copyWith({StepStatus? status, Duration? elapsed}) =>
+  ExecutionStep copyWith({StepStatus? status, Duration? timestamp}) =>
       ExecutionStep(
         label: label,
+        type: type,
         status: status ?? this.status,
-        elapsed: elapsed ?? this.elapsed,
+        timestamp: timestamp ?? this.timestamp,
       );
 }

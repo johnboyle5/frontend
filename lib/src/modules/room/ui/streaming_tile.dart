@@ -159,7 +159,7 @@ class _StepLogState extends State<_StepLog> {
                           ),
                         ),
                         Text(
-                          _formatDuration(step.elapsed),
+                          _formatDuration(step.timestamp),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.outline,
                             fontSize: 11,
@@ -177,23 +177,31 @@ class _StepLogState extends State<_StepLog> {
   }
 
   Widget _stepIcon(ExecutionStep step, ThemeData theme) {
-    if (step.status == StepStatus.active) {
-      return SizedBox(
-        width: 12,
-        height: 12,
-        child: CircularProgressIndicator(
-          strokeWidth: 1.5,
-          color: theme.colorScheme.primary,
-        ),
-      );
+    switch (step.status) {
+      case StepStatus.active:
+        return SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: theme.colorScheme.primary,
+          ),
+        );
+      case StepStatus.failed:
+        return Icon(
+          Icons.error,
+          size: 12,
+          color: theme.colorScheme.error,
+        );
+      case StepStatus.completed:
+        return Icon(
+          Icons.check_circle,
+          size: 12,
+          color: step.type == StepType.thinking
+              ? theme.colorScheme.tertiary
+              : theme.colorScheme.primary,
+        );
     }
-    final isThinking = step.label == 'Thinking';
-    return Icon(
-      Icons.check_circle,
-      size: 12,
-      color:
-          isThinking ? theme.colorScheme.tertiary : theme.colorScheme.primary,
-    );
   }
 
   static String _formatDuration(Duration d) {
@@ -216,9 +224,9 @@ class _ThinkingBlockState extends State<_ThinkingBlock> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final thinkingText = widget.tracker.thinkingText.watch(context);
+    final thinkingBlocks = widget.tracker.thinkingBlocks.watch(context);
     final isStreaming = widget.tracker.isThinkingStreaming.watch(context);
-    if (thinkingText.isEmpty && !isStreaming) return const SizedBox.shrink();
+    if (thinkingBlocks.isEmpty && !isStreaming) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -246,7 +254,9 @@ class _ThinkingBlockState extends State<_ThinkingBlock> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    'Thinking',
+                    thinkingBlocks.length > 1
+                        ? 'Thinking (${thinkingBlocks.length})'
+                        : 'Thinking',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.tertiary,
                       fontWeight: FontWeight.w600,
@@ -267,13 +277,18 @@ class _ThinkingBlockState extends State<_ThinkingBlock> {
               ),
               if (_expanded) ...[
                 const SizedBox(height: 4),
-                Text(
-                  thinkingText,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontStyle: FontStyle.italic,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                for (var i = 0; i < thinkingBlocks.length; i++) ...[
+                  if (thinkingBlocks[i].isNotEmpty) ...[
+                    if (i > 0) const SizedBox(height: 8),
+                    Text(
+                      thinkingBlocks[i],
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontStyle: FontStyle.italic,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
               ],
             ],
           ),
