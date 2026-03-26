@@ -135,10 +135,11 @@ class _SvgCodeBlockState extends State<_SvgCodeBlock> {
   }
 
   Widget _sourceView() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return HighlightView(
       widget.code,
       language: 'xml',
-      theme: githubTheme,
+      theme: isDark ? vs2015Theme : githubTheme,
       padding: EdgeInsets.zero,
       textStyle: widget.codeStyle,
     );
