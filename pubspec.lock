@@ -811,7 +811,7 @@ packages:
     source: git
     version: "0.1.0"
   soliplex_logging:
-    dependency: transitive
+    dependency: "direct main"
     description:
       path: "packages/soliplex_logging"
       ref: "583bb976bc5817f1fb0004216859b16762c07206"

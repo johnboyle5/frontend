@@ -14,6 +14,7 @@ void main() {
           selectedThreadId: null,
           onThreadSelected: (_) {},
           onBackToLobby: () {},
+          onCreateThread: () {},
         ),
       ),
     ));
@@ -43,6 +44,7 @@ void main() {
           selectedThreadId: 't-1',
           onThreadSelected: (_) {},
           onBackToLobby: () {},
+          onCreateThread: () {},
         ),
       ),
     ));
@@ -69,6 +71,7 @@ void main() {
           selectedThreadId: null,
           onThreadSelected: (id) => selectedId = id,
           onBackToLobby: () {},
+          onCreateThread: () {},
         ),
       ),
     ));
@@ -87,11 +90,12 @@ void main() {
           selectedThreadId: null,
           onThreadSelected: (_) {},
           onBackToLobby: () => backCalled = true,
+          onCreateThread: () {},
         ),
       ),
     ));
 
-    await tester.tap(find.text('Back to Lobby'));
+    await tester.tap(find.text('Lobby'));
     expect(backCalled, isTrue);
   });
 }

@@ -26,6 +26,7 @@ class ThreadListState {
   final ServerConnection _connection;
   final String _roomId;
   CancelToken? _cancelToken;
+  bool _isDisposed = false;
 
   final Signal<ThreadListStatus> _threads =
       Signal<ThreadListStatus>(ThreadsLoading());
@@ -34,11 +35,14 @@ class ThreadListState {
   void refresh() => _fetch();
 
   void _fetch() {
+    if (_isDisposed) return;
     _cancelToken?.cancel('re-fetch');
     final token = CancelToken();
     _cancelToken = token;
 
-    _threads.value = ThreadsLoading();
+    if (_threads.value is! ThreadsLoaded) {
+      _threads.value = ThreadsLoading();
+    }
 
     _connection.api.getThreads(_roomId, cancelToken: token).then((threads) {
       if (token.isCancelled) return;
@@ -49,11 +53,15 @@ class ThreadListState {
     }).catchError((Object error) {
       if (token.isCancelled) return;
       _cancelToken = null;
-      _threads.value = ThreadsFailed(error);
+      // Preserve existing loaded threads on refresh failure.
+      if (_threads.value is! ThreadsLoaded) {
+        _threads.value = ThreadsFailed(error);
+      }
     });
   }
 
   void dispose() {
+    _isDisposed = true;
     _cancelToken?.cancel('disposed');
   }
 }
