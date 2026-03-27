@@ -8,15 +8,31 @@ import 'text_message_tile.dart';
 import 'tool_call_tile.dart';
 
 class MessageTile extends StatelessWidget {
-  const MessageTile({super.key, required this.message});
+  const MessageTile({
+    super.key,
+    required this.message,
+    this.runId,
+    this.onFeedbackSubmit,
+  });
+
   final ChatMessage message;
+  final String? runId;
+  final void Function(String runId, FeedbackType feedback, String? reason)?
+      onFeedbackSubmit;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: switch (message) {
-        final TextMessage m => TextMessageTile(message: m),
+        final TextMessage m => TextMessageTile(
+            message: m,
+            runId: runId,
+            onFeedbackSubmit: onFeedbackSubmit != null && runId != null
+                ? (feedback, reason) =>
+                    onFeedbackSubmit!(runId!, feedback, reason)
+                : null,
+          ),
         final ToolCallMessage m => ToolCallTile(message: m),
         final ErrorMessage m => ErrorMessageTile(message: m),
         final GenUiMessage m => GenUiTile(message: m),

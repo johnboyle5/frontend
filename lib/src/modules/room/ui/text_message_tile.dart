@@ -1,14 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
+import 'feedback_buttons.dart';
+import 'markdown/flutter_markdown_plus_renderer.dart';
+
 class TextMessageTile extends StatelessWidget {
-  const TextMessageTile({super.key, required this.message});
+  const TextMessageTile({
+    super.key,
+    required this.message,
+    this.runId,
+    this.onFeedbackSubmit,
+  });
+
   final TextMessage message;
+  final String? runId;
+  final void Function(FeedbackType feedback, String? reason)? onFeedbackSubmit;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isUser = message.user == ChatUser.user;
+    final showFeedback = !isUser && onFeedbackSubmit != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -32,8 +44,14 @@ class TextMessageTile extends StatelessWidget {
                 : theme.colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: SelectableText(message.text),
+          child: isUser
+              ? SelectableText(message.text)
+              : FlutterMarkdownPlusRenderer(data: message.text),
         ),
+        if (showFeedback) ...[
+          const SizedBox(height: 4),
+          FeedbackButtons(onFeedbackSubmit: onFeedbackSubmit!),
+        ],
       ],
     );
   }
