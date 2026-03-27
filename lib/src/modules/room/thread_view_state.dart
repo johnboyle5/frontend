@@ -138,7 +138,7 @@ class ThreadViewState {
       case RunningState(:final conversation, :final streaming):
         final current = _messages.value;
         if (current is! MessagesLoaded ||
-            current.messages.length != conversation.messages.length) {
+            !identical(current.messages, conversation.messages)) {
           _messages.value = _loadedFrom(conversation);
         }
         _streamingState.value = streaming;
