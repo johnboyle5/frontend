@@ -303,7 +303,7 @@ class _RoomScreenState extends State<RoomScreen> {
                 messages: messages,
                 messageStates: messageStates,
                 streamingState: streaming,
-                executionTracker: threadView.executionTracker,
+                executionTracker: null,
                 room: room,
                 onSuggestionTapped: (suggestion) =>
                     threadView.sendMessage(suggestion, _state.runtime),

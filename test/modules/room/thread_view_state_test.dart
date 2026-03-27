@@ -202,7 +202,7 @@ void main() {
       state.dispose();
     });
 
-    test('creates executionTracker on sendMessage', () async {
+    test('executionTrackers is empty before any streaming', () async {
       api.nextThreadHistory = ThreadHistory(messages: const []);
 
       final state = ThreadViewState(
@@ -212,22 +212,12 @@ void main() {
       );
 
       await Future<void>.delayed(Duration.zero);
-      expect(state.executionTracker, isNull);
-
-      await state.sendMessage('Hello', runtime);
-
-      // Give the session time to start
-      for (var i = 0; i < 10; i++) {
-        await Future<void>.delayed(Duration.zero);
-      }
-
-      // Tracker survives session end so UI can show final step log
-      expect(state.executionTracker, isNotNull);
+      expect(state.executionTrackers, isEmpty);
 
       state.dispose();
     });
 
-    test('executionTracker survives session end for UI display', () async {
+    test('executionTrackers are cleaned up on dispose', () async {
       api.nextThreadHistory = ThreadHistory(messages: const []);
 
       final state = ThreadViewState(
@@ -245,13 +235,8 @@ void main() {
         await Future<void>.delayed(Duration.zero);
       }
 
-      // Tracker persists after session ends; streaming state is cleared
-      expect(state.executionTracker, isNotNull);
-      expect(state.streamingState.value, isNull);
-
       state.dispose();
-      // Tracker is cleaned up on view disposal
-      expect(state.executionTracker, isNull);
+      expect(state.executionTrackers, isEmpty);
     });
   });
 }

@@ -52,8 +52,11 @@ class ThreadViewState {
   final Signal<SendError?> _lastSendError = Signal<SendError?>(null);
   ReadonlySignal<SendError?> get lastSendError => _lastSendError;
 
-  ExecutionTracker? _executionTracker;
-  ExecutionTracker? get executionTracker => _executionTracker;
+  final Map<String, ExecutionTracker> _executionTrackers = {};
+  Map<String, ExecutionTracker> get executionTrackers =>
+      Map.unmodifiable(_executionTrackers);
+
+  String? _activeTrackerMessageId;
 
   void clearSendError() => _lastSendError.value = null;
 
@@ -98,9 +101,6 @@ class ThreadViewState {
     _activeSession = session;
     _sessionState.value = session.state;
     _runStateUnsub = session.runState.subscribe(_onRunState);
-    _executionTracker?.dispose();
-    _executionTracker =
-        ExecutionTracker(executionEvents: session.lastExecutionEvent);
   }
 
   void _onRunState(RunState runState) {
@@ -109,16 +109,42 @@ class ThreadViewState {
         _messages.value = _loadedFrom(conversation);
         _streamingState.value = streaming;
         _sessionState.value = AgentSessionState.running;
+        if (streaming is TextStreaming &&
+            _activeTrackerMessageId != streaming.messageId) {
+          if (_activeTrackerMessageId == '_awaiting') {
+            // Re-key the awaiting tracker to the actual message ID
+            final tracker = _executionTrackers.remove('_awaiting');
+            if (tracker != null) {
+              _executionTrackers[streaming.messageId] = tracker;
+            }
+          } else {
+            _freezeActiveTracker();
+            _executionTrackers[streaming.messageId] = ExecutionTracker(
+              executionEvents: _activeSession!.lastExecutionEvent,
+            );
+          }
+          _activeTrackerMessageId = streaming.messageId;
+        } else if (streaming is AwaitingText &&
+            _activeTrackerMessageId == null &&
+            _activeSession != null) {
+          _activeTrackerMessageId = '_awaiting';
+          _executionTrackers['_awaiting'] = ExecutionTracker(
+            executionEvents: _activeSession!.lastExecutionEvent,
+          );
+        }
       case CompletedState(:final conversation):
+        _freezeActiveTracker();
         _detachSession();
         _messages.value = _loadedFrom(conversation);
       case FailedState(:final conversation, :final error):
+        _freezeActiveTracker();
         _detachSession();
         _lastSendError.value = SendError(error);
         if (conversation != null) {
           _messages.value = _loadedFrom(conversation);
         }
       case CancelledState(:final conversation):
+        _freezeActiveTracker();
         _detachSession();
         if (conversation != null) {
           _messages.value = _loadedFrom(conversation);
@@ -126,6 +152,13 @@ class ThreadViewState {
       case IdleState():
       case ToolYieldingState():
         break;
+    }
+  }
+
+  void _freezeActiveTracker() {
+    if (_activeTrackerMessageId != null) {
+      _executionTrackers[_activeTrackerMessageId!]?.freeze();
+      _activeTrackerMessageId = null;
     }
   }
 
@@ -175,7 +208,9 @@ class ThreadViewState {
     _isDisposed = true;
     _cancelToken?.cancel('disposed');
     _detachSession();
-    _executionTracker?.dispose();
-    _executionTracker = null;
+    for (final tracker in _executionTrackers.values) {
+      tracker.dispose();
+    }
+    _executionTrackers.clear();
   }
 }
