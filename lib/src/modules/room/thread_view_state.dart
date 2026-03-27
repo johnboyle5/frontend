@@ -52,8 +52,7 @@ class ThreadViewState {
   })  : _connection = connection,
         _roomId = roomId,
         _registry = registry {
-    _fetch();
-    _checkRegistry();
+    if (!_restoreFromRegistry()) _fetch();
   }
 
   final ServerConnection _connection;
@@ -197,16 +196,18 @@ class ThreadViewState {
     _sessionState.value = null;
   }
 
-  void _checkRegistry() {
+  bool _restoreFromRegistry() {
     final session = _registry.activeSession(threadKey);
     if (session != null) {
       _attachSession(session);
-      return;
+      return true;
     }
     final outcome = _registry.completedOutcome(threadKey);
     if (outcome != null) {
       _applyOutcome(outcome);
+      return true;
     }
+    return false;
   }
 
   void _applyOutcome(RunOutcome outcome) {

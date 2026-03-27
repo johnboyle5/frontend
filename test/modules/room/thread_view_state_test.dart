@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
@@ -21,6 +23,7 @@ class _FakeAgentSession implements AgentSession {
 
   final Signal<RunState> _runState;
   final Signal<ExecutionEvent?> _lastExecutionEvent;
+  final Completer<AgentResult> _resultCompleter = Completer<AgentResult>();
 
   @override
   AgentSessionState get state => AgentSessionState.running;
@@ -31,7 +34,12 @@ class _FakeAgentSession implements AgentSession {
   @override
   ReadonlySignal<ExecutionEvent?> get lastExecutionEvent => _lastExecutionEvent;
 
+  @override
+  Future<AgentResult> get result => _resultCompleter.future;
+
   void emit(RunState state) => _runState.value = state;
+
+  void complete(AgentResult result) => _resultCompleter.complete(result);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
@@ -222,6 +230,72 @@ void main() {
     expect(loaded2.messages.first.id, 'msg-2',
         reason:
             'should update when list instance changes even with same length');
+
+    state.dispose();
+  });
+
+  test('uses registry outcome instead of server fetch', () async {
+    final threadKey = (
+      serverId: 'test-server',
+      roomId: 'room-1',
+      threadId: 'thread-1',
+    );
+
+    // Simulate a completed run: register a session and complete it.
+    final userMessage = TextMessage(
+      id: 'user-1',
+      user: ChatUser.user,
+      createdAt: DateTime(2026, 3, 1),
+      text: 'Hello',
+    );
+    final assistantMessage = TextMessage(
+      id: 'assistant-1',
+      user: ChatUser.assistant,
+      createdAt: DateTime(2026, 3, 1),
+      text: 'I can help with that',
+    );
+    final conversation = Conversation(
+      threadId: 'thread-1',
+      messages: [userMessage, assistantMessage],
+    );
+
+    final session = _FakeAgentSession();
+    registry.register(threadKey, session);
+    session.emit(CompletedState(
+      threadKey: threadKey,
+      runId: 'run-1',
+      conversation: conversation,
+    ));
+    session.complete(AgentSuccess(
+      threadKey: threadKey,
+      output: 'done',
+      runId: 'run-1',
+    ));
+    await Future<void>.delayed(Duration.zero);
+
+    // Server has only the assistant message (user message not persisted yet).
+    api.nextThreadHistory = ThreadHistory(messages: [assistantMessage]);
+
+    // Now create a new ThreadViewState (simulates navigating back).
+    final state = ThreadViewState(
+      connection: connection,
+      roomId: 'room-1',
+      threadId: 'thread-1',
+      registry: registry,
+    );
+
+    // Registry outcome should be applied synchronously.
+    final loaded = state.messages.value as MessagesLoaded;
+    expect(loaded.messages.length, 2, reason: 'should have both messages');
+    expect(loaded.messages.first.id, 'user-1');
+
+    // After server fetch completes, registry data should NOT be overwritten.
+    await Future<void>.delayed(Duration.zero);
+
+    final afterFetch = state.messages.value as MessagesLoaded;
+    expect(afterFetch.messages.length, 2,
+        reason: 'server fetch must not overwrite registry outcome');
+    expect(afterFetch.messages.first.id, 'user-1');
 
     state.dispose();
   });
