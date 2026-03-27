@@ -1,3 +1,6 @@
+import 'dart:async' show unawaited;
+
+import 'package:flutter/foundation.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
 import 'execution_tracker.dart';
@@ -14,11 +17,29 @@ class MessagesLoaded extends ThreadViewStatus {
   MessagesLoaded({required this.messages, required this.messageStates});
   final List<ChatMessage> messages;
   final Map<String, MessageState> messageStates;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MessagesLoaded &&
+          identical(messages, other.messages) &&
+          identical(messageStates, other.messageStates);
+
+  @override
+  int get hashCode => Object.hash(messages, messageStates);
 }
 
 class MessagesFailed extends ThreadViewStatus {
   MessagesFailed(this.error);
   final Object error;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MessagesFailed && identical(error, other.error);
+
+  @override
+  int get hashCode => error.hashCode;
 }
 
 class ThreadViewState {
@@ -56,6 +77,16 @@ class ThreadViewState {
   final TrackerRegistry _trackerRegistry = TrackerRegistry();
   Map<String, ExecutionTracker> get executionTrackers =>
       _trackerRegistry.trackers;
+
+  void submitFeedback(String runId, FeedbackType feedback, String? reason) {
+    unawaited(
+      _connection.api
+          .submitFeedback(_roomId, threadId, runId, feedback, reason: reason)
+          .catchError((Object e) {
+        debugPrint('Feedback submission failed: $e');
+      }),
+    );
+  }
 
   void clearSendError() => _lastSendError.value = null;
 
@@ -105,7 +136,11 @@ class ThreadViewState {
   void _onRunState(RunState runState) {
     switch (runState) {
       case RunningState(:final conversation, :final streaming):
-        _messages.value = _loadedFrom(conversation);
+        final current = _messages.value;
+        if (current is! MessagesLoaded ||
+            current.messages.length != conversation.messages.length) {
+          _messages.value = _loadedFrom(conversation);
+        }
         _streamingState.value = streaming;
         _sessionState.value = AgentSessionState.running;
         _trackerRegistry.onStreaming(
