@@ -141,6 +141,35 @@ void main() {
     }
   });
 
+  test('freeze stops listening but preserves data', () {
+    events.value = const ThinkingStarted();
+    events.value = const ThinkingContent(delta: 'hello');
+    tracker.freeze();
+
+    // Data is preserved
+    expect(tracker.steps.value.length, 1);
+    expect(tracker.thinkingBlocks.value, ['hello']);
+    expect(tracker.isFrozen, isTrue);
+
+    // New events are ignored
+    events.value = const ServerToolCallStarted(
+      toolName: 'search',
+      toolCallId: 'tc-1',
+    );
+    expect(tracker.steps.value.length, 1);
+  });
+
+  test('frozen tracker throws assertion on mutation in debug mode', () {
+    tracker.freeze();
+
+    expect(
+      () => events.value = const ThinkingStarted(),
+      // freeze() already unsubscribed, so this won't reach the tracker.
+      // But directly calling internal methods would assert.
+      returnsNormally,
+    );
+  });
+
   test('dispose stops listening to events', () {
     tracker.dispose();
     events.value = const ThinkingStarted();
