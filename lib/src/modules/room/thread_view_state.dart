@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
 import 'execution_tracker.dart';
+import 'run_registry.dart';
 import 'send_error.dart';
 import 'tracker_registry.dart';
 
@@ -47,14 +48,24 @@ class ThreadViewState {
     required ServerConnection connection,
     required String roomId,
     required this.threadId,
+    required RunRegistry registry,
   })  : _connection = connection,
-        _roomId = roomId {
-    _fetch();
+        _roomId = roomId,
+        _registry = registry {
+    if (!_restoreFromRegistry()) _fetch();
   }
 
   final ServerConnection _connection;
   final String _roomId;
   final String threadId;
+  final RunRegistry _registry;
+
+  ThreadKey get threadKey => (
+        serverId: _connection.serverId,
+        roomId: _roomId,
+        threadId: threadId,
+      );
+
   CancelToken? _cancelToken;
   AgentSession? _activeSession;
   void Function()? _runStateUnsub;
@@ -109,6 +120,7 @@ class ThreadViewState {
         cachedHistory: cachedHistory,
       );
       if (_isDisposed) return;
+      _registry.register(threadKey, session);
       _attachSession(session);
     } on Object catch (error) {
       if (_isDisposed) return;
@@ -182,6 +194,36 @@ class ThreadViewState {
     _activeSession = null;
     _streamingState.value = null;
     _sessionState.value = null;
+  }
+
+  bool _restoreFromRegistry() {
+    final session = _registry.activeSession(threadKey);
+    if (session != null) {
+      _attachSession(session);
+      return true;
+    }
+    final outcome = _registry.completedOutcome(threadKey);
+    if (outcome != null) {
+      _applyOutcome(outcome);
+      return true;
+    }
+    return false;
+  }
+
+  void _applyOutcome(RunOutcome outcome) {
+    switch (outcome) {
+      case CompletedRun(:final conversation):
+        _messages.value = _loadedFrom(conversation);
+      case FailedRun(:final conversation, :final error):
+        _lastSendError.value = SendError(error);
+        if (conversation != null) {
+          _messages.value = _loadedFrom(conversation);
+        }
+      case CancelledRun(:final conversation):
+        if (conversation != null) {
+          _messages.value = _loadedFrom(conversation);
+        }
+    }
   }
 
   void _fetch() {

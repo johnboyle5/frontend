@@ -5,6 +5,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 import '../../auth/server_entry.dart';
 import '../agent_runtime_manager.dart';
 import '../room_state.dart';
+import '../run_registry.dart';
 import '../thread_list_state.dart';
 import '../thread_view_state.dart';
 import 'chat_input.dart';
@@ -23,12 +24,14 @@ class RoomScreen extends StatefulWidget {
     required this.roomId,
     required this.threadId,
     required this.runtimeManager,
+    required this.registry,
   });
 
   final ServerEntry serverEntry;
   final String roomId;
   final String? threadId;
   final AgentRuntimeManager runtimeManager;
+  final RunRegistry registry;
 
   @override
   State<RoomScreen> createState() => _RoomScreenState();
@@ -100,6 +103,7 @@ class _RoomScreenState extends State<RoomScreen> {
         connection: widget.serverEntry.connection,
         roomId: widget.roomId,
         runtimeManager: widget.runtimeManager,
+        registry: widget.registry,
         onNavigateToThread: _navigateToThread,
       );
 
@@ -218,14 +222,13 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
-  void _restoreUnsentText(String? unsentText, VoidCallback clearError) {
+  void _restoreUnsentText(String? unsentText) {
     if (unsentText == null || _chatController.text.isNotEmpty) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _chatController.text = unsentText;
       _chatController.selection =
           TextSelection.collapsed(offset: _chatController.text.length);
-      clearError();
     });
   }
 
@@ -240,7 +243,7 @@ class _RoomScreenState extends State<RoomScreen> {
   Widget _buildNoThreadContent() {
     final roomError = _state.lastError.watch(context);
     final isSpawning = _state.isSpawning.watch(context);
-    _restoreUnsentText(roomError?.unsentText, _state.clearError);
+    _restoreUnsentText(roomError?.unsentText);
 
     return Column(
       children: [
@@ -282,7 +285,7 @@ class _RoomScreenState extends State<RoomScreen> {
     final room = roomStatus is RoomLoaded ? roomStatus.room : null;
     final sendError = threadView.lastSendError.watch(context);
 
-    _restoreUnsentText(sendError?.unsentText, threadView.clearSendError);
+    _restoreUnsentText(sendError?.unsentText);
 
     return Column(
       children: [
