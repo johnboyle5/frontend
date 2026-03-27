@@ -120,9 +120,9 @@ class RoomState {
         roomId: _roomId,
         prompt: prompt,
       );
-      if (_isDisposed) return;
       final key = session.threadKey;
       _registry.register(key, session);
+      if (_isDisposed) return;
       threadList.refresh();
       selectThread(key.threadId);
       _activeThreadView!.attachSession(session);
@@ -131,7 +131,7 @@ class RoomState {
       if (_isDisposed) return;
       _lastError.value = SendError(error, unsentText: prompt);
     } finally {
-      if (!_isDisposed) _isSpawning.value = false;
+      _isSpawning.value = false;
     }
   }
 

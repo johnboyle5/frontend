@@ -425,6 +425,57 @@ void main() {
       state.dispose();
     });
 
+    test('dispose during sendMessage still registers session in registry',
+        () async {
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+        registry: registry,
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      expect(state.messages.value, isA<MessagesLoaded>());
+
+      // Start sendMessage but dispose before it completes.
+      final sendFuture = state.sendMessage('Hello', runtime);
+      state.dispose();
+
+      // Let the spawn complete.
+      await sendFuture;
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      // Session should be tracked in the registry despite disposal.
+      final key = (
+        serverId: 'test-server',
+        roomId: 'room-1',
+        threadId: 'thread-1',
+      );
+      final active = registry.activeSession(key);
+      final outcome = registry.completedOutcome(key);
+      expect(active != null || outcome != null, isTrue);
+
+      // A new ThreadViewState for the same thread should restore from registry
+      // rather than fetching from the server.
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+      final restored = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+        registry: registry,
+      );
+
+      // The run failed (FakeAgUiStreamClient throws), so the outcome is a
+      // FailedRun. Restoration applies the error via _applyOutcome.
+      expect(restored.lastSendError.value, isNotNull);
+
+      restored.dispose();
+    });
+
     test('executionTrackers is empty before any streaming', () async {
       api.nextThreadHistory = ThreadHistory(messages: const []);
 
@@ -437,6 +488,40 @@ void main() {
 
       await Future<void>.delayed(Duration.zero);
       expect(state.executionTrackers, isEmpty);
+
+      state.dispose();
+    });
+
+    test('session completing clears activeSession without crash', () async {
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+        registry: registry,
+      );
+
+      await Future<void>.delayed(Duration.zero);
+
+      // Attach a fake session and emit CompletedState.
+      // This triggers _onRunState → _detachSession → _activeSession = null.
+      final fakeSession = _FakeAgentSession();
+      state.attachSession(fakeSession);
+
+      final conversation = Conversation(threadId: 'thread-1');
+      fakeSession.emit(CompletedState(
+        threadKey: (
+          serverId: 'test-server',
+          roomId: 'room-1',
+          threadId: 'thread-1',
+        ),
+        runId: 'run-1',
+        conversation: conversation,
+      ));
+
+      // No crash — the null-check in _onRunState handles cleanup safely.
+      expect(state.sessionState.value, isNull);
 
       state.dispose();
     });

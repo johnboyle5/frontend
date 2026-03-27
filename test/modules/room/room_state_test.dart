@@ -122,6 +122,33 @@ void main() {
     state.dispose();
   });
 
+  test('isSpawning clears after disposal during sendToNewThread', () async {
+    api.nextRoom = Room(id: 'room-1', name: 'Test');
+    api.nextThreads = [];
+    api.nextThreadHistory = ThreadHistory(messages: const []);
+
+    final state = RoomState(
+      connection: connection,
+      roomId: 'room-1',
+      runtimeManager: runtimeManager,
+      registry: registry,
+    );
+
+    await Future<void>.delayed(Duration.zero);
+
+    // Start sendToNewThread but dispose before spawn completes.
+    final sendFuture = state.sendToNewThread('Hello');
+    state.dispose();
+
+    await sendFuture;
+    for (var i = 0; i < 10; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    // isSpawning should be cleared unconditionally, even after disposal.
+    expect(state.isSpawning.value, isFalse);
+  });
+
   test('createThread calls API, refreshes list, and selects thread', () async {
     final createdThread = ThreadInfo(
       id: 'new-thread',

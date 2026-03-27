@@ -119,8 +119,8 @@ class ThreadViewState {
         threadId: threadId,
         cachedHistory: cachedHistory,
       );
-      if (_isDisposed) return;
       _registry.register(threadKey, session);
+      if (_isDisposed) return;
       _attachSession(session);
     } on Object catch (error) {
       if (_isDisposed) return;
@@ -146,6 +146,8 @@ class ThreadViewState {
   }
 
   void _onRunState(RunState runState) {
+    final session = _activeSession;
+    if (session == null) return;
     switch (runState) {
       case RunningState(:final conversation, :final streaming):
         final current = _messages.value;
@@ -157,7 +159,7 @@ class ThreadViewState {
         _sessionState.value = AgentSessionState.running;
         _trackerRegistry.onStreaming(
           streaming,
-          _activeSession!.lastExecutionEvent,
+          session.lastExecutionEvent,
         );
       case CompletedState(:final conversation):
         _trackerRegistry.onRunTerminated();
