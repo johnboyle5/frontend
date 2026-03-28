@@ -1,3 +1,6 @@
+import 'dart:async' show unawaited;
+
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:soliplex_agent/soliplex_agent.dart';
 
 import 'agent_runtime_manager.dart';
@@ -48,6 +51,7 @@ class RoomState {
   final ThreadListState threadList;
   ThreadViewState? _activeThreadView;
   CancelToken? _roomFetchToken;
+  Future<AgentSession>? _pendingSpawn;
   bool _isDisposed = false;
 
   final Signal<RoomStatus> _room = Signal<RoomStatus>(RoomLoading());
@@ -111,15 +115,32 @@ class RoomState {
   ///
   /// Spawns a session which creates the thread server-side, then creates a
   /// [ThreadViewState] and attaches the session to it.
+  void cancelSpawn() {
+    final pending = _pendingSpawn;
+    if (pending == null) return;
+    _pendingSpawn = null;
+    _isSpawning.value = false;
+    unawaited(pending.then((s) {
+      s.cancel();
+      s.dispose();
+    }).catchError((Object e) {
+      debugPrint('Cancelled spawn cleanup failed: $e');
+    }));
+  }
+
   Future<void> sendToNewThread(String prompt) async {
     if (_isSpawning.value) return;
     _lastError.value = null;
     _isSpawning.value = true;
+    Future<AgentSession>? spawnFuture;
     try {
-      final session = await runtime.spawn(
+      spawnFuture = runtime.spawn(
         roomId: _roomId,
         prompt: prompt,
       );
+      _pendingSpawn = spawnFuture;
+      final session = await spawnFuture;
+      if (_pendingSpawn != spawnFuture) return;
       final key = session.threadKey;
       _registry.register(key, session);
       if (_isDisposed) return;
@@ -131,12 +152,16 @@ class RoomState {
       if (_isDisposed) return;
       _lastError.value = SendError(error, unsentText: prompt);
     } finally {
-      _isSpawning.value = false;
+      if (_pendingSpawn == spawnFuture) {
+        _pendingSpawn = null;
+        _isSpawning.value = false;
+      }
     }
   }
 
   void dispose() {
     _isDisposed = true;
+    cancelSpawn();
     _roomFetchToken?.cancel('disposed');
     threadList.dispose();
     _activeThreadView?.dispose();

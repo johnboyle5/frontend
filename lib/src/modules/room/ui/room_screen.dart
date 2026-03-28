@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
+import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 import '../../auth/server_entry.dart';
 import '../agent_runtime_manager.dart';
 import '../room_state.dart';
@@ -16,6 +17,11 @@ import 'thread_sidebar.dart';
 
 const double _sidebarWidth = 300;
 const double _wideBreakpoint = 600;
+
+/// Constant signal used to tell [ChatInput] a spawn is in progress
+/// when no [ThreadViewState] exists yet.
+final _spawningSessionState =
+    Signal<AgentSessionState?>(AgentSessionState.spawning);
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({
@@ -262,8 +268,8 @@ class _RoomScreenState extends State<RoomScreen> {
           ),
         ChatInput(
           onSend: (text) => _state.sendToNewThread(text),
-          onCancel: () {},
-          sessionState: null,
+          onCancel: _state.cancelSpawn,
+          sessionState: isSpawning ? _spawningSessionState : null,
           controller: _chatController,
           focusNode: _chatFocusNode,
         ),
