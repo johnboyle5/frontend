@@ -57,6 +57,9 @@ class RoomState {
   final Signal<RoomStatus> _room = Signal<RoomStatus>(RoomLoading());
   ReadonlySignal<RoomStatus> get room => _room;
 
+  // Lifecycle: null → spawning (sendToNewThread) → null (on completion,
+  //            error, or cancelSpawn). Doubles as a concurrency guard and
+  //            the UI signal for ChatInput's cancel button.
   final Signal<AgentSessionState?> _sessionState =
       Signal<AgentSessionState?>(null);
   ReadonlySignal<AgentSessionState?> get sessionState => _sessionState;
@@ -143,6 +146,7 @@ class RoomState {
       final session = await spawnFuture;
       if (_pendingSpawn != spawnFuture) return;
       _pendingSpawn = null;
+      _sessionState.value = null;
       final key = session.threadKey;
       _registry.register(key, session);
       if (_isDisposed) return;
@@ -151,7 +155,7 @@ class RoomState {
       _activeThreadView!.attachSession(session);
       onNavigateToThread?.call(key.threadId);
     } on Object catch (error) {
-      if (_isDisposed) return;
+      if (_isDisposed || _sessionState.value == null) return;
       _lastError.value = SendError(error, unsentText: prompt);
     } finally {
       if (_pendingSpawn == spawnFuture) {
@@ -163,7 +167,6 @@ class RoomState {
 
   void dispose() {
     _isDisposed = true;
-    cancelSpawn();
     _roomFetchToken?.cancel('disposed');
     threadList.dispose();
     _activeThreadView?.dispose();

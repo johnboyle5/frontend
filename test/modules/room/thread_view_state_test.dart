@@ -24,6 +24,7 @@ class _FakeAgentSession implements AgentSession {
   final Signal<RunState> _runState;
   final Signal<ExecutionEvent?> _lastExecutionEvent;
   final Completer<AgentResult> _resultCompleter = Completer<AgentResult>();
+  bool cancelCalled = false;
 
   @override
   AgentSessionState get state => AgentSessionState.running;
@@ -36,6 +37,9 @@ class _FakeAgentSession implements AgentSession {
 
   @override
   Future<AgentResult> get result => _resultCompleter.future;
+
+  @override
+  void cancel() => cancelCalled = true;
 
   void emit(RunState state) => _runState.value = state;
 
@@ -425,7 +429,8 @@ void main() {
       state.dispose();
     });
 
-    test('dispose during sendMessage cancels pending spawn', () async {
+    test('dispose during sendMessage still registers session in registry',
+        () async {
       api.nextThreadHistory = ThreadHistory(messages: const []);
 
       final state = ThreadViewState(
@@ -442,20 +447,42 @@ void main() {
       final sendFuture = state.sendMessage('Hello', runtime);
       state.dispose();
 
-      // Let the spawn complete and cleanup run.
+      // Let the spawn complete.
       await sendFuture;
       for (var i = 0; i < 10; i++) {
         await Future<void>.delayed(Duration.zero);
       }
 
-      // Dispose cancels the pending spawn — no session should be registered.
+      // Session should be tracked in the registry despite disposal.
       final key = (
         serverId: 'test-server',
         roomId: 'room-1',
         threadId: 'thread-1',
       );
-      expect(registry.activeSession(key), isNull);
-      expect(registry.completedOutcome(key), isNull);
+      final active = registry.activeSession(key);
+      final outcome = registry.completedOutcome(key);
+      expect(active != null || outcome != null, isTrue);
+    });
+
+    test('dispose does not cancel an active session', () async {
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+        registry: registry,
+      );
+
+      await Future<void>.delayed(Duration.zero);
+
+      final fakeSession = _FakeAgentSession();
+      state.attachSession(fakeSession);
+      expect(state.sessionState.value, isNotNull);
+
+      state.dispose();
+
+      expect(fakeSession.cancelCalled, isFalse);
     });
 
     test('sessionState is spawning while sendMessage awaits spawn', () async {

@@ -79,6 +79,10 @@ class ThreadViewState {
   final Signal<StreamingState?> _streamingState = Signal<StreamingState?>(null);
   ReadonlySignal<StreamingState?> get streamingState => _streamingState;
 
+  // Lifecycle: null → spawning (sendMessage) → running (_onRunState)
+  //            → null (_detachSession on terminal state, or cancelRun).
+  //            Doubles as a concurrency guard (sendMessage rejects if non-null)
+  //            and the UI signal for ChatInput's cancel button.
   final Signal<AgentSessionState?> _sessionState =
       Signal<AgentSessionState?>(null);
   ReadonlySignal<AgentSessionState?> get sessionState => _sessionState;
@@ -123,7 +127,7 @@ class ThreadViewState {
       if (_isDisposed) return;
       _attachSession(session);
     } on Object catch (error) {
-      if (_isDisposed) return;
+      if (_isDisposed || _sessionState.value == null) return;
       _lastSendError.value = SendError(error, unsentText: prompt);
     } finally {
       if (_pendingSpawn == spawnFuture) {
@@ -138,19 +142,24 @@ class ThreadViewState {
   }
 
   void cancelRun() {
-    final pending = _pendingSpawn;
-    if (pending != null) {
-      _pendingSpawn = null;
-      _sessionState.value = null;
-      unawaited(pending.then((s) {
-        s.cancel();
-        s.dispose();
-      }).catchError((Object e) {
-        debugPrint('Cancelled spawn cleanup failed: $e');
-      }));
-      return;
-    }
+    if (_cancelPendingSpawn()) return;
     _activeSession?.cancel();
+  }
+
+  /// Cancels a pending spawn if one exists. Returns true if a spawn was
+  /// cancelled, false if there was nothing pending.
+  bool _cancelPendingSpawn() {
+    final pending = _pendingSpawn;
+    if (pending == null) return false;
+    _pendingSpawn = null;
+    _sessionState.value = null;
+    unawaited(pending.then((s) {
+      s.cancel();
+      s.dispose();
+    }).catchError((Object e) {
+      debugPrint('Cancelled spawn cleanup failed: $e');
+    }));
+    return true;
   }
 
   void _attachSession(AgentSession session) {
@@ -275,7 +284,6 @@ class ThreadViewState {
 
   void dispose() {
     _isDisposed = true;
-    cancelRun();
     _cancelToken?.cancel('disposed');
     _detachSession();
     _trackerRegistry.dispose();

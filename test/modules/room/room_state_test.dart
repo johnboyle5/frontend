@@ -147,7 +147,7 @@ void main() {
     state.dispose();
   });
 
-  test('sessionState clears after disposal during sendToNewThread', () async {
+  test('dispose during sendToNewThread does not cancel the spawn', () async {
     api.nextRoom = Room(id: 'room-1', name: 'Test');
     api.nextThreads = [];
     api.nextThreadHistory = ThreadHistory(messages: const []);
@@ -165,13 +165,14 @@ void main() {
     final sendFuture = state.sendToNewThread('Hello');
     state.dispose();
 
+    // Should complete without error — spawn runs to completion.
     await sendFuture;
     for (var i = 0; i < 10; i++) {
       await Future<void>.delayed(Duration.zero);
     }
 
-    // sessionState should be cleared after disposal.
-    expect(state.sessionState.value, isNull);
+    // No error should be surfaced (disposed state swallows errors).
+    expect(state.lastError.value, isNull);
   });
 
   test('createThread calls API, refreshes list, and selects thread', () async {
