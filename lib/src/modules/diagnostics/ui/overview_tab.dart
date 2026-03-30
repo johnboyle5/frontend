@@ -21,6 +21,24 @@ class OverviewTab extends StatefulWidget {
 
 class _OverviewTabState extends State<OverviewTab> {
   _StreamView _streamView = _StreamView.conversation;
+  SseParseResult? _parseResult;
+  AccumulatedRun? _accumulatedRun;
+
+  SseParseResult _getParsed() {
+    return _parseResult ??= parseSseEvents(widget.group.streamEnd!.body!);
+  }
+
+  AccumulatedRun _getAccumulated() {
+    return _accumulatedRun ??= accumulateEvents(_getParsed().events);
+  }
+
+  dynamic get _responseBody {
+    final response = widget.group.response;
+    if (response != null && response.body != null) return response.body;
+    final streamEnd = widget.group.streamEnd;
+    if (streamEnd != null && streamEnd.body != null) return streamEnd.body;
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +46,7 @@ class _OverviewTabState extends State<OverviewTab> {
     final body = group.requestBody;
     final hasRequestBody = body != null && body.toString().isNotEmpty;
 
-    if (!hasRequestBody && !group.isStream && _responseBody(group) == null) {
+    if (!hasRequestBody && !group.isStream && _responseBody == null) {
       return _emptyState(context);
     }
 
@@ -41,23 +59,16 @@ class _OverviewTabState extends State<OverviewTab> {
         ],
         if (group.isStream)
           _StreamSection(
-            group: group,
+            parseResult: _getParsed(),
+            accumulatedRun: _getAccumulated(),
             view: _streamView,
             onViewChanged: (v) => setState(() => _streamView = v),
           )
-        else if (_responseBody(group) != null) ...[
-          _JsonSection(title: 'Response Body', body: _responseBody(group)),
+        else if (_responseBody != null) ...[
+          _JsonSection(title: 'Response Body', body: _responseBody),
         ],
       ],
     );
-  }
-
-  dynamic _responseBody(HttpEventGroup group) {
-    final response = group.response;
-    if (response != null && response.body != null) return response.body;
-    final streamEnd = group.streamEnd;
-    if (streamEnd != null && streamEnd.body != null) return streamEnd.body;
-    return null;
   }
 
   Widget _emptyState(BuildContext context) {
@@ -77,21 +88,20 @@ enum _StreamView { conversation, events }
 
 class _StreamSection extends StatelessWidget {
   const _StreamSection({
-    required this.group,
+    required this.parseResult,
+    required this.accumulatedRun,
     required this.view,
     required this.onViewChanged,
   });
 
-  final HttpEventGroup group;
+  final SseParseResult parseResult;
+  final AccumulatedRun accumulatedRun;
   final _StreamView view;
   final ValueChanged<_StreamView> onViewChanged;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final streamEnd = group.streamEnd;
-    final body = streamEnd?.body ?? '';
-    final parseResult = parseSseEvents(body);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,7 +132,7 @@ class _StreamSection extends StatelessWidget {
         const SizedBox(height: 8),
         if (parseResult.wasTruncated) _TruncationBanner(),
         if (view == _StreamView.conversation)
-          _ConversationView(events: parseResult.events)
+          _ConversationView(run: accumulatedRun)
         else
           _EventsView(events: parseResult.events),
       ],
@@ -164,14 +174,12 @@ class _TruncationBanner extends StatelessWidget {
 }
 
 class _ConversationView extends StatelessWidget {
-  const _ConversationView({required this.events});
+  const _ConversationView({required this.run});
 
-  final List<SseEvent> events;
+  final AccumulatedRun run;
 
   @override
   Widget build(BuildContext context) {
-    final run = accumulateEvents(events);
-
     if (run.entries.isEmpty) {
       return _emptyMessage(context, 'No conversation entries');
     }
@@ -392,7 +400,6 @@ class _SseEventCardState extends State<_SseEventCard> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  const Spacer(),
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 16,

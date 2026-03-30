@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
 import '../../../shared/copy_button.dart';
+import '../models/event_accumulator.dart';
 import '../models/format_utils.dart';
 import '../models/http_event_group.dart';
+import '../models/sse_event_parser.dart';
 import 'http_status_display.dart';
 import 'overview_tab.dart';
 
@@ -41,6 +43,7 @@ class _RequestDetailViewState extends State<RequestDetailView>
   late final TabController _tabController;
   final _searchController = TextEditingController();
   SearchScope _scope = SearchScope.everything;
+  int _currentMatchIndex = 0;
 
   static const _tabCount = 4;
 
@@ -58,7 +61,7 @@ class _RequestDetailViewState extends State<RequestDetailView>
     super.dispose();
   }
 
-  void _onSearchChanged() => setState(() {});
+  void _onSearchChanged() => setState(() => _currentMatchIndex = 0);
 
   String _requestText() {
     final group = widget.group;
@@ -103,15 +106,36 @@ class _RequestDetailViewState extends State<RequestDetailView>
   String _curlText() => group.toCurl() ?? '';
 
   String _overviewText() {
-    final group = widget.group;
-    final parts = <String>[];
-    final body = group.requestBody;
-    if (body != null) parts.add(HttpEventGroup.formatBody(body));
-    final streamEnd = group.streamEnd;
-    if (streamEnd?.body != null) parts.add(streamEnd!.body!);
-    final resp = group.response;
-    if (resp?.body != null) parts.add(HttpEventGroup.formatBody(resp!.body));
-    return parts.join('\n');
+    final buf = StringBuffer();
+    final body = widget.group.requestBody;
+    if (body != null) buf.write(HttpEventGroup.formatBody(body));
+
+    if (widget.group.isStream && widget.group.streamEnd?.body != null) {
+      final rawBody = widget.group.streamEnd!.body!;
+      buf.write(rawBody);
+      final parsed = parseSseEvents(rawBody);
+      final run = accumulateEvents(parsed.events);
+      for (final entry in run.entries) {
+        switch (entry) {
+          case MessageEntry(:final text):
+            buf.write(text);
+          case ToolCallEntry(:final toolName, :final args):
+            buf.write(toolName);
+            buf.write(args);
+          case ToolResultEntry(:final content):
+            buf.write(content);
+          case ThinkingEntry(:final text):
+            buf.write(text);
+          case RunStatusEntry(:final message):
+            if (message != null) buf.write(message);
+          case StateEntry():
+            break;
+        }
+      }
+    } else if (!widget.group.isStream && widget.group.response?.body != null) {
+      buf.write(HttpEventGroup.formatBody(widget.group.response!.body));
+    }
+    return buf.toString();
   }
 
   HttpEventGroup get group => widget.group;
@@ -131,6 +155,17 @@ class _RequestDetailViewState extends State<RequestDetailView>
     return count;
   }
 
+  int _matchesForScope(SearchScope scope) {
+    final q = _searchController.text;
+    return switch (scope) {
+      SearchScope.request => _countMatches(_requestText(), q),
+      SearchScope.response => _countMatches(_responseText(), q),
+      SearchScope.curl => _countMatches(_curlText(), q),
+      SearchScope.overview => _countMatches(_overviewText(), q),
+      SearchScope.everything => 0,
+    };
+  }
+
   int _tabMatches(int tabIndex) {
     final q = _searchController.text;
     if (q.isEmpty) return 0;
@@ -142,13 +177,55 @@ class _RequestDetailViewState extends State<RequestDetailView>
       _ => SearchScope.request,
     };
     if (_scope != SearchScope.everything && _scope != tabScope) return 0;
-    return switch (tabScope) {
-      SearchScope.request => _countMatches(_requestText(), q),
-      SearchScope.response => _countMatches(_responseText(), q),
-      SearchScope.curl => _countMatches(_curlText(), q),
-      SearchScope.overview => _countMatches(_overviewText(), q),
-      SearchScope.everything => 0,
-    };
+    return _matchesForScope(tabScope);
+  }
+
+  List<int> get _matchCountsPerTab => [
+        _matchesForScope(SearchScope.request),
+        _matchesForScope(SearchScope.response),
+        _matchesForScope(SearchScope.curl),
+        _matchesForScope(SearchScope.overview),
+      ];
+
+  int get _totalMatches {
+    final q = _searchController.text;
+    if (q.isEmpty) return 0;
+    if (_scope == SearchScope.everything) {
+      return _matchCountsPerTab.fold(0, (a, b) => a + b);
+    }
+    return _matchesForScope(_scope);
+  }
+
+  void _nextMatch() {
+    if (_totalMatches == 0) return;
+    setState(() {
+      _currentMatchIndex = (_currentMatchIndex + 1) % _totalMatches;
+      _navigateToMatch();
+    });
+  }
+
+  void _previousMatch() {
+    if (_totalMatches == 0) return;
+    setState(() {
+      _currentMatchIndex =
+          (_currentMatchIndex - 1 + _totalMatches) % _totalMatches;
+      _navigateToMatch();
+    });
+  }
+
+  void _navigateToMatch() {
+    if (_scope != SearchScope.everything) return;
+    final counts = _matchCountsPerTab;
+    var remaining = _currentMatchIndex;
+    for (var i = 0; i < counts.length; i++) {
+      if (remaining < counts[i]) {
+        if (_tabController.index != i) {
+          _tabController.animateTo(i);
+        }
+        return;
+      }
+      remaining -= counts[i];
+    }
   }
 
   Widget _buildTab(String label, int tabIndex) {
@@ -205,7 +282,12 @@ class _RequestDetailViewState extends State<RequestDetailView>
             underline: const SizedBox.shrink(),
             isDense: true,
             onChanged: (v) {
-              if (v != null) setState(() => _scope = v);
+              if (v != null) {
+                setState(() {
+                  _scope = v;
+                  _currentMatchIndex = 0;
+                });
+              }
             },
             items: [
               for (final scope in SearchScope.values)
@@ -215,6 +297,29 @@ class _RequestDetailViewState extends State<RequestDetailView>
                 ),
             ],
           ),
+          if (_searchController.text.isNotEmpty && _totalMatches > 0) ...[
+            const SizedBox(width: 8),
+            Text(
+              '${_currentMatchIndex + 1}/$_totalMatches',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            IconButton(
+              icon: const Icon(Icons.keyboard_arrow_up, size: 20),
+              onPressed: _previousMatch,
+              tooltip: 'Previous match',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+            IconButton(
+              icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+              onPressed: _nextMatch,
+              tooltip: 'Next match',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
         ],
       ),
     );
