@@ -179,7 +179,7 @@ class ThreadViewState {
         final current = _messages.value;
         if (current is! MessagesLoaded ||
             !identical(current.messages, conversation.messages)) {
-          _messages.value = _loadedFrom(conversation);
+          _messages.value = _messagesLoaded(conversation);
         }
         _streamingState.value = streaming;
         _sessionState.value = AgentSessionState.running;
@@ -187,22 +187,22 @@ class ThreadViewState {
           streaming,
           session.lastExecutionEvent,
         );
-      case CompletedState(:final conversation):
+      case CompletedState(:final conversation, :final runId):
         _trackerRegistry.onRunTerminated();
         _detachSession();
-        _messages.value = _loadedFrom(conversation);
+        _messages.value = _messagesLoaded(conversation, runId: runId);
       case FailedState(:final conversation, :final error):
         _trackerRegistry.onRunTerminated();
         _detachSession();
         _lastSendError.value = SendError(error);
         if (conversation != null) {
-          _messages.value = _loadedFrom(conversation);
+          _messages.value = _messagesLoaded(conversation);
         }
       case CancelledState(:final conversation):
         _trackerRegistry.onRunTerminated();
         _detachSession();
         if (conversation != null) {
-          _messages.value = _loadedFrom(conversation);
+          _messages.value = _messagesLoaded(conversation);
         }
       case IdleState():
       case ToolYieldingState():
@@ -210,11 +210,36 @@ class ThreadViewState {
     }
   }
 
-  static MessagesLoaded _loadedFrom(Conversation conversation) =>
-      MessagesLoaded(
-        messages: conversation.messages,
-        messageStates: conversation.messageStates,
-      );
+  MessagesLoaded _messagesLoaded(Conversation conversation, {String? runId}) {
+    final existing = switch (_messages.value) {
+      MessagesLoaded(:final messageStates) => messageStates,
+      _ => const <String, MessageState>{},
+    };
+    final merged = {...existing, ...conversation.messageStates};
+    if (runId != null) {
+      final userMsgId = _lastUserMessageId(conversation);
+      if (userMsgId != null) {
+        merged[userMsgId] = MessageState(
+          userMessageId: userMsgId,
+          sourceReferences: const [],
+          runId: runId,
+        );
+      }
+    }
+    return MessagesLoaded(
+      messages: conversation.messages,
+      messageStates: merged,
+    );
+  }
+
+  static String? _lastUserMessageId(Conversation conversation) {
+    for (var i = conversation.messages.length - 1; i >= 0; i--) {
+      if (conversation.messages[i].user == ChatUser.user) {
+        return conversation.messages[i].id;
+      }
+    }
+    return null;
+  }
 
   void _detachSession() {
     _runStateUnsub?.call();
@@ -240,16 +265,16 @@ class ThreadViewState {
 
   void _applyOutcome(RunOutcome outcome) {
     switch (outcome) {
-      case CompletedRun(:final conversation):
-        _messages.value = _loadedFrom(conversation);
+      case CompletedRun(:final conversation, :final runId):
+        _messages.value = _messagesLoaded(conversation, runId: runId);
       case FailedRun(:final conversation, :final error):
         _lastSendError.value = SendError(error);
         if (conversation != null) {
-          _messages.value = _loadedFrom(conversation);
+          _messages.value = _messagesLoaded(conversation);
         }
       case CancelledRun(:final conversation):
         if (conversation != null) {
-          _messages.value = _loadedFrom(conversation);
+          _messages.value = _messagesLoaded(conversation);
         }
     }
   }

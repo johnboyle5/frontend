@@ -134,6 +134,7 @@ class _RoomScreenState extends State<RoomScreen> {
   bool _handleKey(KeyEvent event) {
     if (_chatFocusNode.hasFocus) return false;
     if (event is! KeyDownEvent) return false;
+    if (ModalRoute.of(context)?.isCurrent != true) return false;
     _chatFocusNode.requestFocus();
     return false;
   }
