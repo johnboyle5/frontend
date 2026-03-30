@@ -21,6 +21,7 @@ class MessageTimeline extends StatefulWidget {
     this.room,
     this.onSuggestionTapped,
     this.onFeedbackSubmit,
+    this.onInspect,
   });
 
   final List<ChatMessage> messages;
@@ -31,6 +32,7 @@ class MessageTimeline extends StatefulWidget {
   final void Function(String suggestion)? onSuggestionTapped;
   final void Function(String runId, FeedbackType feedback, String? reason)?
       onFeedbackSubmit;
+  final void Function(String runId)? onInspect;
 
   @override
   State<MessageTimeline> createState() => _MessageTimelineState();
@@ -187,8 +189,13 @@ class _MessageTimelineState extends State<MessageTimeline> {
                     padding: const EdgeInsets.only(bottom: 16),
                     child: MessageTile(
                       message: message,
-                      runId: runIdMap[message.id],
+                      runId: runIdMap[message.id] ??
+                          (message is TextMessage &&
+                                  message.user == ChatUser.user
+                              ? widget.messageStates[message.id]?.runId
+                              : null),
                       onFeedbackSubmit: widget.onFeedbackSubmit,
+                      onInspect: widget.onInspect,
                       executionTracker: widget.executionTrackers[message.id] ??
                           (message is LoadingMessage
                               ? widget.executionTrackers[awaitingTrackerKey]
