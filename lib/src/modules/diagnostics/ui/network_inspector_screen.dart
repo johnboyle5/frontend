@@ -20,20 +20,17 @@ class _NetworkInspectorScreenState extends State<NetworkInspectorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: ListenableBuilder(
-          listenable: widget.inspector,
-          builder: (context, _) {
-            final count = groupHttpEvents(widget.inspector.events).length;
-            return Text('Requests ($count)');
-          },
-        ),
-        actions: [
-          ListenableBuilder(
-            listenable: widget.inspector,
-            builder: (context, _) {
-              return IconButton(
+    return ListenableBuilder(
+      listenable: widget.inspector,
+      builder: (context, _) {
+        final groups = groupHttpEvents(widget.inspector.events);
+        final sortedGroups = groups.reversed.toList();
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('Requests (${sortedGroups.length})'),
+            actions: [
+              IconButton(
                 icon: const Icon(Icons.delete_outline),
                 onPressed: widget.inspector.events.isEmpty
                     ? null
@@ -42,18 +39,10 @@ class _NetworkInspectorScreenState extends State<NetworkInspectorScreen> {
                         setState(() => _selectedRequestId = null);
                       },
                 tooltip: 'Clear all requests',
-              );
-            },
+              ),
+            ],
           ),
-        ],
-      ),
-      body: ListenableBuilder(
-        listenable: widget.inspector,
-        builder: (context, _) {
-          final groups = groupHttpEvents(widget.inspector.events);
-          final sortedGroups = groups.reversed.toList();
-
-          return LayoutBuilder(
+          body: LayoutBuilder(
             builder: (context, constraints) {
               if (sortedGroups.isEmpty) return _buildEmptyState(context);
               final isWide = constraints.maxWidth >= 600;
@@ -62,9 +51,9 @@ class _NetworkInspectorScreenState extends State<NetworkInspectorScreen> {
               }
               return _buildListLayout(context, sortedGroups);
             },
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 

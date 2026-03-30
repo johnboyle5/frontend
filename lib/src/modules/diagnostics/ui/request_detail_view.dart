@@ -1,9 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
+import '../../../shared/copy_button.dart';
 import '../models/format_utils.dart';
 import '../models/http_event_group.dart';
 import 'http_status_display.dart';
@@ -145,7 +143,8 @@ class _RequestTab extends StatelessWidget {
         if (headers.isNotEmpty) ...[
           _SectionHeader(
             title: 'Headers',
-            copyButton: _CopyIconButton(
+            copyButton: CopyButton(
+              iconSize: 18,
               text:
                   headers.entries.map((e) => '${e.key}: ${e.value}').join('\n'),
               tooltip: 'Copy Headers',
@@ -157,7 +156,8 @@ class _RequestTab extends StatelessWidget {
         if (body != null) ...[
           _SectionHeader(
             title: 'Body',
-            copyButton: _CopyIconButton(
+            copyButton: CopyButton(
+              iconSize: 18,
               text: HttpEventGroup.formatBody(body),
               tooltip: 'Copy Body',
             ),
@@ -223,7 +223,8 @@ class _ResponseTab extends StatelessWidget {
           const SizedBox(height: 16),
           _SectionHeader(
             title: 'Stream Content',
-            copyButton: _CopyIconButton(
+            copyButton: CopyButton(
+              iconSize: 18,
               text: streamEnd.body!,
               tooltip: 'Copy Stream Content',
             ),
@@ -261,7 +262,8 @@ class _ResponseTab extends StatelessWidget {
           const SizedBox(height: 16),
           _SectionHeader(
             title: 'Headers',
-            copyButton: _CopyIconButton(
+            copyButton: CopyButton(
+              iconSize: 18,
               text: resp.headers!.entries
                   .map((e) => '${e.key}: ${e.value}')
                   .join('\n'),
@@ -274,7 +276,8 @@ class _ResponseTab extends StatelessWidget {
           const SizedBox(height: 16),
           _SectionHeader(
             title: 'Body',
-            copyButton: _CopyIconButton(
+            copyButton: CopyButton(
+              iconSize: 18,
               text: HttpEventGroup.formatBody(resp.body),
               tooltip: 'Copy Body',
             ),
@@ -314,7 +317,8 @@ class _CurlTab extends StatelessWidget {
                 style: theme.textTheme.titleSmall,
               ),
               const Spacer(),
-              _CopyIconButton(text: curl, tooltip: 'Copy to clipboard'),
+              CopyButton(
+                  iconSize: 18, text: curl, tooltip: 'Copy to clipboard'),
             ],
           ),
           const SizedBox(height: 8),
@@ -543,47 +547,6 @@ class _ErrorDisplay extends StatelessWidget {
           ],
         ],
       ),
-    );
-  }
-}
-
-class _CopyIconButton extends StatefulWidget {
-  const _CopyIconButton({required this.text, this.tooltip = 'Copy'});
-
-  final String text;
-  final String tooltip;
-
-  @override
-  State<_CopyIconButton> createState() => _CopyIconButtonState();
-}
-
-class _CopyIconButtonState extends State<_CopyIconButton> {
-  bool _showCheck = false;
-  Timer? _revertTimer;
-
-  @override
-  void dispose() {
-    _revertTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _copy() async {
-    await Clipboard.setData(ClipboardData(text: widget.text));
-    if (!mounted) return;
-    setState(() => _showCheck = true);
-    _revertTimer?.cancel();
-    _revertTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _showCheck = false);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      icon: Icon(_showCheck ? Icons.check : Icons.copy, size: 18),
-      onPressed: _copy,
-      tooltip: widget.tooltip,
-      visualDensity: VisualDensity.compact,
     );
   }
 }
