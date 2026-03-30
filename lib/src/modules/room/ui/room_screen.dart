@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import '../../auth/server_entry.dart';
+import '../../diagnostics/diagnostics_providers.dart';
+import '../../diagnostics/models/http_event_grouper.dart';
+import '../../diagnostics/models/run_event_filter.dart';
+import '../../diagnostics/ui/run_http_detail_page.dart';
 import '../agent_runtime_manager.dart';
 import '../room_state.dart';
 import '../run_registry.dart';
@@ -303,6 +308,20 @@ class _RoomScreenState extends State<RoomScreen> {
                 onSuggestionTapped: (suggestion) =>
                     threadView.sendMessage(suggestion, _state.runtime),
                 onFeedbackSubmit: threadView.submitFeedback,
+                onInspect: (runId) {
+                  final inspector = ProviderScope.containerOf(context)
+                      .read(networkInspectorProvider);
+                  final filtered = filterEventsByRunId(
+                    inspector.events,
+                    runId,
+                  );
+                  final groups = groupHttpEvents(filtered);
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => RunHttpDetailPage(groups: groups),
+                    ),
+                  );
+                },
               ),
           },
         ),

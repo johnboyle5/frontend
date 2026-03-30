@@ -15,6 +15,7 @@ class TextMessageTile extends StatelessWidget {
     required this.message,
     this.runId,
     this.onFeedbackSubmit,
+    this.onInspect,
     this.executionTracker,
     this.streamingActivity,
   });
@@ -22,6 +23,7 @@ class TextMessageTile extends StatelessWidget {
   final TextMessage message;
   final String? runId;
   final void Function(FeedbackType feedback, String? reason)? onFeedbackSubmit;
+  final VoidCallback? onInspect;
   final ExecutionTracker? executionTracker;
   final ActivityType? streamingActivity;
 
@@ -67,6 +69,21 @@ class TextMessageTile extends StatelessWidget {
         Row(
           children: [
             CopyButton(text: message.text),
+            if (isUser && onInspect != null) ...[
+              const SizedBox(width: 8),
+              Tooltip(
+                message: 'Inspect HTTP traffic',
+                child: InkWell(
+                  onTap: onInspect,
+                  borderRadius: BorderRadius.circular(4),
+                  child: Icon(
+                    Icons.bug_report_outlined,
+                    size: 20,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
             if (showFeedback) ...[
               const SizedBox(width: 8),
               FeedbackButtons(onFeedbackSubmit: onFeedbackSubmit!),

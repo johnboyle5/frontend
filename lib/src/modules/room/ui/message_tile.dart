@@ -14,6 +14,7 @@ class MessageTile extends StatelessWidget {
     required this.message,
     this.runId,
     this.onFeedbackSubmit,
+    this.onInspect,
     this.executionTracker,
     this.streamingActivity,
   });
@@ -22,6 +23,7 @@ class MessageTile extends StatelessWidget {
   final String? runId;
   final void Function(String runId, FeedbackType feedback, String? reason)?
       onFeedbackSubmit;
+  final void Function(String runId)? onInspect;
   final ExecutionTracker? executionTracker;
   final ActivityType? streamingActivity;
 
@@ -36,6 +38,9 @@ class MessageTile extends StatelessWidget {
             onFeedbackSubmit: onFeedbackSubmit != null && runId != null
                 ? (feedback, reason) =>
                     onFeedbackSubmit!(runId!, feedback, reason)
+                : null,
+            onInspect: onInspect != null && runId != null
+                ? () => onInspect!(runId!)
                 : null,
             executionTracker: executionTracker,
             streamingActivity: streamingActivity,
