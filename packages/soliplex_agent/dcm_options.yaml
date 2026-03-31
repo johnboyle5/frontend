@@ -10,5 +10,3 @@ dcm:
       threshold: 3
   rules:
     - avoid-nested-conditional-expressions
-    - prefer-correct-identifier-length
-    - prefer-moving-to-variable
