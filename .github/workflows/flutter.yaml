@@ -94,7 +94,7 @@ jobs:
           echo "::notice::Coverage check passed with ${COVERAGE}%"
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage/
@@ -132,7 +132,7 @@ jobs:
         run: flutter build web --release
 
       - name: Upload web artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: web-build
           path: build/web/
