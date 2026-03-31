@@ -1,0 +1,1375 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:mocktail/mocktail.dart';
+// HttpTransport uses our local CancelToken, not ag_ui's.
+// Hide ag_ui's CancelToken to avoid ambiguity.
+import 'package:soliplex_client/soliplex_client.dart' hide CancelToken;
+import 'package:soliplex_client/src/api/mappers.dart';
+import 'package:soliplex_client/src/utils/cancel_token.dart';
+import 'package:test/test.dart';
+
+class MockSoliplexHttpClient extends Mock implements SoliplexHttpClient {}
+
+void main() {
+  late MockSoliplexHttpClient mockClient;
+  late HttpTransport transport;
+
+  setUpAll(() {
+    registerFallbackValue(Uri.parse('https://example.com'));
+  });
+
+  setUp(() {
+    mockClient = MockSoliplexHttpClient();
+    transport = HttpTransport(client: mockClient);
+
+    // Setup default close behavior
+    when(() => mockClient.close()).thenReturn(null);
+  });
+
+  tearDown(() {
+    transport.close();
+    reset(mockClient);
+  });
+
+  HttpResponse jsonResponse(
+    int statusCode, {
+    Object? body,
+    Map<String, String>? headers,
+  }) {
+    final json = body != null ? jsonEncode(body) : '';
+    return HttpResponse(
+      statusCode: statusCode,
+      bodyBytes: Uint8List.fromList(utf8.encode(json)),
+      headers: {'content-type': 'application/json', ...?headers},
+    );
+  }
+
+  HttpResponse textResponse(int statusCode, String body) {
+    return HttpResponse(
+      statusCode: statusCode,
+      bodyBytes: Uint8List.fromList(utf8.encode(body)),
+      headers: const {'content-type': 'text/plain'},
+    );
+  }
+
+  HttpResponse emptyResponse(int statusCode) {
+    return HttpResponse(statusCode: statusCode, bodyBytes: Uint8List(0));
+  }
+
+  group('HttpTransport', () {
+    group('request - successful responses', () {
+      test('returns parsed JSON for 200 response', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => jsonResponse(200, body: {'id': 1, 'name': 'test'}),
+        );
+
+        final result = await transport.request<Map<String, dynamic>>(
+          'GET',
+          Uri.parse('https://api.example.com/data'),
+        );
+
+        expect(result['id'], equals(1));
+        expect(result['name'], equals('test'));
+      });
+
+      test('uses fromJson converter when provided', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              jsonResponse(200, body: {'id': '1', 'name': 'Test Room'}),
+        );
+
+        final result = await transport.request<Room>(
+          'GET',
+          Uri.parse('https://api.example.com/rooms/1'),
+          fromJson: roomFromJson,
+        );
+
+        expect(result.name, equals('Test Room'));
+        expect(result.id, equals('1'));
+      });
+
+      test('handles 201 Created response', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(201, body: {'id': 'new-id'}));
+
+        final result = await transport.request<Map<String, dynamic>>(
+          'POST',
+          Uri.parse('https://api.example.com/items'),
+          body: {'name': 'New Item'},
+        );
+
+        expect(result['id'], equals('new-id'));
+      });
+
+      test('handles 204 No Content response', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => emptyResponse(204));
+
+        final result = await transport.request<Map<String, dynamic>?>(
+          'DELETE',
+          Uri.parse('https://api.example.com/items/1'),
+        );
+
+        expect(result, isNull);
+      });
+
+      test('returns raw string for non-JSON response', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => textResponse(200, 'Hello, World!'));
+
+        final result = await transport.request<String>(
+          'GET',
+          Uri.parse('https://api.example.com/text'),
+        );
+
+        expect(result, equals('Hello, World!'));
+      });
+
+      test('detects JSON by content starting with {', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => HttpResponse(
+            statusCode: 200,
+            bodyBytes: Uint8List.fromList(utf8.encode('{"key": "value"}')),
+          ),
+        );
+
+        final result = await transport.request<Map<String, dynamic>>(
+          'GET',
+          Uri.parse('https://api.example.com/data'),
+        );
+
+        expect(result['key'], equals('value'));
+      });
+
+      test('detects JSON by content starting with [', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => HttpResponse(
+            statusCode: 200,
+            bodyBytes: Uint8List.fromList(utf8.encode('[1, 2, 3]')),
+          ),
+        );
+
+        final result = await transport.request<List<dynamic>>(
+          'GET',
+          Uri.parse('https://api.example.com/items'),
+        );
+
+        expect(result, equals([1, 2, 3]));
+      });
+    });
+
+    group('request - HTTP methods', () {
+      test('forwards GET request', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await transport.request<void>(
+          'GET',
+          Uri.parse('https://api.example.com'),
+        );
+
+        verify(
+          () => mockClient.request(
+            'GET',
+            Uri.parse('https://api.example.com'),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+
+      test('forwards POST request with JSON body', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(201, body: {}));
+
+        await transport.request<void>(
+          'POST',
+          Uri.parse('https://api.example.com/items'),
+          body: {'name': 'Test'},
+        );
+
+        verify(
+          () => mockClient.request(
+            'POST',
+            Uri.parse('https://api.example.com/items'),
+            headers: {'content-type': 'application/json'},
+            body: '{"name":"Test"}',
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+
+      test('forwards PUT request', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await transport.request<void>(
+          'PUT',
+          Uri.parse('https://api.example.com/items/1'),
+          body: {'name': 'Updated'},
+        );
+
+        verify(
+          () => mockClient.request(
+            'PUT',
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+
+      test('forwards DELETE request', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => emptyResponse(204));
+
+        await transport.request<void>(
+          'DELETE',
+          Uri.parse('https://api.example.com/items/1'),
+        );
+
+        verify(
+          () => mockClient.request(
+            'DELETE',
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+
+      test('forwards PATCH request', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await transport.request<void>(
+          'PATCH',
+          Uri.parse('https://api.example.com/items/1'),
+          body: {'name': 'Patched'},
+        );
+
+        verify(
+          () => mockClient.request(
+            'PATCH',
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+    });
+
+    group('request - headers', () {
+      test('passes custom headers to client', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await transport.request<void>(
+          'GET',
+          Uri.parse('https://api.example.com'),
+          headers: {'Authorization': 'Bearer token', 'X-Custom': 'value'},
+        );
+
+        verify(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: {'Authorization': 'Bearer token', 'X-Custom': 'value'},
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+
+      test('adds content-type header for JSON body', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await transport.request<void>(
+          'POST',
+          Uri.parse('https://api.example.com'),
+          body: {'key': 'value'},
+        );
+
+        verify(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: {'content-type': 'application/json'},
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+
+      test('does not override existing content-type header', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await transport.request<void>(
+          'POST',
+          Uri.parse('https://api.example.com'),
+          headers: {'content-type': 'application/x-custom'},
+          body: {'key': 'value'},
+        );
+
+        verify(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: {'content-type': 'application/x-custom'},
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).called(1);
+      });
+    });
+
+    group('request - timeout', () {
+      test('uses default timeout when not specified', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await transport.request<void>(
+          'GET',
+          Uri.parse('https://api.example.com'),
+        );
+
+        verify(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: defaultHttpTimeout,
+          ),
+        ).called(1);
+      });
+
+      test('uses per-request timeout when specified', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {}));
+
+        await transport.request<void>(
+          'GET',
+          Uri.parse('https://api.example.com'),
+          timeout: const Duration(seconds: 5),
+        );
+
+        verify(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: const Duration(seconds: 5),
+          ),
+        ).called(1);
+      });
+    });
+
+    group('request - exception mapping', () {
+      test(
+        'throws AuthException for 401 response with server message',
+        () async {
+          when(
+            () => mockClient.request(
+              any(),
+              any(),
+              headers: any(named: 'headers'),
+              body: any(named: 'body'),
+              timeout: any(named: 'timeout'),
+            ),
+          ).thenAnswer(
+            (_) async => jsonResponse(401, body: {'message': 'Unauthorized'}),
+          );
+
+          await expectLater(
+            transport.request<void>(
+              'GET',
+              Uri.parse('https://api.example.com'),
+            ),
+            throwsA(
+              isA<AuthException>()
+                  .having((e) => e.statusCode, 'statusCode', 401)
+                  .having((e) => e.message, 'message', 'Unauthorized')
+                  .having(
+                    (e) => e.serverMessage,
+                    'serverMessage',
+                    'Unauthorized',
+                  ),
+            ),
+          );
+        },
+      );
+
+      test('throws AuthException for 401 without server message', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => HttpResponse(statusCode: 401, bodyBytes: Uint8List(0)),
+        );
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(
+            isA<AuthException>()
+                .having((e) => e.statusCode, 'statusCode', 401)
+                .having((e) => e.message, 'message', 'HTTP 401')
+                .having((e) => e.serverMessage, 'serverMessage', isNull),
+          ),
+        );
+      });
+
+      test('throws AuthException for 403 response', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => jsonResponse(403, body: {'error': 'Forbidden'}),
+        );
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(
+            isA<AuthException>()
+                .having((e) => e.statusCode, 'statusCode', 403)
+                .having((e) => e.message, 'message', 'Forbidden')
+                .having((e) => e.serverMessage, 'serverMessage', 'Forbidden'),
+          ),
+        );
+      });
+
+      test(
+        'throws NotFoundException for 404 response with server message',
+        () async {
+          when(
+            () => mockClient.request(
+              any(),
+              any(),
+              headers: any(named: 'headers'),
+              body: any(named: 'body'),
+              timeout: any(named: 'timeout'),
+            ),
+          ).thenAnswer(
+            (_) async =>
+                jsonResponse(404, body: {'detail': 'Resource not found'}),
+          );
+
+          await expectLater(
+            transport.request<void>(
+              'GET',
+              Uri.parse('https://api.example.com/items/999'),
+            ),
+            throwsA(
+              isA<NotFoundException>()
+                  .having((e) => e.resource, 'resource', '/items/999')
+                  .having((e) => e.message, 'message', 'Resource not found')
+                  .having(
+                    (e) => e.serverMessage,
+                    'serverMessage',
+                    'Resource not found',
+                  ),
+            ),
+          );
+        },
+      );
+
+      test(
+        'throws ApiException for 400 Bad Request with server message',
+        () async {
+          when(
+            () => mockClient.request(
+              any(),
+              any(),
+              headers: any(named: 'headers'),
+              body: any(named: 'body'),
+              timeout: any(named: 'timeout'),
+            ),
+          ).thenAnswer(
+            (_) async => jsonResponse(400, body: {'message': 'Invalid input'}),
+          );
+
+          await expectLater(
+            transport.request<void>(
+              'POST',
+              Uri.parse('https://api.example.com'),
+            ),
+            throwsA(
+              isA<ApiException>()
+                  .having((e) => e.statusCode, 'statusCode', 400)
+                  .having((e) => e.message, 'message', 'Invalid input')
+                  .having(
+                    (e) => e.serverMessage,
+                    'serverMessage',
+                    'Invalid input',
+                  ),
+            ),
+          );
+        },
+      );
+
+      test('throws ApiException for 500 Internal Server Error', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => jsonResponse(500, body: {'message': 'Server error'}),
+        );
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(
+            isA<ApiException>()
+                .having((e) => e.statusCode, 'statusCode', 500)
+                .having((e) => e.message, 'message', 'Server error')
+                .having(
+                  (e) => e.serverMessage,
+                  'serverMessage',
+                  'Server error',
+                ),
+          ),
+        );
+      });
+
+      test('throws ApiException for 502 Bad Gateway', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => textResponse(502, 'Bad Gateway'));
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(
+            isA<ApiException>().having((e) => e.statusCode, 'statusCode', 502),
+          ),
+        );
+      });
+
+      test('uses HTTP status as message when no JSON error message', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => emptyResponse(500));
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(
+            isA<ApiException>()
+                .having((e) => e.message, 'message', 'HTTP 500')
+                .having((e) => e.serverMessage, 'serverMessage', isNull),
+          ),
+        );
+      });
+
+      test('passes through NetworkException from client', () async {
+        const networkError = NetworkException(message: 'Connection refused');
+
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenThrow(networkError);
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(equals(networkError)),
+        );
+      });
+
+      test('passes through timeout NetworkException from client', () async {
+        const timeoutError = NetworkException(
+          message: 'Request timed out',
+          isTimeout: true,
+        );
+
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenThrow(timeoutError);
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(
+            isA<NetworkException>().having(
+              (e) => e.isTimeout,
+              'isTimeout',
+              true,
+            ),
+          ),
+        );
+      });
+    });
+
+    group('request - CancelToken', () {
+      test(
+        'throws CancelledException when token is already cancelled',
+        () async {
+          final token = CancelToken()..cancel('Pre-cancelled');
+
+          await expectLater(
+            transport.request<void>(
+              'GET',
+              Uri.parse('https://api.example.com'),
+              cancelToken: token,
+            ),
+            throwsA(
+              isA<CancelledException>().having(
+                (e) => e.reason,
+                'reason',
+                'Pre-cancelled',
+              ),
+            ),
+          );
+
+          // Client should not be called
+          verifyNever(
+            () => mockClient.request(
+              any(),
+              any(),
+              headers: any(named: 'headers'),
+              body: any(named: 'body'),
+              timeout: any(named: 'timeout'),
+            ),
+          );
+        },
+      );
+
+      test(
+        'throws CancelledException when token cancelled during request',
+        () async {
+          final token = CancelToken();
+          final completer = Completer<HttpResponse>();
+
+          when(
+            () => mockClient.request(
+              any(),
+              any(),
+              headers: any(named: 'headers'),
+              body: any(named: 'body'),
+              timeout: any(named: 'timeout'),
+            ),
+          ).thenAnswer((_) async {
+            // Cancel after request starts
+            token.cancel('Cancelled mid-flight');
+            return completer.future;
+          });
+
+          // Complete the request (but token is already cancelled)
+          completer.complete(jsonResponse(200, body: {}));
+
+          await expectLater(
+            transport.request<void>(
+              'GET',
+              Uri.parse('https://api.example.com'),
+              cancelToken: token,
+            ),
+            throwsA(
+              isA<CancelledException>().having(
+                (e) => e.reason,
+                'reason',
+                'Cancelled mid-flight',
+              ),
+            ),
+          );
+        },
+      );
+
+      test('succeeds when token is not cancelled', () async {
+        final token = CancelToken();
+
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => jsonResponse(200, body: {'result': 'ok'}));
+
+        final result = await transport.request<Map<String, dynamic>>(
+          'GET',
+          Uri.parse('https://api.example.com'),
+          cancelToken: token,
+        );
+
+        expect(result['result'], equals('ok'));
+      });
+    });
+
+    group('requestStream', () {
+      test('returns StreamedHttpResponse for 200', () async {
+        final controller = StreamController<List<int>>();
+
+        when(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              StreamedHttpResponse(statusCode: 200, body: controller.stream),
+        );
+
+        final response = await transport.requestStream(
+          'GET',
+          Uri.parse('https://api.example.com/stream'),
+        );
+
+        expect(response.statusCode, equals(200));
+
+        final chunks = <List<int>>[];
+        final completer = Completer<void>();
+
+        response.body.listen(chunks.add, onDone: completer.complete);
+
+        controller
+          ..add([1, 2, 3])
+          ..add([4, 5, 6]);
+        await controller.close();
+
+        await completer.future;
+
+        expect(
+          chunks,
+          equals([
+            [1, 2, 3],
+            [4, 5, 6],
+          ]),
+        );
+      });
+
+      test('forwards headers and JSON body to client', () async {
+        final controller = StreamController<List<int>>.broadcast();
+
+        when(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              StreamedHttpResponse(statusCode: 200, body: controller.stream),
+        );
+
+        final response = await transport.requestStream(
+          'POST',
+          Uri.parse('https://api.example.com/stream'),
+          headers: {'Authorization': 'Bearer token'},
+          body: {'prompt': 'Hello'},
+        );
+
+        expect(response.statusCode, equals(200));
+
+        verify(
+          () => mockClient.requestStream(
+            'POST',
+            Uri.parse('https://api.example.com/stream'),
+            headers: {
+              'Authorization': 'Bearer token',
+              'content-type': 'application/json',
+            },
+            body: '{"prompt":"Hello"}',
+          ),
+        ).called(1);
+
+        unawaited(controller.close());
+      });
+
+      test('throws AuthException for 401 status', () async {
+        when(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer(
+          (_) async => const StreamedHttpResponse(
+            statusCode: 401,
+            body: Stream.empty(),
+            reasonPhrase: 'Unauthorized',
+          ),
+        );
+
+        await expectLater(
+          transport.requestStream(
+            'GET',
+            Uri.parse('https://api.example.com/stream'),
+          ),
+          throwsA(
+            isA<AuthException>().having((e) => e.statusCode, 'statusCode', 401),
+          ),
+        );
+      });
+
+      test('throws ApiException for 500 status', () async {
+        when(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer(
+          (_) async => const StreamedHttpResponse(
+            statusCode: 500,
+            body: Stream.empty(),
+            reasonPhrase: 'Internal Server Error',
+          ),
+        );
+
+        await expectLater(
+          transport.requestStream(
+            'GET',
+            Uri.parse('https://api.example.com/stream'),
+          ),
+          throwsA(
+            isA<ApiException>().having((e) => e.statusCode, 'statusCode', 500),
+          ),
+        );
+      });
+
+      test('throws NotFoundException for 404 status', () async {
+        when(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer(
+          (_) async => const StreamedHttpResponse(
+            statusCode: 404,
+            body: Stream.empty(),
+            reasonPhrase: 'Not Found',
+          ),
+        );
+
+        await expectLater(
+          transport.requestStream(
+            'GET',
+            Uri.parse('https://api.example.com/items/999'),
+          ),
+          throwsA(
+            isA<NotFoundException>().having(
+              (e) => e.resource,
+              'resource',
+              '/items/999',
+            ),
+          ),
+        );
+      });
+
+      test('throws CancelledException when token already cancelled', () async {
+        final token = CancelToken()..cancel('Pre-cancelled');
+
+        await expectLater(
+          transport.requestStream(
+            'GET',
+            Uri.parse('https://api.example.com/stream'),
+            cancelToken: token,
+          ),
+          throwsA(isA<CancelledException>()),
+        );
+      });
+
+      test('cancels stream when token is cancelled', () async {
+        final token = CancelToken();
+        final controller = StreamController<List<int>>();
+
+        when(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              StreamedHttpResponse(statusCode: 200, body: controller.stream),
+        );
+
+        final response = await transport.requestStream(
+          'GET',
+          Uri.parse('https://api.example.com/stream'),
+          cancelToken: token,
+        );
+
+        final errors = <Object>[];
+        final completer = Completer<void>();
+
+        response.body.listen(
+          (_) {},
+          onError: (Object e) {
+            errors.add(e);
+            completer.complete();
+          },
+          onDone: () {
+            if (!completer.isCompleted) completer.complete();
+          },
+        );
+
+        // Send some data
+        controller.add([1, 2, 3]);
+        await Future<void>.delayed(Duration.zero);
+
+        // Cancel the token
+        token.cancel('User cancelled');
+
+        await completer.future;
+
+        expect(errors, hasLength(1));
+        expect(errors.first, isA<CancelledException>());
+        expect(
+          (errors.first as CancelledException).reason,
+          equals('User cancelled'),
+        );
+
+        await controller.close();
+      });
+
+      test('stream completes normally when not cancelled', () async {
+        final token = CancelToken();
+        final controller = StreamController<List<int>>();
+
+        when(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              StreamedHttpResponse(statusCode: 200, body: controller.stream),
+        );
+
+        final response = await transport.requestStream(
+          'GET',
+          Uri.parse('https://api.example.com/stream'),
+          cancelToken: token,
+        );
+
+        final chunks = <List<int>>[];
+        final completer = Completer<void>();
+
+        response.body.listen(chunks.add, onDone: completer.complete);
+
+        controller
+          ..add([1, 2, 3])
+          ..add([4, 5]);
+        await controller.close();
+
+        await completer.future;
+
+        expect(
+          chunks,
+          equals([
+            [1, 2, 3],
+            [4, 5],
+          ]),
+        );
+      });
+
+      test('works without cancel token', () async {
+        final controller = StreamController<List<int>>();
+
+        when(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              StreamedHttpResponse(statusCode: 200, body: controller.stream),
+        );
+
+        final response = await transport.requestStream(
+          'GET',
+          Uri.parse('https://api.example.com/stream'),
+        );
+
+        final chunks = <List<int>>[];
+        final completer = Completer<void>();
+
+        response.body.listen(chunks.add, onDone: completer.complete);
+
+        controller.add([1, 2, 3]);
+        await controller.close();
+
+        await completer.future;
+
+        expect(chunks, hasLength(1));
+      });
+
+      test('supports pause and resume with cancel token', () async {
+        final controller = StreamController<List<int>>();
+
+        when(
+          () => mockClient.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              StreamedHttpResponse(statusCode: 200, body: controller.stream),
+        );
+
+        final token = CancelToken();
+        final response = await transport.requestStream(
+          'GET',
+          Uri.parse('https://api.example.com/stream'),
+          cancelToken: token,
+        );
+
+        final chunks = <List<int>>[];
+        final subscription = response.body.listen(chunks.add);
+
+        // Add first chunk
+        controller.add([1, 2, 3]);
+        await Future<void>.delayed(Duration.zero);
+        expect(chunks, hasLength(1));
+
+        // Pause the subscription
+        subscription.pause();
+        await Future<void>.delayed(Duration.zero);
+
+        // Add chunk while paused (will be buffered)
+        controller.add([4, 5, 6]);
+        await Future<void>.delayed(Duration.zero);
+
+        // Resume the subscription
+        subscription.resume();
+        await Future<void>.delayed(Duration.zero);
+
+        // Buffered chunk should now be received
+        expect(chunks, hasLength(2));
+
+        await subscription.cancel();
+        await controller.close();
+      });
+    });
+
+    group('close', () {
+      test('delegates to client', () {
+        transport.close();
+
+        verify(() => mockClient.close()).called(1);
+      });
+    });
+
+    group('error message extraction', () {
+      test('extracts message field from JSON error', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              jsonResponse(400, body: {'message': 'Custom error message'}),
+        );
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.message,
+              'message',
+              'Custom error message',
+            ),
+          ),
+        );
+      });
+
+      test('extracts error field from JSON error', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => jsonResponse(400, body: {'error': 'Error field value'}),
+        );
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.message,
+              'message',
+              'Error field value',
+            ),
+          ),
+        );
+      });
+
+      test('extracts detail field from JSON error', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              jsonResponse(400, body: {'detail': 'Detail field value'}),
+        );
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.message,
+              'message',
+              'Detail field value',
+            ),
+          ),
+        );
+      });
+
+      test('prefers message over error over detail', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => jsonResponse(
+            400,
+            body: {
+              'message': 'Message field',
+              'error': 'Error field',
+              'detail': 'Detail field',
+            },
+          ),
+        );
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.message,
+              'message',
+              'Message field',
+            ),
+          ),
+        );
+      });
+
+      test('includes body in ApiException', () async {
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              jsonResponse(400, body: {'message': 'Error', 'code': 123}),
+        );
+
+        await expectLater(
+          transport.request<void>('GET', Uri.parse('https://api.example.com')),
+          throwsA(
+            isA<ApiException>().having(
+              (e) => e.body,
+              'body',
+              contains('"code":123'),
+            ),
+          ),
+        );
+      });
+    });
+  });
+}
