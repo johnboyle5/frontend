@@ -50,14 +50,14 @@ usage.
 
 ## Log Levels
 
-| Level   | Value | Usage                        |
-|---------|-------|------------------------------|
-| trace   | 0     | Very detailed debugging      |
-| debug   | 100   | Development debugging        |
-| info    | 200   | Normal operations            |
-| warning | 300   | Recoverable issues           |
+| Level   | Value | Usage                          |
+|---------|-------|--------------------------------|
+| trace   | 0     | Very detailed debugging        |
+| debug   | 100   | Development debugging          |
+| info    | 200   | Normal operations              |
+| warning | 300   | Recoverable issues             |
 | error   | 400   | Errors affecting functionality |
-| fatal   | 500   | Unrecoverable errors         |
+| fatal   | 500   | Unrecoverable errors           |
 
 ## API Reference
 

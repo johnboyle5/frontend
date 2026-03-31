@@ -43,24 +43,24 @@ cd /path/to/soliplex   # on pgsql+m7-room-configs branch
 
 ### `test/integration/l2_agent_api_integration_test.dart`
 
-| Room | Purpose |
-|------|---------|
-| `echo` | Basic agent spawn, concurrent runs, cancellation |
+| Room           | Purpose                                          |
+|----------------|--------------------------------------------------|
+| `echo`         | Basic agent spawn, concurrent runs, cancellation |
 
 ### `test/run/m7_room_integration_test.dart`
 
-| Room | Purpose |
-|------|---------|
-| `echo` | L0/L1 basic run, streaming, cancellation |
-| `parallel` | Parallel tool execution |
-| `writer` | Multi-agent pipeline (write stage) |
-| `reviewer` | Multi-agent pipeline (review stage) |
-| `fixer` | Multi-agent pipeline (fix stage) |
-| `classifier` | L2+ classification tasks |
-| `planner` | L2+ planning tasks |
-| `judge` | L2+ evaluation/judgment |
-| `advocate` | L2+++ debate (advocate role) |
-| `critic` | L2+++ debate (critic role) |
+| Room           | Purpose                                          |
+|----------------|--------------------------------------------------|
+| `echo`         | L0/L1 basic run, streaming, cancellation         |
+| `parallel`     | Parallel tool execution                          |
+| `writer`       | Multi-agent pipeline (write stage)               |
+| `reviewer`     | Multi-agent pipeline (review stage)              |
+| `fixer`        | Multi-agent pipeline (fix stage)                 |
+| `classifier`   | L2+ classification tasks                         |
+| `planner`      | L2+ planning tasks                               |
+| `judge`        | L2+ evaluation/judgment                          |
+| `advocate`     | L2+++ debate (advocate role)                     |
+| `critic`       | L2+++ debate (critic role)                       |
 
 ## Running
 

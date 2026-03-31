@@ -79,6 +79,8 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lcov
+          lcov --remove coverage/lcov.info 'packages/*' \
+            -o coverage/lcov.info --ignore-errors unused
           COVERAGE=$(lcov --summary coverage/lcov.info 2>&1 \
             | grep "lines" | sed 's/.*: \([0-9.]*\)%.*/\1/')
           echo "Coverage: ${COVERAGE}%"
