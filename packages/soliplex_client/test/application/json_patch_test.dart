@@ -271,8 +271,8 @@ void main() {
 
         final result = applyJsonPatch(state, operations);
 
-        final haikuRagChat = result['rag'] as Map<String, dynamic>;
-        final qaHistory = haikuRagChat['qa_history'] as List<dynamic>;
+        final ragState = result['rag'] as Map<String, dynamic>;
+        final qaHistory = ragState['qa_history'] as List<dynamic>;
         expect(qaHistory, hasLength(1));
         expect((qaHistory[0] as Map<String, dynamic>)['question'], 'Q1');
       });

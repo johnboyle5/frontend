@@ -47,6 +47,7 @@ void main() {
         api: api,
         roomId: 'room-1',
         chunkId: 'c1',
+        useDialogLayout: false,
         documentTitle: 'Test Doc',
         pageNumbers: const [1],
       ),
@@ -73,6 +74,7 @@ void main() {
         api: api,
         roomId: 'room-1',
         chunkId: 'c1',
+        useDialogLayout: false,
         documentTitle: 'My Document',
         pageNumbers: const [3, 4],
       ),
@@ -93,6 +95,7 @@ void main() {
         api: api,
         roomId: 'room-1',
         chunkId: 'c1',
+        useDialogLayout: false,
         documentTitle: 'Test Doc',
         pageNumbers: const [],
       ),
@@ -131,6 +134,7 @@ void main() {
         api: api,
         roomId: 'room-1',
         chunkId: 'c1',
+        useDialogLayout: false,
         documentTitle: 'Doc',
         pageNumbers: const [1],
       ),
@@ -138,6 +142,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CircleAvatar), findsNothing);
+  });
+
+  testWidgets('dialog layout shows title bar with close button',
+      (tester) async {
+    final api = _ChunkVizApi()
+      ..nextVisualization = ChunkVisualization(
+        chunkId: 'c1',
+        documentUri: 'doc.pdf',
+        imagesBase64: [_pngBase64],
+      );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ChunkVisualizationPage(
+          api: api,
+          roomId: 'room-1',
+          chunkId: 'c1',
+          useDialogLayout: true,
+          documentTitle: 'My Report',
+          pageNumbers: const [1],
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.text('My Report'), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
   });
 
   testWidgets('tapping rotate button rotates the image', (tester) async {
@@ -153,6 +185,7 @@ void main() {
         api: api,
         roomId: 'room-1',
         chunkId: 'c1',
+        useDialogLayout: false,
         documentTitle: 'Doc',
         pageNumbers: const [1],
       ),

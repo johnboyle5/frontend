@@ -12,6 +12,7 @@ class ChunkVisualizationPage extends StatefulWidget {
     required this.chunkId,
     required this.documentTitle,
     required this.pageNumbers,
+    required this.useDialogLayout,
   });
 
   final SoliplexApi api;
@@ -19,6 +20,7 @@ class ChunkVisualizationPage extends StatefulWidget {
   final String chunkId;
   final String documentTitle;
   final List<int> pageNumbers;
+  final bool useDialogLayout;
 
   static Future<void> show({
     required BuildContext context,
@@ -28,15 +30,17 @@ class ChunkVisualizationPage extends StatefulWidget {
     required String documentTitle,
     required List<int> pageNumbers,
   }) {
+    final useDialog = MediaQuery.sizeOf(context).width >= 600;
     final child = ChunkVisualizationPage(
       api: api,
       roomId: roomId,
       chunkId: chunkId,
       documentTitle: documentTitle,
       pageNumbers: pageNumbers,
+      useDialogLayout: useDialog,
     );
 
-    if (MediaQuery.sizeOf(context).width >= 600) {
+    if (useDialog) {
       return showDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -114,7 +118,7 @@ class _ChunkVisualizationPageState extends State<ChunkVisualizationPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (MediaQuery.sizeOf(context).width >= 600) {
+    if (widget.useDialogLayout) {
       return Dialog(
         insetPadding: const EdgeInsets.all(16),
         child: ConstrainedBox(
