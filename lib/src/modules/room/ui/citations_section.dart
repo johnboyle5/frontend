@@ -39,10 +39,13 @@ class _CitationsSectionState extends State<CitationsSection> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.format_quote,
-                  size: 16,
-                  color: theme.colorScheme.onSurfaceVariant,
+                Transform.flip(
+                  flipX: true,
+                  child: Icon(
+                    Icons.format_quote,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 Text(
