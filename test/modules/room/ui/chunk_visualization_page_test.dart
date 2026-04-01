@@ -1,0 +1,173 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:soliplex_agent/soliplex_agent.dart' hide State;
+
+import 'package:soliplex_frontend/src/modules/room/ui/chunk_visualization_page.dart';
+
+import '../../../helpers/fakes.dart';
+
+// 1x1 red PNG pixel (minimal valid PNG).
+final _pngBytes = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4'
+  '2mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==',
+);
+final _pngBase64 = base64Encode(_pngBytes);
+
+class _ChunkVizApi extends FakeSoliplexApi {
+  ChunkVisualization? nextVisualization;
+  Exception? nextVizError;
+
+  @override
+  Future<ChunkVisualization> getChunkVisualization(
+    String roomId,
+    String chunkId, {
+    CancelToken? cancelToken,
+  }) async {
+    if (nextVizError != null) throw nextVizError!;
+    if (nextVisualization != null) return nextVisualization!;
+    throw StateError('Set nextVisualization or nextVizError before calling');
+  }
+}
+
+Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+
+void main() {
+  testWidgets('shows loading indicator while fetching', (tester) async {
+    final api = _ChunkVizApi()
+      ..nextVisualization = ChunkVisualization(
+        chunkId: 'c1',
+        documentUri: 'doc.pdf',
+        imagesBase64: [_pngBase64],
+      );
+
+    await tester.pumpWidget(_wrap(
+      ChunkVisualizationPage(
+        api: api,
+        roomId: 'room-1',
+        chunkId: 'c1',
+        documentTitle: 'Test Doc',
+        pageNumbers: const [1],
+      ),
+    ));
+
+    // Before future completes, loading spinner is shown
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('shows images after successful load', (tester) async {
+    final api = _ChunkVizApi()
+      ..nextVisualization = ChunkVisualization(
+        chunkId: 'c1',
+        documentUri: 'doc.pdf',
+        imagesBase64: [_pngBase64, _pngBase64],
+      );
+
+    await tester.pumpWidget(_wrap(
+      ChunkVisualizationPage(
+        api: api,
+        roomId: 'room-1',
+        chunkId: 'c1',
+        documentTitle: 'My Document',
+        pageNumbers: const [3, 4],
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('My Document'), findsOneWidget);
+    expect(find.text('Page 3'), findsOneWidget);
+    // Two page indicator dots
+    expect(find.byType(CircleAvatar), findsNWidgets(2));
+  });
+
+  testWidgets('shows error with retry on failure', (tester) async {
+    final api = _ChunkVizApi()..nextVizError = Exception('Network error');
+
+    await tester.pumpWidget(_wrap(
+      ChunkVisualizationPage(
+        api: api,
+        roomId: 'room-1',
+        chunkId: 'c1',
+        documentTitle: 'Test Doc',
+        pageNumbers: const [],
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Failed to load visualization'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+
+    // Set success for retry
+    api
+      ..nextVizError = null
+      ..nextVisualization = ChunkVisualization(
+        chunkId: 'c1',
+        documentUri: 'doc.pdf',
+        imagesBase64: [_pngBase64],
+      );
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Failed to load visualization'), findsNothing);
+    expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('no page indicators for single image', (tester) async {
+    final api = _ChunkVizApi()
+      ..nextVisualization = ChunkVisualization(
+        chunkId: 'c1',
+        documentUri: 'doc.pdf',
+        imagesBase64: [_pngBase64],
+      );
+
+    await tester.pumpWidget(_wrap(
+      ChunkVisualizationPage(
+        api: api,
+        roomId: 'room-1',
+        chunkId: 'c1',
+        documentTitle: 'Doc',
+        pageNumbers: const [1],
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircleAvatar), findsNothing);
+  });
+
+  testWidgets('tapping rotate button rotates the image', (tester) async {
+    final api = _ChunkVizApi()
+      ..nextVisualization = ChunkVisualization(
+        chunkId: 'c1',
+        documentUri: 'doc.pdf',
+        imagesBase64: [_pngBase64],
+      );
+
+    await tester.pumpWidget(_wrap(
+      ChunkVisualizationPage(
+        api: api,
+        roomId: 'room-1',
+        chunkId: 'c1',
+        documentTitle: 'Doc',
+        pageNumbers: const [1],
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Initial rotation is 0
+    final rotatedBox = tester.widget<RotatedBox>(find.byType(RotatedBox));
+    expect(rotatedBox.quarterTurns, 0);
+
+    // Tap rotate button
+    await tester.tap(find.byTooltip('Rotate'));
+    await tester.pump();
+
+    final rotated = tester.widget<RotatedBox>(find.byType(RotatedBox));
+    expect(rotated.quarterTurns, 1);
+  });
+}

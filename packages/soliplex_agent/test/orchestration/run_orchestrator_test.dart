@@ -1241,7 +1241,7 @@ void main() {
           const TextMessageContentEvent(messageId: 'msg-1', delta: 'Answer'),
           const StateSnapshotEvent(
             snapshot: {
-              'haiku.rag.chat': {
+              'rag': {
                 'qa_history': [
                   {
                     'question': 'Q1',
@@ -1314,7 +1314,7 @@ void main() {
         const RunStartedEvent(threadId: 'thread-1', runId: _runId),
         const StateSnapshotEvent(
           snapshot: {
-            'haiku.rag.chat': {
+            'rag': {
               'qa_history': [
                 {
                   'question': 'Q1',
@@ -1382,7 +1382,7 @@ void main() {
             const RunStartedEvent(threadId: 'thread-1', runId: _runId),
             const StateSnapshotEvent(
               snapshot: {
-                'haiku.rag.chat': {
+                'rag': {
                   'qa_history': [
                     {
                       'question': 'Q1',
@@ -1419,7 +1419,7 @@ void main() {
           const TextMessageContentEvent(messageId: 'msg-2', delta: 'Done'),
           const StateSnapshotEvent(
             snapshot: {
-              'haiku.rag.chat': {
+              'rag': {
                 'qa_history': [
                   {
                     'question': 'Q1',

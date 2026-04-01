@@ -6,6 +6,7 @@ import '../compute_display_messages.dart';
 import '../execution_tracker.dart';
 import '../tracker_registry.dart' show awaitingTrackerKey;
 import '../run_id_resolver.dart';
+import '../source_references_resolver.dart';
 import 'message_tile.dart';
 import 'room_welcome.dart';
 import 'scroll/anchored_scroll_controller.dart';
@@ -22,6 +23,7 @@ class MessageTimeline extends StatefulWidget {
     this.onSuggestionTapped,
     this.onFeedbackSubmit,
     this.onInspect,
+    this.onShowChunkVisualization,
   });
 
   final List<ChatMessage> messages;
@@ -33,6 +35,7 @@ class MessageTimeline extends StatefulWidget {
   final void Function(String runId, FeedbackType feedback, String? reason)?
       onFeedbackSubmit;
   final void Function(String runId)? onInspect;
+  final void Function(SourceReference)? onShowChunkVisualization;
 
   @override
   State<MessageTimeline> createState() => _MessageTimelineState();
@@ -163,6 +166,8 @@ class _MessageTimelineState extends State<MessageTimeline> {
     }
 
     final runIdMap = buildRunIdMap(widget.messages, widget.messageStates);
+    final sourceReferencesMap =
+        buildSourceReferencesMap(widget.messages, widget.messageStates);
     final streamingActivity = widget.streamingState != null
         ? switch (widget.streamingState!) {
             AwaitingText(:final currentActivity) => currentActivity,
@@ -194,8 +199,10 @@ class _MessageTimelineState extends State<MessageTimeline> {
                                   message.user == ChatUser.user
                               ? widget.messageStates[message.id]?.runId
                               : null),
+                      sourceReferences: sourceReferencesMap[message.id],
                       onFeedbackSubmit: widget.onFeedbackSubmit,
                       onInspect: widget.onInspect,
+                      onShowChunkVisualization: widget.onShowChunkVisualization,
                       executionTracker: widget.executionTrackers[message.id] ??
                           (message is LoadingMessage
                               ? widget.executionTrackers[awaitingTrackerKey]
