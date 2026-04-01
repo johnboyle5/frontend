@@ -28,15 +28,24 @@ class ChunkVisualizationPage extends StatefulWidget {
     required String documentTitle,
     required List<int> pageNumbers,
   }) {
-    return showDialog<void>(
-      context: context,
-      builder: (_) => ChunkVisualizationPage(
-        api: api,
-        roomId: roomId,
-        chunkId: chunkId,
-        documentTitle: documentTitle,
-        pageNumbers: pageNumbers,
-      ),
+    final child = ChunkVisualizationPage(
+      api: api,
+      roomId: roomId,
+      chunkId: chunkId,
+      documentTitle: documentTitle,
+      pageNumbers: pageNumbers,
+    );
+
+    if (MediaQuery.sizeOf(context).width >= 600) {
+      return showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => child,
+      );
+    }
+
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => child),
     );
   }
 
@@ -88,36 +97,48 @@ class _ChunkVisualizationPageState extends State<ChunkVisualizationPage> {
     return 'Image ${index + 1} of $total';
   }
 
+  Widget _buildContent(BuildContext context) {
+    return FutureBuilder<List<Uint8List>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return _buildError(context, snapshot.error!);
+        }
+        return _buildImages(context, snapshot.data ?? const []);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.all(16),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 800,
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
+    if (MediaQuery.sizeOf(context).width >= 600) {
+      return Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 800,
+            maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildTitleBar(context),
+              Expanded(child: _buildContent(context)),
+            ],
+          ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildTitleBar(context),
-            Expanded(
-              child: FutureBuilder<List<Uint8List>>(
-                future: _future,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    return _buildError(context, snapshot.error!);
-                  }
-                  return _buildImages(context, snapshot.data ?? const []);
-                },
-              ),
-            ),
-          ],
-        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.documentTitle),
+        titleTextStyle: Theme.of(context).textTheme.titleMedium,
       ),
+      body: _buildContent(context),
     );
   }
 
