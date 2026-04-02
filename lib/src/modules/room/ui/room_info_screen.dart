@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 import 'package:soliplex_client/soliplex_client.dart' hide Room, State;
 
+import '../../../shared/copy_button.dart';
 import '../../../shared/file_type_icons.dart';
 import '../../auth/server_entry.dart';
 
@@ -125,47 +126,50 @@ class _RoomInfoBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      children: [
-        if (room.hasDescription)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Text(
-              room.description,
-              style: Theme.of(context).textTheme.bodyLarge,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (room.hasDescription)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(
+                room.description,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
             ),
+          _AgentCard(agent: room.agent),
+          _FeaturesCard(room: room, api: api, roomId: roomId),
+          _ExpandableListCard<MapEntry<String, RoomSkill>>(
+            key: const ValueKey('skills'),
+            title: 'SKILLS',
+            items: room.skills.entries.toList(),
+            nameOf: (e) => e.key,
+            contentOf: (e) => _buildSkillContent(e.value),
           ),
-        _AgentCard(agent: room.agent),
-        _FeaturesCard(room: room, api: api, roomId: roomId),
-        _ExpandableListCard<MapEntry<String, RoomSkill>>(
-          key: const ValueKey('skills'),
-          title: 'SKILLS',
-          items: room.skills.entries.toList(),
-          nameOf: (e) => e.key,
-          contentOf: (e) => _buildSkillContent(e.value),
-        ),
-        _ExpandableListCard<MapEntry<String, RoomTool>>(
-          key: const ValueKey('tools'),
-          title: 'TOOLS',
-          items: room.tools.entries.toList(),
-          nameOf: (e) => e.key,
-          contentOf: (e) => _buildToolContent(e.value),
-        ),
-        _ExpandableListCard<MapEntry<String, McpClientToolset>>(
-          key: const ValueKey('mcp-toolsets'),
-          title: 'MCP CLIENT TOOLSETS',
-          emptyLabel: 'MCP client toolsets',
-          items: room.mcpClientToolsets.entries.toList(),
-          nameOf: (e) => e.key,
-          contentOf: (e) => _buildToolsetContent(e.value),
-        ),
-        _ClientToolsCard(clientToolsFuture: clientToolsFuture),
-        _DocumentsCard(
-          documentsFuture: documentsFuture,
-          onRetry: onRetryDocuments,
-        ),
-      ],
+          _ExpandableListCard<MapEntry<String, RoomTool>>(
+            key: const ValueKey('tools'),
+            title: 'TOOLS',
+            items: room.tools.entries.toList(),
+            nameOf: (e) => e.key,
+            contentOf: (e) => _buildToolContent(e.value),
+          ),
+          _ExpandableListCard<MapEntry<String, McpClientToolset>>(
+            key: const ValueKey('mcp-toolsets'),
+            title: 'MCP CLIENT TOOLSETS',
+            emptyLabel: 'MCP client toolsets',
+            items: room.mcpClientToolsets.entries.toList(),
+            nameOf: (e) => e.key,
+            contentOf: (e) => _buildToolsetContent(e.value),
+          ),
+          _ClientToolsCard(clientToolsFuture: clientToolsFuture),
+          _DocumentsCard(
+            documentsFuture: documentsFuture,
+            onRetry: onRetryDocuments,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -346,16 +350,8 @@ class _SystemPromptViewer extends StatefulWidget {
 
 class _SystemPromptViewerState extends State<_SystemPromptViewer> {
   bool _expanded = false;
-  bool _copied = false;
-  Timer? _copyResetTimer;
 
   static const _collapsedMaxLines = 3;
-
-  @override
-  void dispose() {
-    _copyResetTimer?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -376,32 +372,10 @@ class _SystemPromptViewerState extends State<_SystemPromptViewer> {
                 ),
               ),
               const Spacer(),
-              IconButton(
-                icon: Icon(
-                  _copied ? Icons.check : Icons.copy,
-                  size: 18,
-                ),
-                onPressed: _copied
-                    ? null
-                    : () {
-                        Clipboard.setData(
-                          ClipboardData(text: widget.prompt),
-                        );
-                        setState(() => _copied = true);
-                        _copyResetTimer?.cancel();
-                        _copyResetTimer = Timer(
-                          const Duration(seconds: 2),
-                          () {
-                            if (mounted) setState(() => _copied = false);
-                          },
-                        );
-                      },
-                tooltip: 'Copy system prompt',
+              CopyButton(
                 iconSize: 18,
-                constraints: const BoxConstraints(
-                  minWidth: 32,
-                  minHeight: 32,
-                ),
+                text: widget.prompt,
+                tooltip: 'Copy system prompt',
               ),
             ],
           ),
@@ -504,9 +478,11 @@ class _McpTokenRow extends StatefulWidget {
   State<_McpTokenRow> createState() => _McpTokenRowState();
 }
 
+enum _TokenCopyState { idle, success, error }
+
 class _McpTokenRowState extends State<_McpTokenRow> {
   Future<String>? _tokenFuture;
-  bool _copied = false;
+  _TokenCopyState _copyState = _TokenCopyState.idle;
   Timer? _copyResetTimer;
 
   @override
@@ -521,12 +497,27 @@ class _McpTokenRowState extends State<_McpTokenRow> {
     super.dispose();
   }
 
-  void _copyToken(String token) {
-    Clipboard.setData(ClipboardData(text: token));
-    setState(() => _copied = true);
+  Future<void> _copyToken(String token) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: token));
+    } on PlatformException catch (e, st) {
+      debugPrint('Clipboard.setData PlatformException: $e\n$st');
+      _showCopyFeedback(_TokenCopyState.error);
+      return;
+    } on Exception catch (e, st) {
+      debugPrint('Clipboard.setData failed: $e\n$st');
+      _showCopyFeedback(_TokenCopyState.error);
+      return;
+    }
+    _showCopyFeedback(_TokenCopyState.success);
+  }
+
+  void _showCopyFeedback(_TokenCopyState value) {
+    if (!mounted) return;
+    setState(() => _copyState = value);
     _copyResetTimer?.cancel();
     _copyResetTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _copied = false);
+      if (mounted) setState(() => _copyState = _TokenCopyState.idle);
     });
   }
 
@@ -561,12 +552,19 @@ class _McpTokenRowState extends State<_McpTokenRow> {
           return const SizedBox.shrink();
         }
         final token = snapshot.data!;
+        final (icon, label) = switch (_copyState) {
+          _TokenCopyState.idle => (Icons.copy, 'Copy Token'),
+          _TokenCopyState.success => (Icons.check, 'Copied'),
+          _TokenCopyState.error => (Icons.error_outline, 'Copy failed'),
+        };
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: OutlinedButton.icon(
-            icon: Icon(_copied ? Icons.check : Icons.copy, size: 16),
-            label: Text(_copied ? 'Copied' : 'Copy Token'),
-            onPressed: _copied ? null : () => _copyToken(token),
+            icon: Icon(icon, size: 16),
+            label: Text(label),
+            onPressed: _copyState == _TokenCopyState.idle
+                ? () => _copyToken(token)
+                : null,
           ),
         );
       },

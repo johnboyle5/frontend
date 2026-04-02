@@ -210,7 +210,9 @@ void main() {
           toolRegistryResolver: (_) => completer.future,
         ),
       );
-      await tester.pumpAndSettle();
+      // Use pump() — pumpAndSettle would time out on the loading spinner.
+      await tester.pump();
+      await tester.pump();
 
       // Scroll to find the CLIENT TOOLS section while loading
       await tester.scrollUntilVisible(
