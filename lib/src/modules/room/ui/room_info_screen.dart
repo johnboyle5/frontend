@@ -431,12 +431,12 @@ class _SystemPromptViewerState extends State<_SystemPromptViewer> {
                       ),
                     ),
                   ),
-                  if (overflows)
+                  if (overflows || _expanded)
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: () => setState(() => _expanded = true),
-                        child: const Text('Show more'),
+                        onPressed: () => setState(() => _expanded = !_expanded),
+                        child: Text(_expanded ? 'Collapse' : 'Expand'),
                       ),
                     ),
                 ],
