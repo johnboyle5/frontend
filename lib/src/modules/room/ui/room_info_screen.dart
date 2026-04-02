@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -135,41 +136,31 @@ class _RoomInfoBody extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyLarge,
             ),
           ),
-        if (room.agent != null) _AgentCard(agent: room.agent!),
+        _AgentCard(agent: room.agent),
         _FeaturesCard(room: room, api: api, roomId: roomId),
-        if (room.tools.isNotEmpty)
-          _ExpandableListCard<MapEntry<String, RoomTool>>(
-            key: const ValueKey('tools'),
-            title: 'TOOLS',
-            items: room.tools.entries.toList(),
-            nameOf: (e) => e.key,
-            contentOf: (e) => _buildToolContent(e.value),
-          ),
-        if (room.mcpClientToolsets.isNotEmpty)
-          _ExpandableListCard<MapEntry<String, McpClientToolset>>(
-            key: const ValueKey('mcp-toolsets'),
-            title: 'MCP CLIENT TOOLSETS',
-            items: room.mcpClientToolsets.entries.toList(),
-            nameOf: (e) => e.key,
-            contentOf: (e) => _buildToolsetContent(e.value),
-          ),
-        FutureBuilder<List<Tool>>(
-          future: clientToolsFuture,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return const SizedBox.shrink();
-            }
-            final tools = snapshot.data!;
-            return _ExpandableListCard<Tool>(
-              key: const ValueKey('client-tools'),
-              title: 'CLIENT TOOLS',
-              items: tools,
-              nameOf: (t) => t.name,
-              contentOf: (t) =>
-                  t.description.isNotEmpty ? Text(t.description) : null,
-            );
-          },
+        _ExpandableListCard<MapEntry<String, RoomSkill>>(
+          key: const ValueKey('skills'),
+          title: 'SKILLS',
+          items: room.skills.entries.toList(),
+          nameOf: (e) => e.key,
+          contentOf: (e) => _buildSkillContent(e.value),
         ),
+        _ExpandableListCard<MapEntry<String, RoomTool>>(
+          key: const ValueKey('tools'),
+          title: 'TOOLS',
+          items: room.tools.entries.toList(),
+          nameOf: (e) => e.key,
+          contentOf: (e) => _buildToolContent(e.value),
+        ),
+        _ExpandableListCard<MapEntry<String, McpClientToolset>>(
+          key: const ValueKey('mcp-toolsets'),
+          title: 'MCP CLIENT TOOLSETS',
+          emptyLabel: 'MCP client toolsets',
+          items: room.mcpClientToolsets.entries.toList(),
+          nameOf: (e) => e.key,
+          contentOf: (e) => _buildToolsetContent(e.value),
+        ),
+        _ClientToolsCard(clientToolsFuture: clientToolsFuture),
         _DocumentsCard(
           documentsFuture: documentsFuture,
           onRetry: onRetryDocuments,
@@ -284,10 +275,17 @@ class _InfoRow extends StatelessWidget {
 
 class _AgentCard extends StatelessWidget {
   const _AgentCard({required this.agent});
-  final RoomAgent agent;
+  final RoomAgent? agent;
 
   @override
   Widget build(BuildContext context) {
+    final agent = this.agent;
+    if (agent == null) {
+      return const _SectionCard(
+        title: 'AGENT',
+        children: [_EmptyMessage(label: 'agent')],
+      );
+    }
     return _SectionCard(
       title: 'AGENT',
       children: [
@@ -305,9 +303,25 @@ class _AgentCard extends StatelessWidget {
                 _SystemPromptViewer(prompt: systemPrompt),
             ],
           FactoryRoomAgent(:final extraConfig) when extraConfig.isNotEmpty => [
-              _InfoRow(
-                label: 'Extra Config',
-                value: extraConfig.toString(),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Extra Config',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    _formatDynamicValue(
+                      extraConfig,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
               ),
             ],
           _ => <Widget>[],
@@ -415,20 +429,17 @@ class _SystemPromptViewerState extends State<_SystemPromptViewer> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GestureDetector(
-                    onTap: () => setState(() => _expanded = !_expanded),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: SelectableText(
-                        widget.prompt,
-                        maxLines: _expanded ? null : _collapsedMaxLines,
-                        style: promptStyle,
-                      ),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SelectableText(
+                      widget.prompt,
+                      maxLines: _expanded ? null : _collapsedMaxLines,
+                      style: promptStyle,
                     ),
                   ),
                   if (overflows || _expanded)
@@ -636,6 +647,7 @@ class _ExpandableListCard<T> extends StatefulWidget {
     required this.items,
     required this.nameOf,
     required this.contentOf,
+    this.emptyLabel,
     super.key,
   });
 
@@ -643,6 +655,7 @@ class _ExpandableListCard<T> extends StatefulWidget {
   final List<T> items;
   final String Function(T) nameOf;
   final Widget? Function(T) contentOf;
+  final String? emptyLabel;
 
   @override
   State<_ExpandableListCard<T>> createState() => _ExpandableListCardState<T>();
@@ -653,24 +666,290 @@ class _ExpandableListCardState<T> extends State<_ExpandableListCard<T>> {
 
   @override
   Widget build(BuildContext context) {
+    final items = widget.items;
     return _SectionCard(
-      title: '${widget.title} (${widget.items.length})',
+      title: '${widget.title} (${items.length})',
+      children: items.isEmpty
+          ? [
+              _EmptyMessage(
+                label: widget.emptyLabel ?? widget.title.toLowerCase(),
+              ),
+            ]
+          : [
+              for (final item in items)
+                () {
+                  final name = widget.nameOf(item);
+                  return _ExpandableTile(
+                    name: name,
+                    expanded: _expandedNames.contains(name),
+                    onToggle: () => setState(() {
+                      if (!_expandedNames.remove(name)) {
+                        _expandedNames.add(name);
+                      }
+                    }),
+                    content: widget.contentOf(item),
+                  );
+                }(),
+            ],
+    );
+  }
+}
+
+class _EmptyMessage extends StatelessWidget {
+  const _EmptyMessage({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      'No $label in this room.',
+      style: theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+class _ClientToolsCard extends StatelessWidget {
+  const _ClientToolsCard({required this.clientToolsFuture});
+  final Future<List<Tool>> clientToolsFuture;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Tool>>(
+      future: clientToolsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const _SectionCard(
+            title: 'CLIENT TOOLS',
+            children: [
+              Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ],
+          );
+        }
+        if (snapshot.hasError) {
+          return const _SectionCard(
+            title: 'CLIENT TOOLS',
+            children: [_EmptyMessage(label: 'client tools')],
+          );
+        }
+        final tools = snapshot.data ?? const [];
+        if (tools.isEmpty) {
+          return _SectionCard(
+            title: 'CLIENT TOOLS (${tools.length})',
+            children: const [_EmptyMessage(label: 'client tools')],
+          );
+        }
+        return _ExpandableListCard<Tool>(
+          key: const ValueKey('client-tools'),
+          title: 'CLIENT TOOLS',
+          items: tools,
+          nameOf: (t) => t.name,
+          contentOf: (t) =>
+              t.description.isNotEmpty ? Text(t.description) : null,
+        );
+      },
+    );
+  }
+}
+
+const _jsonEncoder = JsonEncoder.withIndent('  ');
+
+/// Formats a dynamic value for display, using pretty-printed JSON for
+/// complex values (maps/lists) and plain text for scalars.
+SelectableText _formatDynamicValue(Object? value, {TextStyle? style}) {
+  final isComplex = value is Map || value is Iterable;
+  String text;
+  if (isComplex) {
+    try {
+      text = _jsonEncoder.convert(value);
+    } catch (_) {
+      text = value.toString();
+    }
+  } else {
+    text = '$value';
+  }
+  return SelectableText(
+    text,
+    style: isComplex ? style?.copyWith(fontFamily: 'monospace') : style,
+  );
+}
+
+Widget _buildSkillContent(RoomSkill skill) {
+  return _SkillContentColumn(skill: skill);
+}
+
+class _SkillContentColumn extends StatelessWidget {
+  const _SkillContentColumn({required this.skill});
+  final RoomSkill skill;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final labelStyle = theme.textTheme.labelSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+      color: colorScheme.onSurfaceVariant,
+    );
+    final valueStyle = theme.textTheme.bodySmall;
+    final noneStyle = theme.textTheme.bodySmall?.copyWith(
+      fontStyle: FontStyle.italic,
+      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+    );
+
+    Widget field(String label, String? value) {
+      final isNone = value == null || value.isEmpty;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: labelStyle),
+          const SizedBox(height: 2),
+          Text(
+            isNone ? 'None' : value,
+            style: isNone ? noneStyle : valueStyle,
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final item in widget.items)
-          () {
-            final name = widget.nameOf(item);
-            return _ExpandableTile(
-              name: name,
-              expanded: _expandedNames.contains(name),
-              onToggle: () => setState(() {
-                if (!_expandedNames.remove(name)) {
-                  _expandedNames.add(name);
-                }
-              }),
-              content: widget.contentOf(item),
-            );
-          }(),
+        field('description', skill.description),
+        const SizedBox(height: 8),
+        field('source', skill.source),
+        const SizedBox(height: 8),
+        field('license', skill.license),
+        const SizedBox(height: 8),
+        field('compatibility', skill.compatibility),
+        const SizedBox(height: 8),
+        field('allowed_tools', skill.allowedTools?.join(', ')),
+        const SizedBox(height: 8),
+        field('state_namespace', skill.stateNamespace),
+        if (skill.metadata.isNotEmpty ||
+            (skill.stateTypeSchema?.isNotEmpty ?? false))
+          _DialogButton(
+            label: 'Show more',
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => _SkillDetailDialog(skill: skill),
+            ),
+          ),
       ],
+    );
+  }
+}
+
+class _SkillDetailDialog extends StatelessWidget {
+  const _SkillDetailDialog({required this.skill});
+  final RoomSkill skill;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final sectionStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    final labelStyle = theme.textTheme.labelSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+      color: colorScheme.onSurfaceVariant,
+    );
+    final valueStyle = theme.textTheme.bodySmall;
+    final noneStyle = theme.textTheme.bodySmall?.copyWith(
+      fontStyle: FontStyle.italic,
+      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+    );
+
+    Widget mapSection(String title, Map<String, dynamic>? data) {
+      final isEmpty = data == null || data.isEmpty;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: sectionStyle),
+          const SizedBox(height: 8),
+          if (isEmpty)
+            Text('Empty', style: noneStyle)
+          else
+            for (final entry in data.entries) ...[
+              SizedBox(
+                width: double.infinity,
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(entry.key, style: labelStyle),
+                        const SizedBox(height: 2),
+                        _formatDynamicValue(
+                          entry.value,
+                          style: valueStyle,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+        ],
+      );
+    }
+
+    return AlertDialog(
+      title: Text(
+        skill.name,
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              mapSection('Metadata', skill.metadata),
+              const SizedBox(height: 16),
+              mapSection('State Schema', skill.stateTypeSchema),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DialogButton extends StatelessWidget {
+  const _DialogButton({required this.label, required this.onPressed});
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton(
+        style: TextButton.styleFrom(
+          textStyle: theme.textTheme.labelSmall,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        ),
+        onPressed: onPressed,
+        child: Text(label),
+      ),
     );
   }
 }
@@ -1019,8 +1298,8 @@ class _MetadataDialog extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          SelectableText(
-                            entry.value.toString(),
+                          _formatDynamicValue(
+                            entry.value,
                             style: theme.textTheme.bodySmall,
                           ),
                         ],

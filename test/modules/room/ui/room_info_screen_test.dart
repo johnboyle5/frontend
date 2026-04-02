@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
@@ -103,6 +105,141 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.text('MCP CLIENT TOOLSETS (1)'), findsOneWidget);
+    });
+
+    testWidgets('shows skills section with skills', (tester) async {
+      final room = _testRoom.copyWith(
+        skills: {
+          'web_search': const RoomSkill(
+            name: 'Web Search',
+            description: 'Search the web',
+            source: 'filesystem',
+          ),
+        },
+      );
+      await tester.pumpWidget(_buildScreen(room: room));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('SKILLS (1)'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('SKILLS (1)'), findsOneWidget);
+    });
+
+    testWidgets('expanding skill shows detail dialog on Show more',
+        (tester) async {
+      final room = _testRoom.copyWith(
+        skills: {
+          'web_search': const RoomSkill(
+            name: 'Web Search',
+            description: 'Search the web',
+            source: 'filesystem',
+            metadata: {'author': 'test-user'},
+          ),
+        },
+      );
+      await tester.pumpWidget(_buildScreen(room: room));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('web_search'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('web_search'));
+      await tester.pumpAndSettle();
+
+      // Skill detail fields visible
+      expect(find.text('Search the web'), findsOneWidget);
+      expect(find.text('filesystem'), findsOneWidget);
+
+      // Tap "Show more" to open dialog
+      await tester.tap(find.text('Show more'));
+      await tester.pumpAndSettle();
+
+      // Dialog shows metadata
+      expect(find.text('Metadata'), findsOneWidget);
+      expect(find.text('author'), findsOneWidget);
+      expect(find.text('test-user'), findsOneWidget);
+    });
+
+    testWidgets('shows empty skills section when no skills', (tester) async {
+      await tester.pumpWidget(_buildScreen());
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('SKILLS (0)'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('SKILLS (0)'), findsOneWidget);
+    });
+
+    testWidgets('shows empty tools section when no tools', (tester) async {
+      final room = _testRoom.copyWith(tools: const {});
+      await tester.pumpWidget(_buildScreen(room: room));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('TOOLS (0)'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('TOOLS (0)'), findsOneWidget);
+    });
+
+    testWidgets('shows empty MCP toolsets section when none', (tester) async {
+      final room = _testRoom.copyWith(mcpClientToolsets: const {});
+      await tester.pumpWidget(_buildScreen(room: room));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('MCP CLIENT TOOLSETS (0)'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('MCP CLIENT TOOLSETS (0)'), findsOneWidget);
+    });
+
+    testWidgets('shows client tools loading then empty', (tester) async {
+      final completer = Completer<ToolRegistry>();
+      await tester.pumpWidget(
+        _buildScreen(
+          toolRegistryResolver: (_) => completer.future,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Scroll to find the CLIENT TOOLS section while loading
+      await tester.scrollUntilVisible(
+        find.text('CLIENT TOOLS'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('CLIENT TOOLS'), findsOneWidget);
+
+      // Complete with empty registry
+      completer.complete(const ToolRegistry());
+      await tester.pumpAndSettle();
+
+      expect(find.text('CLIENT TOOLS (0)'), findsOneWidget);
+    });
+
+    testWidgets('shows factory agent with extra config', (tester) async {
+      final room = _testRoom.copyWith(
+        agent: const FactoryRoomAgent(
+          id: 'agent-factory',
+          factoryName: 'my_module.create_agent',
+          extraConfig: {'temperature': 0.7, 'top_k': 50},
+        ),
+      );
+      await tester.pumpWidget(_buildScreen(room: room));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Extra Config'), findsOneWidget);
+      expect(find.textContaining('0.7'), findsOneWidget);
     });
 
     testWidgets('shows error on fetch failure', (tester) async {
