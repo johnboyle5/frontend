@@ -52,7 +52,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final entry = widget.serverManager.servers.value[serverId];
     assert(entry != null, 'Info tap for unknown serverId: $serverId');
     if (entry == null) return;
-    context.go('/room/${entry.alias}/$roomId/info');
+    context.push('/room/${entry.alias}/$roomId/info');
   }
 
   @override

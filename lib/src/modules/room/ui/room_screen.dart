@@ -152,12 +152,12 @@ class _RoomScreenState extends State<RoomScreen> {
   void _onNetworkInspector() => context.push('/diagnostics/network');
 
   void _onRoomInfo() {
-    context.go('/room/${widget.serverEntry.alias}/${widget.roomId}/info');
+    context.push('/room/${widget.serverEntry.alias}/${widget.roomId}/info');
   }
 
   void _onThreadSelected(String threadId) {
     context.go(
-      '/room/${widget.serverEntry.alias}/${widget.roomId}/$threadId',
+      '/room/${widget.serverEntry.alias}/${widget.roomId}/thread/$threadId',
     );
   }
 
