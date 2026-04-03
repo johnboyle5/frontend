@@ -37,7 +37,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   void _onAddServer() => context.go('/');
 
-  void _onSettings() {}
+  void _onServerTap() => context.push('/servers');
 
   void _onNetworkInspector() => context.push('/diagnostics/network');
 
@@ -68,8 +68,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 servers: servers,
                 profiles: profiles,
                 roomsByServer: roomsByServer,
+                onServerTap: _onServerTap,
                 onAddServer: _onAddServer,
-                onSettings: _onSettings,
                 onNetworkInspector: _onNetworkInspector,
                 onRoomTap: _onRoomTap,
                 onInfoTap: _onInfoTap,
@@ -78,8 +78,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 servers: servers,
                 profiles: profiles,
                 roomsByServer: roomsByServer,
+                onServerTap: _onServerTap,
                 onAddServer: _onAddServer,
-                onSettings: _onSettings,
                 onNetworkInspector: _onNetworkInspector,
                 onRoomTap: _onRoomTap,
                 onInfoTap: _onInfoTap,
@@ -94,8 +94,8 @@ class _WideLayout extends StatelessWidget {
     required this.servers,
     required this.profiles,
     required this.roomsByServer,
+    required this.onServerTap,
     required this.onAddServer,
-    required this.onSettings,
     required this.onNetworkInspector,
     required this.onRoomTap,
     required this.onInfoTap,
@@ -104,8 +104,8 @@ class _WideLayout extends StatelessWidget {
   final Map<String, ServerEntry> servers;
   final Map<String, UserProfile?> profiles;
   final Map<String, ServerRooms> roomsByServer;
+  final VoidCallback onServerTap;
   final VoidCallback onAddServer;
-  final VoidCallback onSettings;
   final VoidCallback onNetworkInspector;
   final void Function(String serverId, String roomId) onRoomTap;
   final void Function(String serverId, String roomId) onInfoTap;
@@ -120,8 +120,8 @@ class _WideLayout extends StatelessWidget {
             child: ServerSidebar(
               servers: servers,
               profiles: profiles,
+              onServerTap: onServerTap,
               onAddServer: onAddServer,
-              onSettings: onSettings,
               onNetworkInspector: onNetworkInspector,
             ),
           ),
@@ -146,8 +146,8 @@ class _NarrowLayout extends StatelessWidget {
     required this.servers,
     required this.profiles,
     required this.roomsByServer,
+    required this.onServerTap,
     required this.onAddServer,
-    required this.onSettings,
     required this.onNetworkInspector,
     required this.onRoomTap,
     required this.onInfoTap,
@@ -156,8 +156,8 @@ class _NarrowLayout extends StatelessWidget {
   final Map<String, ServerEntry> servers;
   final Map<String, UserProfile?> profiles;
   final Map<String, ServerRooms> roomsByServer;
+  final VoidCallback onServerTap;
   final VoidCallback onAddServer;
-  final VoidCallback onSettings;
   final VoidCallback onNetworkInspector;
   final void Function(String serverId, String roomId) onRoomTap;
   final void Function(String serverId, String roomId) onInfoTap;
@@ -177,8 +177,8 @@ class _NarrowLayout extends StatelessWidget {
         child: ServerSidebar(
           servers: servers,
           profiles: profiles,
+          onServerTap: onServerTap,
           onAddServer: onAddServer,
-          onSettings: onSettings,
           onNetworkInspector: onNetworkInspector,
         ),
       ),
