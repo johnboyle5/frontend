@@ -4,6 +4,7 @@ import 'package:soliplex_agent/soliplex_agent.dart';
 import 'package:soliplex_client_native/soliplex_client_native.dart';
 import 'package:soliplex_logging/soliplex_logging.dart' show LoggerFactory;
 
+import '../design/design.dart';
 import '../core/shell_config.dart';
 import '../core/signal_listenable.dart';
 import '../interfaces/auth_state.dart';
@@ -28,11 +29,13 @@ const _defaultLogoAsset = 'assets/branding/soliplex/logo_1024.png';
 const _logoSize = 64.0;
 
 ThemeData _defaultTheme() {
-  final base = ThemeData();
+  final base = soliplexLightTheme();
   final colorScheme = base.colorScheme;
   final textTheme = base.textTheme;
+
   return base.copyWith(
     extensions: [
+      ...base.extensions.values,
       MarkdownThemeExtension(
         h1: textTheme.titleLarge,
         h2: textTheme.titleMedium,

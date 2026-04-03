@@ -45,7 +45,21 @@ class _ServerListScreenState extends ConsumerState<ServerListScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Servers')),
+      appBar: AppBar(
+        title: const Text('Servers'),
+        automaticallyImplyLeading: false,
+        actions: [
+          TextButton(
+            onPressed: () => context.go('/'),
+            child: const Text('Home'),
+          ),
+          if (connected.isNotEmpty)
+            TextButton(
+              onPressed: () => context.go('/lobby'),
+              child: const Text('Lobby'),
+            ),
+        ],
+      ),
       body: ListView(
         children: [
           if (connected.isNotEmpty) ...[
@@ -103,12 +117,24 @@ class _ServerListScreenState extends ConsumerState<ServerListScreen> {
   Widget _disconnectedTile(ThemeData theme, ServerEntry entry) {
     return ListTile(
       title: Text(formatServerUrl(entry.serverUrl)),
-      trailing: IconButton(
-        icon: Icon(
-          Icons.delete_outline,
-          color: theme.colorScheme.error,
-        ),
-        onPressed: () => widget.serverManager.removeServer(entry.serverId),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton(
+            onPressed: () {
+              final url = Uri.encodeComponent(entry.serverUrl.toString());
+              context.go('/?url=$url');
+            },
+            child: const Text('Sign in'),
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.delete_outline,
+              color: theme.colorScheme.error,
+            ),
+            onPressed: () => widget.serverManager.removeServer(entry.serverId),
+          ),
+        ],
       ),
       onTap: () {
         final url = Uri.encodeComponent(entry.serverUrl.toString());
