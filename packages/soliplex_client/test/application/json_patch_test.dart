@@ -79,17 +79,17 @@ void main() {
         expect((qaHistory[1] as Map<String, dynamic>)['question'], 'Q2');
       });
 
-      test('replaces item in array at index', () {
+      test('inserts item in array at index per RFC 6902', () {
         final state = <String, dynamic>{
           'items': ['a', 'b', 'c'],
         };
         final operations = [
-          {'op': 'add', 'path': '/items/1', 'value': 'replaced'},
+          {'op': 'add', 'path': '/items/1', 'value': 'inserted'},
         ];
 
         final result = applyJsonPatch(state, operations);
 
-        expect(result['items'], ['a', 'replaced', 'c']);
+        expect(result['items'], ['a', 'inserted', 'b', 'c']);
       });
     });
 

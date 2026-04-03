@@ -11,6 +11,7 @@ class ChatInput extends StatefulWidget {
     this.sessionState,
     this.controller,
     this.focusNode,
+    this.enabled = true,
   });
 
   final void Function(String text) onSend;
@@ -18,6 +19,7 @@ class ChatInput extends StatefulWidget {
   final ReadonlySignal<AgentSessionState?>? sessionState;
   final TextEditingController? controller;
   final FocusNode? focusNode;
+  final bool enabled;
 
   @override
   State<ChatInput> createState() => _ChatInputState();
@@ -78,7 +80,7 @@ class _ChatInputState extends State<ChatInput> {
 
   void _send() {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || !widget.enabled) return;
     widget.onSend(text);
     _controller.clear();
     _focusNode.requestFocus();
@@ -91,6 +93,7 @@ class _ChatInputState extends State<ChatInput> {
   Widget build(BuildContext context) {
     final state = widget.sessionState?.watch(context);
     final active = _isActive(state);
+    final disabled = !widget.enabled || active;
 
     return Padding(
       padding: const EdgeInsets.all(8),
@@ -104,7 +107,7 @@ class _ChatInputState extends State<ChatInput> {
               child: TextField(
                 controller: _controller,
                 focusNode: _focusNode,
-                readOnly: active,
+                readOnly: disabled,
                 maxLines: null,
                 textInputAction: TextInputAction.newline,
                 decoration: const InputDecoration(
@@ -125,7 +128,7 @@ class _ChatInputState extends State<ChatInput> {
               valueListenable: _controller,
               builder: (context, value, _) => IconButton(
                 icon: const Icon(Icons.send),
-                onPressed: value.text.trim().isEmpty ? null : _send,
+                onPressed: value.text.trim().isEmpty || disabled ? null : _send,
               ),
             ),
         ],

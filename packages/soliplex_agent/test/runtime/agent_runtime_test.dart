@@ -224,6 +224,80 @@ void main() {
       verifyNever(() => api.createRun(any(), any()));
     });
 
+    test('sends initial AG-UI state from createThread to backend', () async {
+      final initialState = <String, dynamic>{
+        'rag': <String, dynamic>{
+          'citations': <dynamic>[],
+          'qa_history': <dynamic>[],
+        },
+      };
+      when(
+        () => api.createThread(any()),
+      ).thenAnswer(
+        (_) async => (_threadInfo(), initialState),
+      );
+      stubCreateRun();
+      stubDeleteThread();
+
+      SimpleRunAgentInput? capturedInput;
+      when(
+        () => agUiStreamClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((invocation) {
+        capturedInput =
+            invocation.positionalArguments[1] as SimpleRunAgentInput;
+        return Stream.fromIterable(_happyPathEvents());
+      });
+
+      final session = await runtime.spawn(
+        roomId: _roomId,
+        prompt: 'Hello',
+      );
+      await session.result;
+
+      expect(capturedInput, isNotNull);
+      expect(capturedInput!.state, equals(initialState));
+    });
+
+    test('seedThreadState makes initial state available for spawn', () async {
+      final initialState = <String, dynamic>{
+        'rag': <String, dynamic>{
+          'citations': <dynamic>[],
+          'qa_history': <dynamic>[],
+        },
+      };
+      runtime.seedThreadState(_threadId, initialState);
+
+      stubCreateRun();
+      stubDeleteThread();
+
+      SimpleRunAgentInput? capturedInput;
+      when(
+        () => agUiStreamClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((invocation) {
+        capturedInput =
+            invocation.positionalArguments[1] as SimpleRunAgentInput;
+        return Stream.fromIterable(_happyPathEvents());
+      });
+
+      final session = await runtime.spawn(
+        roomId: _roomId,
+        prompt: 'Hello',
+        threadId: _threadId,
+      );
+      await session.result;
+
+      expect(capturedInput, isNotNull);
+      expect(capturedInput!.state, equals(initialState));
+    });
+
     test('session appears in activeSessions', () async {
       stubCreateThread();
       stubCreateRun();
@@ -796,6 +870,85 @@ void main() {
         () => runtime.spawn(roomId: _roomId, prompt: 'Hello'),
         throwsA(isA<StateError>()),
       );
+    });
+  });
+
+  group('failed run state capture', () {
+    test('captures thread history from mid-stream failure', () async {
+      stubCreateRun();
+      stubDeleteThread();
+
+      // First spawn: stream fails after delivering a message
+      final controller1 = StreamController<BaseEvent>();
+      when(
+        () => agUiStreamClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((_) => controller1.stream);
+
+      final s1 = await runtime.spawn(
+        roomId: _roomId,
+        prompt: 'Hello',
+        threadId: 'thread-fail',
+      );
+
+      // Deliver partial events then error
+      controller1
+        ..add(
+          const RunStartedEvent(
+            threadId: 'thread-fail',
+            runId: _runId,
+          ),
+        )
+        ..add(const TextMessageStartEvent(messageId: 'msg-1'))
+        ..add(
+          const TextMessageContentEvent(
+            messageId: 'msg-1',
+            delta: 'Partial',
+          ),
+        )
+        ..add(const TextMessageEndEvent(messageId: 'msg-1'))
+        ..addError(Exception('network lost'));
+      await s1.result;
+
+      // Wait for _captureThreadHistory to run
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // Second spawn on same thread: should include prior messages
+      SimpleRunAgentInput? capturedInput;
+      when(
+        () => agUiStreamClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((invocation) {
+        capturedInput =
+            invocation.positionalArguments[1] as SimpleRunAgentInput;
+        return Stream.fromIterable([
+          const RunStartedEvent(
+            threadId: 'thread-fail',
+            runId: 'run-2',
+          ),
+          const RunFinishedEvent(
+            threadId: 'thread-fail',
+            runId: 'run-2',
+          ),
+        ]);
+      });
+
+      final s2 = await runtime.spawn(
+        roomId: _roomId,
+        prompt: 'Retry',
+        threadId: 'thread-fail',
+      );
+      await s2.result;
+
+      expect(capturedInput, isNotNull);
+      // Should have 3 messages: user "Hello", assistant "Partial", user "Retry"
+      expect(capturedInput!.messages!.length, 3);
     });
   });
 
