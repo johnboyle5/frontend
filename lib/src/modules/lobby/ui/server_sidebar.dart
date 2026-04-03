@@ -29,6 +29,7 @@ class ServerSidebar extends StatelessWidget {
             servers: servers,
             profiles: profiles,
             onServerTap: onServerTap,
+            onAddServer: onAddServer,
           ),
         ),
         const Divider(height: 1),
@@ -46,11 +47,13 @@ class _ServerList extends StatelessWidget {
     required this.servers,
     required this.profiles,
     required this.onServerTap,
+    required this.onAddServer,
   });
 
   final Map<String, ServerEntry> servers;
   final Map<String, UserProfile?> profiles;
   final VoidCallback onServerTap;
+  final VoidCallback onAddServer;
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +74,14 @@ class _ServerList extends StatelessWidget {
             profile: profiles[entry.key],
             onTap: onServerTap,
           ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: TextButton.icon(
+            onPressed: onAddServer,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add Server'),
+          ),
+        ),
       ],
     );
   }
