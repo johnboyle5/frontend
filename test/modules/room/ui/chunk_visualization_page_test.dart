@@ -145,6 +145,32 @@ void main() {
     expect(find.byType(CircleAvatar), findsNothing);
   });
 
+  testWidgets('handles more pageNumbers than images', (tester) async {
+    final api = _ChunkVizApi()
+      ..nextVisualization = ChunkVisualization(
+        chunkId: 'c1',
+        documentUri: 'doc.pdf',
+        imagesBase64: [_pngBase64],
+      );
+
+    await tester.pumpWidget(_wrap(
+      ChunkVisualizationPage(
+        api: api,
+        roomId: 'room-1',
+        chunkId: 'c1',
+        useDialogLayout: false,
+        documentTitle: 'Multi-page Chunk',
+        pageNumbers: const [3, 4],
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Should show the image without crashing
+    expect(find.byType(Image), findsOneWidget);
+    // Should show a combined page label
+    expect(find.text('Pages 3–4'), findsOneWidget);
+  });
+
   testWidgets('dialog layout shows title bar with close button',
       (tester) async {
     final api = _ChunkVizApi()

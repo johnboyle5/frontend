@@ -136,9 +136,13 @@ class _ChunkVisualizationPageState extends State<ChunkVisualizationPage> {
   }
 
   String _pageLabel(int index, int total) {
-    if (widget.pageNumbers.isNotEmpty && index < widget.pageNumbers.length) {
-      return 'Page ${widget.pageNumbers[index]}';
+    final pn = widget.pageNumbers;
+    if (pn.isEmpty) return 'Image ${index + 1} of $total';
+    // Chunk spans more pages than images — show combined label.
+    if (pn.length > total && total == 1) {
+      return 'Pages ${pn.first}–${pn.last}';
     }
+    if (index < pn.length) return 'Page ${pn[index]}';
     return 'Image ${index + 1} of $total';
   }
 
@@ -282,12 +286,6 @@ class _ChunkVisualizationPageState extends State<ChunkVisualizationPage> {
   }
 
   Widget _buildImages(BuildContext context, List<PageImage> pages) {
-    assert(
-      widget.pageNumbers.isEmpty || widget.pageNumbers.length == pages.length,
-      'pageNumbers.length (${widget.pageNumbers.length}) != '
-      'pages.length (${pages.length})',
-    );
-
     if (pages.isEmpty) {
       return const Center(child: Text('No page images available'));
     }
