@@ -80,7 +80,7 @@ class ChunkVisualizationPage extends StatefulWidget {
     if (useDialog) {
       return showDialog<void>(
         context: context,
-        barrierDismissible: false,
+        barrierDismissible: true,
         builder: (_) => child,
       );
     }
