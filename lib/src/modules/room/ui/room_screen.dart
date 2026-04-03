@@ -363,6 +363,7 @@ class _RoomScreenState extends State<RoomScreen> {
           sessionState: threadView.sessionState,
           controller: _chatController,
           focusNode: _chatFocusNode,
+          enabled: status is MessagesLoaded,
         ),
       ],
     );

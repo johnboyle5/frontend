@@ -95,6 +95,9 @@ class RoomState {
       roomId: _roomId,
       threadId: threadId,
       registry: _registry,
+      onHistoryLoaded: (id, history) {
+        runtime.seedThreadHistory(id, history);
+      },
     );
   }
 
@@ -102,8 +105,10 @@ class RoomState {
   Future<String?> createThread() async {
     _lastError.value = null;
     try {
-      final (threadInfo, _) = await _connection.api.createThread(_roomId);
+      final (threadInfo, aguiState) =
+          await _connection.api.createThread(_roomId);
       if (_isDisposed) return threadInfo.id;
+      runtime.seedThreadState(threadInfo.id, aguiState);
       threadList.refresh();
       selectThread(threadInfo.id);
       onNavigateToThread?.call(threadInfo.id);
