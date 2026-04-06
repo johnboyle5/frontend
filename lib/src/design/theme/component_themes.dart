@@ -45,8 +45,8 @@ ListTileThemeData buildListTileTheme(
         ),
       ),
       contentPadding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 4,
+        horizontal: SoliplexSpacing.s4,
+        vertical: SoliplexSpacing.s1,
       ),
       horizontalTitleGap: 16,
       minVerticalPadding: 12,
