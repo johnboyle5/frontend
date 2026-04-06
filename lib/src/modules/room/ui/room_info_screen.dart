@@ -277,6 +277,7 @@ class _AgentCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     formatDynamicValue(
+                      context,
                       extraConfig,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),

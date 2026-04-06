@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../design/theme/theme_extensions.dart';
 import 'room_info_widgets.dart';
 
 class ExpandableTile extends StatelessWidget {
@@ -26,10 +27,10 @@ class ExpandableTile extends StatelessWidget {
         Expanded(
           child: Text(
             name,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.w600,
-            ),
+            style: SoliplexTheme.mergeCode(
+              context,
+              theme.textTheme.bodyMedium,
+            ).copyWith(fontWeight: FontWeight.w600),
           ),
         ),
         if (hasContent)

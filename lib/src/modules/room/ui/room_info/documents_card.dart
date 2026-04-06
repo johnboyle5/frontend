@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:soliplex_client/soliplex_client.dart' hide State;
 
+import '../../../../design/theme/theme_extensions.dart';
 import '../../../../shared/file_type_icons.dart';
 import 'room_info_widgets.dart';
 
@@ -234,7 +235,7 @@ class _DocumentsCardState extends State<DocumentsCard> {
             const SizedBox(height: 2),
             SelectableText(
               doc.id,
-              style: valueStyle?.copyWith(fontFamily: 'monospace'),
+              style: SoliplexTheme.mergeCode(context, valueStyle),
             ),
             if (doc.uri.isNotEmpty || dateFields.isNotEmpty)
               const SizedBox(height: 8),
@@ -243,7 +244,7 @@ class _DocumentsCardState extends State<DocumentsCard> {
               const SizedBox(height: 2),
               SelectableText(
                 doc.uri,
-                style: valueStyle?.copyWith(fontFamily: 'monospace'),
+                style: SoliplexTheme.mergeCode(context, valueStyle),
               ),
               if (dateFields.isNotEmpty) const SizedBox(height: 8),
             ],
@@ -351,6 +352,7 @@ class MetadataDialog extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           formatDynamicValue(
+                            context,
                             entry.value,
                             style: theme.textTheme.bodySmall,
                           ),

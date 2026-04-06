@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
+import '../../../design/theme/theme_extensions.dart';
+
 class GenUiTile extends StatelessWidget {
   const GenUiTile({super.key, required this.message});
   final GenUiMessage message;
@@ -25,7 +27,7 @@ class GenUiTile extends StatelessWidget {
             SelectableText(
               const JsonEncoder.withIndent('  ').convert(message.data),
               style:
-                  theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+                  SoliplexTheme.mergeCode(context, theme.textTheme.bodySmall),
             ),
           ],
         ),

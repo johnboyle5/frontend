@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
+import '../../../design/theme/theme_extensions.dart';
 import '../../../shared/copy_button.dart';
 import '../models/format_utils.dart';
 import '../models/http_event_group.dart';
@@ -270,9 +271,7 @@ class _RequestDetailViewState extends State<RequestDetailView>
           const SizedBox(height: 8),
           SelectableText(
             group.uri.toString(),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontFamily: 'monospace',
-            ),
+            style: SoliplexTheme.mergeCode(context, theme.textTheme.bodyMedium),
           ),
         ],
       ),
@@ -579,9 +578,8 @@ class _CurlTab extends StatelessWidget {
               ),
               child: SelectableText(
                 curl,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
-                ),
+                style:
+                    SoliplexTheme.mergeCode(context, theme.textTheme.bodySmall),
               ),
             ),
           ),
@@ -653,18 +651,19 @@ class _HeadersTable extends StatelessWidget {
                     width: 140,
                     child: SelectableText(
                       entry.key,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'monospace',
-                      ),
+                      style: SoliplexTheme.mergeCode(
+                        context,
+                        theme.textTheme.bodySmall,
+                      ).copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: SelectableText(
                       entry.value,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'monospace',
+                      style: SoliplexTheme.mergeCode(
+                        context,
+                        theme.textTheme.bodySmall,
                       ),
                     ),
                   ),
@@ -696,9 +695,7 @@ class _BodyDisplay extends StatelessWidget {
       ),
       child: SelectableText(
         formattedBody,
-        style: theme.textTheme.bodySmall?.copyWith(
-          fontFamily: 'monospace',
-        ),
+        style: SoliplexTheme.mergeCode(context, theme.textTheme.bodySmall),
       ),
     );
   }

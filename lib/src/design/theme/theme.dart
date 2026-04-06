@@ -259,6 +259,7 @@ ThemeData _buildTheme(ColorScheme colorScheme, {FontConfig? fontConfig}) {
       SoliplexTheme(
         colors: colorScheme,
         radii: soliplexRadii,
+        codeFont: fontConfig?.codeFont,
         badgeTheme: SoliplexBadgeThemeData(
           background: Color.alphaBlend(
             colorScheme.onSurface.withAlpha(15),

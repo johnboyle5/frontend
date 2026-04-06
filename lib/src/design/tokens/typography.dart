@@ -10,6 +10,13 @@ abstract final class FontFamilies {
 
   /// Brand font — reserved for special brand uses (Google Fonts).
   static const String brand = 'SquadaOne';
+
+  /// Code font — code blocks, inline code, monospaced content.
+  ///
+  /// Platform-adaptive default: SF Mono on Apple, Roboto Mono elsewhere.
+  /// Used as a fallback when [FontConfig.codeFont] is `null`.
+  static const String codeApple = 'SF Mono';
+  static const String codeDefault = 'Roboto Mono';
 }
 
 /// Builds the Soliplex [TextTheme] with optional font overrides.

@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../../../design/theme/theme_extensions.dart';
+
 class SectionCard extends StatelessWidget {
   const SectionCard({super.key, required this.title, required this.children});
 
@@ -118,7 +120,11 @@ const jsonPrettyEncoder = JsonEncoder.withIndent('  ');
 
 /// Formats a dynamic value for display, using pretty-printed JSON for
 /// complex values (maps/lists) and plain text for scalars.
-SelectableText formatDynamicValue(Object? value, {TextStyle? style}) {
+SelectableText formatDynamicValue(
+  BuildContext context,
+  Object? value, {
+  TextStyle? style,
+}) {
   final isComplex = value is Map || value is Iterable;
   String text;
   if (isComplex) {
@@ -132,6 +138,6 @@ SelectableText formatDynamicValue(Object? value, {TextStyle? style}) {
   }
   return SelectableText(
     text,
-    style: isComplex ? style?.copyWith(fontFamily: 'monospace') : style,
+    style: isComplex ? SoliplexTheme.mergeCode(context, style) : style,
   );
 }

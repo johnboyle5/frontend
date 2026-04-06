@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
+import '../../../../design/theme/theme_extensions.dart';
 import 'code_block_builder.dart';
 import 'inline_code_builder.dart';
 import 'markdown_renderer.dart';
@@ -17,7 +18,7 @@ class FlutterMarkdownPlusRenderer extends MarkdownRenderer {
   @override
   Widget build(BuildContext context) {
     final markdownTheme = Theme.of(context).extension<MarkdownThemeExtension>();
-    final monoStyle = _monospaceStyle(context);
+    final monoStyle = SoliplexTheme.codeStyle(context);
 
     return MarkdownBody(
       data: _sanitize(data),
@@ -36,16 +37,6 @@ class FlutterMarkdownPlusRenderer extends MarkdownRenderer {
           preferredStyle: monoStyle.copyWith(fontSize: 14),
         ),
       },
-    );
-  }
-
-  static TextStyle _monospaceStyle(BuildContext context) {
-    final platform = Theme.of(context).platform;
-    final isApple =
-        platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
-    return TextStyle(
-      fontFamily: isApple ? 'SF Mono' : 'Roboto Mono',
-      fontFamilyFallback: const ['monospace'],
     );
   }
 

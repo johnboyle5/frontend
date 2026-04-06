@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
+import '../../../design/theme/theme_extensions.dart';
+
 class ToolCallTile extends StatelessWidget {
   const ToolCallTile({super.key, required this.message});
   final ToolCallMessage message;
@@ -82,7 +84,7 @@ class _CodeBlock extends StatelessWidget {
           const SizedBox(height: 4),
           SelectableText(
             text,
-            style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+            style: SoliplexTheme.mergeCode(context, theme.textTheme.bodySmall),
           ),
         ],
       ),

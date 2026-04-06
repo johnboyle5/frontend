@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../design/theme/theme_extensions.dart';
 import '../../../../shared/copy_button.dart';
 
 class SystemPromptViewer extends StatefulWidget {
@@ -43,10 +44,10 @@ class _SystemPromptViewerState extends State<SystemPromptViewer> {
           ),
           LayoutBuilder(
             builder: (context, constraints) {
-              final promptStyle = theme.textTheme.bodyMedium?.copyWith(
-                fontFamily: 'monospace',
-                fontSize: 14,
-              );
+              final promptStyle = SoliplexTheme.mergeCode(
+                context,
+                theme.textTheme.bodyMedium,
+              ).copyWith(fontSize: 14);
               const containerPadding = 16.0;
               final overflows = !_expanded &&
                   (TextPainter(

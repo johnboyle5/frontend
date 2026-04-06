@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../design/theme/theme_extensions.dart';
 import '../models/json_tree_model.dart';
 
 /// Renders a [List<JsonNode>] as an expandable tree with syntax coloring.
@@ -13,11 +14,13 @@ class JsonTreeView extends StatelessWidget {
     if (nodes.isEmpty) {
       return Text(
         '(empty)',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontFamily: 'monospace',
-              fontStyle: FontStyle.italic,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+        style: SoliplexTheme.mergeCode(
+          context,
+          Theme.of(context).textTheme.bodySmall,
+        ).copyWith(
+          fontStyle: FontStyle.italic,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       );
     }
     return _JsonNodeList(nodes: nodes, depth: 0);
@@ -99,9 +102,8 @@ class _JsonNodeTileState extends State<_JsonNodeTile> {
       if (asDouble != null) valueColor = colorScheme.primary;
     }
 
-    final baseStyle = theme.textTheme.bodySmall?.copyWith(
-      fontFamily: 'monospace',
-    );
+    final baseStyle =
+        SoliplexTheme.mergeCode(context, theme.textTheme.bodySmall);
 
     return Padding(
       padding: EdgeInsets.only(left: indent),
@@ -136,9 +138,8 @@ class _JsonNodeTileState extends State<_JsonNodeTile> {
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final baseStyle = theme.textTheme.bodySmall?.copyWith(
-      fontFamily: 'monospace',
-    );
+    final baseStyle =
+        SoliplexTheme.mergeCode(context, theme.textTheme.bodySmall);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

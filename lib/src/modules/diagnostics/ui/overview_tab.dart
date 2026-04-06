@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../../design/theme/theme_extensions.dart';
 import '../models/event_accumulator.dart';
 import '../models/http_event_group.dart';
 import '../models/json_tree_model.dart';
@@ -374,10 +375,10 @@ class _SseEventCardState extends State<_SseEventCard> {
                     Expanded(
                       child: Text(
                         summary,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontFamily: 'monospace',
-                        ),
+                        style: SoliplexTheme.mergeCode(
+                          context,
+                          theme.textTheme.bodySmall,
+                        ).copyWith(color: colorScheme.onSurfaceVariant),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -418,9 +419,8 @@ class _EventTypeBadge extends StatelessWidget {
       ),
       child: Text(
         type,
-        style: TextStyle(
+        style: SoliplexTheme.codeStyle(context).copyWith(
           fontSize: 10,
-          fontFamily: 'monospace',
           color: colorScheme.onSurfaceVariant,
         ),
       ),
@@ -467,8 +467,9 @@ class _JsonSection extends StatelessWidget {
           child: plainText != null
               ? SelectableText(
                   plainText,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontFamily: 'monospace',
+                  style: SoliplexTheme.mergeCode(
+                    context,
+                    theme.textTheme.bodySmall,
                   ),
                 )
               : JsonTreeView(nodes: buildJsonTree(parsed)),

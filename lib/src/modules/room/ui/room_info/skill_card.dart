@@ -112,6 +112,7 @@ class SkillDetailDialog extends StatelessWidget {
                         Text(entry.key, style: labelStyle),
                         const SizedBox(height: 2),
                         formatDynamicValue(
+                          context,
                           entry.value,
                           style: valueStyle,
                         ),
