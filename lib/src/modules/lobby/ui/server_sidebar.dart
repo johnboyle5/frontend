@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../soliplex_frontend.dart';
+import '../../../shared/theme_toggle_button.dart';
 import '../../auth/server_entry.dart';
 import '../lobby_state.dart';
 
@@ -32,7 +34,7 @@ class ServerSidebar extends StatelessWidget {
             onAddServer: onAddServer,
           ),
         ),
-        const Divider(height: 1),
+        const Divider(height: 4),
         _ActionButtons(
           onAddServer: onAddServer,
           onNetworkInspector: onNetworkInspector,
@@ -60,14 +62,21 @@ class _ServerList extends StatelessWidget {
     return ListView(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text(
-            'Servers (${servers.length})',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+          padding: const EdgeInsets.only(left: SoliplexSpacing.s4),
+          child: Row(
+            children: [
+              Text(
+                'Servers (${servers.length})',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              const Spacer(),
+              const ThemeToggleButton(),
+            ],
           ),
         ),
+        const Divider(height: 4),
         for (final entry in servers.entries)
           _ServerTile(
             entry: entry.value,
@@ -75,7 +84,7 @@ class _ServerList extends StatelessWidget {
             onTap: onServerTap,
           ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.all(SoliplexSpacing.s2),
           child: OutlinedButton.icon(
             onPressed: onAddServer,
             icon: const Icon(Icons.add, size: 18),
@@ -133,13 +142,23 @@ class _ActionButtons extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextButton(
+        TextButton.icon(
           onPressed: onAddServer,
-          child: const Text('Home'),
+          icon: const Icon(Icons.home, size: 16),
+          label: const Text('Home'),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s2),
+            visualDensity: VisualDensity.comfortable,
+          ),
         ),
-        TextButton(
+        TextButton.icon(
           onPressed: onNetworkInspector,
-          child: const Text('Network Inspector'),
+          icon: const Icon(Icons.network_cell, size: 16),
+          label: const Text('Network Inspector'),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s2),
+            visualDensity: VisualDensity.comfortable,
+          ),
         ),
       ],
     );

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../soliplex_frontend.dart';
+import '../../../shared/theme_toggle_button.dart';
 import '../thread_list_state.dart';
 import 'error_retry_panel.dart';
 import 'thread_tile.dart';
@@ -31,42 +33,35 @@ class ThreadSidebar extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: Row(
-            children: [
-              TextButton.icon(
-                onPressed: onBackToLobby,
-                icon: const Icon(Icons.arrow_back, size: 16),
-                label: const Text('Lobby'),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  visualDensity: VisualDensity.compact,
-                ),
+        Row(
+          children: [
+            TextButton.icon(
+              onPressed: onBackToLobby,
+              icon: const Icon(Icons.arrow_back, size: 24),
+              label: const Text('Lobby'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s2, vertical: SoliplexSpacing.s5),
               ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: onCreateThread,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('New Thread'),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            ],
-          ),
+            ),
+            const Spacer(),
+            const ThemeToggleButton(),
+            IconButton(
+              onPressed: onCreateThread,
+              icon: const Icon(Icons.add, size: 24),
+              tooltip: 'New Thread',
+            ),
+          ],
         ),
-        const Divider(height: 1),
+        const Divider(height: 4),
         Expanded(child: _buildContent(context)),
-        const Divider(height: 1),
+        const Divider(height: 4),
         TextButton.icon(
           onPressed: onRoomInfo,
           icon: const Icon(Icons.info_outline, size: 16),
           label: const Text('Room Info'),
           style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s2),
+            visualDensity: VisualDensity.comfortable,
           ),
         ),
         TextButton.icon(
@@ -74,8 +69,8 @@ class ThreadSidebar extends StatelessWidget {
           icon: const Icon(Icons.http, size: 16),
           label: const Text('Network Inspector'),
           style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s2),
+            visualDensity: VisualDensity.comfortable,
           ),
         ),
       ],
@@ -86,7 +81,7 @@ class ThreadSidebar extends StatelessWidget {
     return switch (threadListStatus) {
       ThreadsLoading() => const Center(child: CircularProgressIndicator()),
       ThreadsFailed(:final error) => Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(SoliplexSpacing.s4),
           child: ErrorRetryPanel(
             title: 'Failed to load threads',
             error: error,

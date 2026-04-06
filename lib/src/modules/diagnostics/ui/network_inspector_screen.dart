@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/theme_toggle_button.dart';
 import '../models/http_event_group.dart';
 import '../models/http_event_grouper.dart';
 import '../network_inspector.dart';
@@ -40,6 +41,7 @@ class _NetworkInspectorScreenState extends State<NetworkInspectorScreen> {
                       },
                 tooltip: 'Clear all requests',
               ),
+              const ThemeToggleButton(),
             ],
           ),
           body: LayoutBuilder(
