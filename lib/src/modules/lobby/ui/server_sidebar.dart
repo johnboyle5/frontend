@@ -8,15 +8,15 @@ class ServerSidebar extends StatelessWidget {
     super.key,
     required this.servers,
     required this.profiles,
+    required this.onServerTap,
     required this.onAddServer,
-    required this.onSettings,
     required this.onNetworkInspector,
   });
 
   final Map<String, ServerEntry> servers;
   final Map<String, UserProfile?> profiles;
+  final VoidCallback onServerTap;
   final VoidCallback onAddServer;
-  final VoidCallback onSettings;
   final VoidCallback onNetworkInspector;
 
   @override
@@ -28,12 +28,13 @@ class ServerSidebar extends StatelessWidget {
           child: _ServerList(
             servers: servers,
             profiles: profiles,
+            onServerTap: onServerTap,
+            onAddServer: onAddServer,
           ),
         ),
         const Divider(height: 1),
         _ActionButtons(
           onAddServer: onAddServer,
-          onSettings: onSettings,
           onNetworkInspector: onNetworkInspector,
         ),
       ],
@@ -42,10 +43,17 @@ class ServerSidebar extends StatelessWidget {
 }
 
 class _ServerList extends StatelessWidget {
-  const _ServerList({required this.servers, required this.profiles});
+  const _ServerList({
+    required this.servers,
+    required this.profiles,
+    required this.onServerTap,
+    required this.onAddServer,
+  });
 
   final Map<String, ServerEntry> servers;
   final Map<String, UserProfile?> profiles;
+  final VoidCallback onServerTap;
+  final VoidCallback onAddServer;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +63,7 @@ class _ServerList extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
             'Servers (${servers.length})',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
           ),
@@ -64,17 +72,31 @@ class _ServerList extends StatelessWidget {
           _ServerTile(
             entry: entry.value,
             profile: profiles[entry.key],
+            onTap: onServerTap,
           ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: OutlinedButton.icon(
+            onPressed: onAddServer,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add Server'),
+          ),
+        ),
       ],
     );
   }
 }
 
 class _ServerTile extends StatelessWidget {
-  const _ServerTile({required this.entry, required this.profile});
+  const _ServerTile({
+    required this.entry,
+    required this.profile,
+    required this.onTap,
+  });
 
   final ServerEntry entry;
   final UserProfile? profile;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +104,7 @@ class _ServerTile extends StatelessWidget {
       title: Text(formatServerUrl(entry.serverUrl)),
       subtitle: Text(_identityLabel),
       dense: true,
+      onTap: onTap,
     );
   }
 
@@ -99,12 +122,10 @@ class _ServerTile extends StatelessWidget {
 class _ActionButtons extends StatelessWidget {
   const _ActionButtons({
     required this.onAddServer,
-    required this.onSettings,
     required this.onNetworkInspector,
   });
 
   final VoidCallback onAddServer;
-  final VoidCallback onSettings;
   final VoidCallback onNetworkInspector;
 
   @override
@@ -114,11 +135,7 @@ class _ActionButtons extends StatelessWidget {
       children: [
         TextButton(
           onPressed: onAddServer,
-          child: const Text('Add Server'),
-        ),
-        TextButton(
-          onPressed: onSettings,
-          child: const Text('Settings'),
+          child: const Text('Home'),
         ),
         TextButton(
           onPressed: onNetworkInspector,

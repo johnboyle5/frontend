@@ -154,7 +154,7 @@ class LobbyState {
   }
 
   void _fetchUserProfile(String serverId, ServerEntry entry) {
-    final url = entry.serverUrl.resolve('/user_info');
+    final url = entry.serverUrl.resolve('/api/user_info');
     Future.sync(() => entry.httpClient.request('GET', url)).then((response) {
       if (!_authSubscriptions.containsKey(serverId)) return;
       final UserProfile? profile;

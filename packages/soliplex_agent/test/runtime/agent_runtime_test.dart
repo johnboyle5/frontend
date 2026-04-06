@@ -224,6 +224,80 @@ void main() {
       verifyNever(() => api.createRun(any(), any()));
     });
 
+    test('sends initial AG-UI state from createThread to backend', () async {
+      final initialState = <String, dynamic>{
+        'rag': <String, dynamic>{
+          'citations': <dynamic>[],
+          'qa_history': <dynamic>[],
+        },
+      };
+      when(
+        () => api.createThread(any()),
+      ).thenAnswer(
+        (_) async => (_threadInfo(), initialState),
+      );
+      stubCreateRun();
+      stubDeleteThread();
+
+      SimpleRunAgentInput? capturedInput;
+      when(
+        () => agUiStreamClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((invocation) {
+        capturedInput =
+            invocation.positionalArguments[1] as SimpleRunAgentInput;
+        return Stream.fromIterable(_happyPathEvents());
+      });
+
+      final session = await runtime.spawn(
+        roomId: _roomId,
+        prompt: 'Hello',
+      );
+      await session.result;
+
+      expect(capturedInput, isNotNull);
+      expect(capturedInput!.state, equals(initialState));
+    });
+
+    test('seedThreadState makes initial state available for spawn', () async {
+      final initialState = <String, dynamic>{
+        'rag': <String, dynamic>{
+          'citations': <dynamic>[],
+          'qa_history': <dynamic>[],
+        },
+      };
+      runtime.seedThreadState(_threadId, initialState);
+
+      stubCreateRun();
+      stubDeleteThread();
+
+      SimpleRunAgentInput? capturedInput;
+      when(
+        () => agUiStreamClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((invocation) {
+        capturedInput =
+            invocation.positionalArguments[1] as SimpleRunAgentInput;
+        return Stream.fromIterable(_happyPathEvents());
+      });
+
+      final session = await runtime.spawn(
+        roomId: _roomId,
+        prompt: 'Hello',
+        threadId: _threadId,
+      );
+      await session.result;
+
+      expect(capturedInput, isNotNull);
+      expect(capturedInput!.state, equals(initialState));
+    });
+
     test('session appears in activeSessions', () async {
       stubCreateThread();
       stubCreateRun();
@@ -339,32 +413,76 @@ void main() {
     });
   });
 
-  group('WASM guard', () {
-    test('blocks second spawn on non-reentrant platform', () async {
+  group('WASM concurrent sessions', () {
+    test('allows concurrent sessions on web platform', () async {
       runtime = createRuntime(platform: const WebPlatformConstraints());
 
       stubCreateThread();
       stubCreateRun();
       stubDeleteThread();
-      final controller = StreamController<BaseEvent>();
-      stubRunAgent(stream: controller.stream);
-
-      await runtime.spawn(roomId: _roomId, prompt: 'A');
-
-      expect(
-        () => runtime.spawn(roomId: _roomId, prompt: 'B'),
-        throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            contains('WASM'),
-          ),
+      // Non-broadcast: events buffer until the orchestrator subscribes.
+      final controllerA = StreamController<BaseEvent>();
+      final controllerB = StreamController<BaseEvent>();
+      var callCount = 0;
+      when(
+        () => agUiStreamClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
         ),
+      ).thenAnswer((_) {
+        callCount++;
+        return callCount == 1 ? controllerA.stream : controllerB.stream;
+      });
+
+      final sessionA = await runtime.spawn(roomId: _roomId, prompt: 'A');
+      final sessionB = await runtime.spawn(roomId: _roomId, prompt: 'B');
+
+      expect(runtime.activeSessions, hasLength(2));
+
+      _happyPathEvents().forEach(controllerA.add);
+      _happyPathEvents().forEach(controllerB.add);
+      await controllerA.close();
+      await controllerB.close();
+
+      final resultA = await sessionA.result;
+      final resultB = await sessionB.result;
+      expect(resultA, isA<AgentSuccess>());
+      expect(resultB, isA<AgentSuccess>());
+    });
+
+    test('queues at maxConcurrentSessions limit', () async {
+      runtime = createRuntime(
+        platform: const WebPlatformConstraints(maxConcurrentSessions: 1),
       );
 
-      // Clean up
-      _happyPathEvents().forEach(controller.add);
-      await controller.close();
+      stubCreateThread();
+      stubCreateRun();
+      stubDeleteThread();
+      final controllerA = StreamController<BaseEvent>.broadcast();
+      stubRunAgent(stream: controllerA.stream);
+
+      await runtime.spawn(roomId: _roomId, prompt: 'A');
+      expect(runtime.pendingSpawnCount, 0);
+
+      final spawnFuture = runtime.spawn(roomId: _roomId, prompt: 'B');
+      await Future<void>.delayed(Duration.zero);
+      expect(runtime.pendingSpawnCount, 1);
+
+      // Complete first → drain queue.
+      _happyPathEvents().forEach(controllerA.add);
+      await controllerA.close();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final controllerB = StreamController<BaseEvent>.broadcast();
+      stubRunAgent(stream: controllerB.stream);
+
+      final session = await spawnFuture;
+      expect(session, isNotNull);
+      expect(runtime.pendingSpawnCount, 0);
+
+      _happyPathEvents().forEach(controllerB.add);
+      await controllerB.close();
     });
   });
 
@@ -442,33 +560,6 @@ void main() {
       // Let microtasks settle.
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(caught, isA<StateError>());
-    });
-
-    test('WASM reentrant guard still throws immediately', () async {
-      runtime = createRuntime(platform: const WebPlatformConstraints());
-
-      stubCreateThread();
-      stubCreateRun();
-      stubDeleteThread();
-      final controller = StreamController<BaseEvent>.broadcast();
-      stubRunAgent(stream: controller.stream);
-
-      await runtime.spawn(roomId: _roomId, prompt: 'A');
-
-      expect(
-        () => runtime.spawn(roomId: _roomId, prompt: 'B'),
-        throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            contains('WASM'),
-          ),
-        ),
-      );
-
-      // Clean up
-      _happyPathEvents().forEach(controller.add);
-      await controller.close();
     });
   });
 
@@ -779,6 +870,85 @@ void main() {
         () => runtime.spawn(roomId: _roomId, prompt: 'Hello'),
         throwsA(isA<StateError>()),
       );
+    });
+  });
+
+  group('failed run state capture', () {
+    test('captures thread history from mid-stream failure', () async {
+      stubCreateRun();
+      stubDeleteThread();
+
+      // First spawn: stream fails after delivering a message
+      final controller1 = StreamController<BaseEvent>();
+      when(
+        () => agUiStreamClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((_) => controller1.stream);
+
+      final s1 = await runtime.spawn(
+        roomId: _roomId,
+        prompt: 'Hello',
+        threadId: 'thread-fail',
+      );
+
+      // Deliver partial events then error
+      controller1
+        ..add(
+          const RunStartedEvent(
+            threadId: 'thread-fail',
+            runId: _runId,
+          ),
+        )
+        ..add(const TextMessageStartEvent(messageId: 'msg-1'))
+        ..add(
+          const TextMessageContentEvent(
+            messageId: 'msg-1',
+            delta: 'Partial',
+          ),
+        )
+        ..add(const TextMessageEndEvent(messageId: 'msg-1'))
+        ..addError(Exception('network lost'));
+      await s1.result;
+
+      // Wait for _captureThreadHistory to run
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // Second spawn on same thread: should include prior messages
+      SimpleRunAgentInput? capturedInput;
+      when(
+        () => agUiStreamClient.runAgent(
+          any(),
+          any(),
+          cancelToken: any(named: 'cancelToken'),
+        ),
+      ).thenAnswer((invocation) {
+        capturedInput =
+            invocation.positionalArguments[1] as SimpleRunAgentInput;
+        return Stream.fromIterable([
+          const RunStartedEvent(
+            threadId: 'thread-fail',
+            runId: 'run-2',
+          ),
+          const RunFinishedEvent(
+            threadId: 'thread-fail',
+            runId: 'run-2',
+          ),
+        ]);
+      });
+
+      final s2 = await runtime.spawn(
+        roomId: _roomId,
+        prompt: 'Retry',
+        threadId: 'thread-fail',
+      );
+      await s2.result;
+
+      expect(capturedInput, isNotNull);
+      // Should have 3 messages: user "Hello", assistant "Partial", user "Retry"
+      expect(capturedInput!.messages!.length, 3);
     });
   });
 

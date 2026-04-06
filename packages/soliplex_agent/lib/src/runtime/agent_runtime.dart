@@ -121,6 +121,31 @@ class AgentRuntime {
   /// Number of spawn requests waiting for a concurrency slot.
   int get pendingSpawnCount => _spawnQueue.length;
 
+  /// Stores initial AG-UI state for a thread created externally.
+  ///
+  /// Call this when a thread is created outside of [spawn] (e.g. via
+  /// a UI "new thread" button) so that the backend-provided initial
+  /// state is available when [spawn] is later called with that threadId.
+  void seedThreadState(
+    String threadId,
+    Map<String, dynamic> aguiState,
+  ) {
+    if (aguiState.isEmpty) return;
+    _threadHistories[threadId] = ThreadHistory(
+      messages: const [],
+      aguiState: aguiState,
+    );
+  }
+
+  /// Stores full thread history loaded from the server.
+  ///
+  /// Call this when thread history is fetched (e.g. when selecting an
+  /// existing thread) so that messages and AG-UI state are available
+  /// when [spawn] is later called with that threadId.
+  void seedThreadHistory(String threadId, ThreadHistory history) {
+    _threadHistories[threadId] = history;
+  }
+
   /// Spawns a new agent session.
   ///
   /// Creates a thread (or reuses [threadId]), resolves tools for [roomId],
@@ -140,7 +165,6 @@ class AgentRuntime {
     AgentSession? parent,
   }) async {
     _guardNotDisposed();
-    _guardWasmReentrancy();
     await _waitForSlot();
     _guardSpawnDepth(parent);
     final depth = parent == null ? 0 : parent.depth + 1;
@@ -232,14 +256,8 @@ class AgentRuntime {
     }
   }
 
-  void _guardWasmReentrancy() {
-    if (!_platform.supportsReentrantInterpreter && _activeCount > 0) {
-      throw StateError('WASM runtime does not support concurrent sessions');
-    }
-  }
-
   Future<void> _waitForSlot() async {
-    if (_activeCount < _platform.maxConcurrentBridges) return;
+    if (_activeCount < _platform.maxConcurrentSessions) return;
     final completer = Completer<void>();
     _spawnQueue.add(completer);
     await completer.future;
@@ -248,7 +266,7 @@ class AgentRuntime {
 
   void _drainQueue() {
     if (_spawnQueue.isEmpty) return;
-    if (_activeCount >= _platform.maxConcurrentBridges) return;
+    if (_activeCount >= _platform.maxConcurrentSessions) return;
     _spawnQueue.removeAt(0).complete();
   }
 
@@ -277,8 +295,15 @@ class AgentRuntime {
       final key = (serverId: serverId, roomId: roomId, threadId: threadId);
       return (key, null);
     }
-    final (threadInfo, _) = await _connection.api.createThread(roomId);
+    final (threadInfo, initialAguiState) =
+        await _connection.api.createThread(roomId);
     final key = (serverId: serverId, roomId: roomId, threadId: threadInfo.id);
+    if (initialAguiState.isNotEmpty) {
+      _threadHistories[key.threadId] = ThreadHistory(
+        messages: const [],
+        aguiState: initialAguiState,
+      );
+    }
     final existingRunId =
         threadInfo.hasInitialRun ? threadInfo.initialRunId : null;
     return (key, existingRunId);
@@ -407,6 +432,12 @@ class AgentRuntime {
           messageStates: conversation.messageStates,
         ),
       CancelledState(:final conversation) when conversation != null =>
+        ThreadHistory(
+          messages: conversation.messages,
+          aguiState: conversation.aguiState,
+          messageStates: conversation.messageStates,
+        ),
+      FailedState(:final conversation) when conversation != null =>
         ThreadHistory(
           messages: conversation.messages,
           aguiState: conversation.aguiState,

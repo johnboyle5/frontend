@@ -43,12 +43,22 @@ class MessagesFailed extends ThreadViewStatus {
   int get hashCode => error.hashCode;
 }
 
+/// Callback invoked when thread history is loaded from the server.
+///
+/// Provides the thread ID and the full loaded history so callers can
+/// seed the runtime's thread history cache with messages and AG-UI state.
+typedef HistoryLoadedCallback = void Function(
+  String threadId,
+  ThreadHistory history,
+);
+
 class ThreadViewState {
   ThreadViewState({
     required ServerConnection connection,
     required String roomId,
     required this.threadId,
     required RunRegistry registry,
+    this.onHistoryLoaded,
   })  : _connection = connection,
         _roomId = roomId,
         _registry = registry {
@@ -58,6 +68,7 @@ class ThreadViewState {
   final ServerConnection _connection;
   final String _roomId;
   final String threadId;
+  final HistoryLoadedCallback? onHistoryLoaded;
   final RunRegistry _registry;
 
   ThreadKey get threadKey => (
@@ -279,6 +290,7 @@ class ThreadViewState {
         messages: history.messages,
         messageStates: history.messageStates,
       );
+      onHistoryLoaded?.call(threadId, history);
     }).catchError((Object error) {
       if (token.isCancelled) return;
       _cancelToken = null;

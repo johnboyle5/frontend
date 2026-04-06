@@ -91,6 +91,44 @@ void main() {
     state.dispose();
   });
 
+  test('calls onHistoryLoaded with full history after fetch', () async {
+    final message = TextMessage(
+      id: 'msg-1',
+      user: ChatUser.user,
+      createdAt: DateTime(2026, 3, 1),
+      text: 'Hello',
+    );
+    final aguiState = <String, dynamic>{
+      'rag': <String, dynamic>{
+        'citations': <dynamic>[],
+        'qa_history': <dynamic>[],
+      },
+    };
+    api.nextThreadHistory = ThreadHistory(
+      messages: [message],
+      aguiState: aguiState,
+    );
+
+    ThreadHistory? capturedHistory;
+    final state = ThreadViewState(
+      connection: connection,
+      roomId: 'room-1',
+      threadId: 'thread-1',
+      registry: registry,
+      onHistoryLoaded: (threadId, history) {
+        capturedHistory = history;
+      },
+    );
+
+    await Future<void>.delayed(Duration.zero);
+
+    expect(capturedHistory, isNotNull);
+    expect(capturedHistory!.aguiState, equals(aguiState));
+    expect(capturedHistory!.messages.length, 1);
+
+    state.dispose();
+  });
+
   test('exposes failed status on fetch error', () async {
     api.nextThreadHistoryError = Exception('network error');
 

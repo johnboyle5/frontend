@@ -17,8 +17,8 @@ ServerManager _createManager() => ServerManager(
 Widget _buildSidebar({
   required Map<String, ServerEntry> servers,
   Map<String, UserProfile?> profiles = const {},
+  VoidCallback? onServerTap,
   VoidCallback? onAddServer,
-  VoidCallback? onSettings,
   VoidCallback? onNetworkInspector,
 }) {
   return MaterialApp(
@@ -26,8 +26,8 @@ Widget _buildSidebar({
       body: ServerSidebar(
         servers: servers,
         profiles: profiles,
+        onServerTap: onServerTap ?? () {},
         onAddServer: onAddServer ?? () {},
-        onSettings: onSettings ?? () {},
         onNetworkInspector: onNetworkInspector ?? () {},
       ),
     ),
@@ -78,22 +78,9 @@ void main() {
         onAddServer: () => addTapped = true,
       ));
 
-      expect(find.text('Add Server'), findsOneWidget);
-      await tester.tap(find.text('Add Server'));
+      expect(find.text('Home'), findsOneWidget);
+      await tester.tap(find.text('Home'));
       expect(addTapped, isTrue);
-    });
-
-    testWidgets('shows Settings button that fires callback', (tester) async {
-      var settingsTapped = false;
-
-      await tester.pumpWidget(_buildSidebar(
-        servers: const {},
-        onSettings: () => settingsTapped = true,
-      ));
-
-      expect(find.text('Settings'), findsOneWidget);
-      await tester.tap(find.text('Settings'));
-      expect(settingsTapped, isTrue);
     });
 
     testWidgets('shows Network Inspector button that fires callback',

@@ -39,7 +39,8 @@ Map<String, dynamic> applyJsonPatch(
 
     try {
       result = switch (operation) {
-        'add' || 'replace' => _setAtPath(result, path, value),
+        'add' => _setAtPath(result, path, value, insert: true),
+        'replace' => _setAtPath(result, path, value),
         'remove' => _removeAtPath(result, path),
         _ => result, // Skip unsupported operations (move, copy, test)
       };
@@ -54,8 +55,9 @@ Map<String, dynamic> applyJsonPatch(
 Map<String, dynamic> _setAtPath(
   Map<String, dynamic> state,
   String path,
-  dynamic value,
-) {
+  dynamic value, {
+  bool insert = false,
+}) {
   final segments = _parsePath(path);
   if (segments.isEmpty) {
     // Path "/" means replace root - but we always return a map
@@ -98,10 +100,17 @@ Map<String, dynamic> _setAtPath(
     } else {
       final index = int.tryParse(lastSegment);
       if (index != null) {
-        if (index == current.length) {
-          current.add(value);
-        } else if (index >= 0 && index < current.length) {
+        if (insert && index >= 0 && index <= current.length) {
+          // RFC 6902 §4.1: add inserts before the index, shifting elements.
+          current.insert(index, value);
+        } else if (!insert && index >= 0 && index < current.length) {
           current[index] = value;
+        } else {
+          _logPatchError(
+            'Array index $index out of bounds '
+            '(length=${current.length}) at $path',
+            {'op': insert ? 'add' : 'replace', 'path': path, 'value': value},
+          );
         }
       }
     }
