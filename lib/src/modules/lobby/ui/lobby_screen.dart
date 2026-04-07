@@ -9,8 +9,8 @@ import '../lobby_state.dart';
 import 'room_card.dart';
 import 'server_sidebar.dart';
 
-const double _sidebarWidth = 240;
-const double _wideBreakpoint = 600;
+const double _sidebarWidth = 280;
+const double _wideBreakpoint = SoliplexBreakpoints.tablet;
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key, required this.serverManager});

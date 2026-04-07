@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_client/soliplex_client.dart'
     show SourceReferenceFormatting;
+import '../../../../soliplex_frontend.dart';
 import '../../auth/server_entry.dart';
 import '../../diagnostics/diagnostics_providers.dart';
 import '../../diagnostics/models/http_event_grouper.dart';
@@ -22,8 +23,8 @@ import 'message_timeline.dart';
 import 'room_welcome.dart';
 import 'thread_sidebar.dart';
 
-const double _sidebarWidth = 300;
-const double _wideBreakpoint = 600;
+const double _sidebarWidth = 280;
+const double _wideBreakpoint = SoliplexBreakpoints.tablet;
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({

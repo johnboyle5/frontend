@@ -30,28 +30,31 @@ class ThreadSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            TextButton.icon(
-              onPressed: onBackToLobby,
-              icon: const Icon(Icons.arrow_back, size: 24),
-              label: const Text('Lobby'),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s3, vertical: SoliplexSpacing.s5),
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              TextButton.icon(
+                onPressed: onBackToLobby,
+                icon: const Icon(Icons.arrow_back, size: 24),
+                label: const Text('Lobby'),
+                style: TextButton.styleFrom(
+                  alignment: Alignment.centerLeft,
+                  foregroundColor: Theme.of(context).colorScheme.onSurface,
+                ),
               ),
-            ),
-            const Spacer(),
-            const ThemeToggleButton(),
-            IconButton(
-              onPressed: onCreateThread,
-              icon: const Icon(Icons.add, size: 24),
-              tooltip: 'New Thread',
-            ),
-          ],
-        ),
+              const Spacer(),
+              const ThemeToggleButton(),
+              IconButton(
+                onPressed: onCreateThread,
+                icon: const Icon(Icons.add, size: 24),
+                tooltip: 'New Thread',
+              ),
+            ],
+          ),
         const Divider(height: 4),
         Expanded(child: _buildContent(context)),
         const Divider(height: 4),
@@ -68,7 +71,8 @@ class ThreadSidebar extends StatelessWidget {
           label: const Text('Network Inspector'),
           style: TextButton.styleFrom(alignment: Alignment.centerLeft),
         ),
-      ],
+        ],
+      ),
     );
   }
 
