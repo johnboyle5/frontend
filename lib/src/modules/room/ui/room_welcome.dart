@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
+import '../../../../soliplex_frontend.dart';
 import 'markdown/flutter_markdown_plus_renderer.dart';
 
 class RoomWelcome extends StatelessWidget {
@@ -28,20 +29,17 @@ class RoomWelcome extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(SoliplexSpacing.s8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (currentRoom.name.isNotEmpty)
               Text(
                 currentRoom.name,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: theme.textTheme.headlineLarge,
                 textAlign: TextAlign.center,
               ),
             if (currentRoom.hasWelcomeMessage) ...[
-              const SizedBox(height: 8),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 480),
                 child: FlutterMarkdownPlusRenderer(
@@ -50,12 +48,12 @@ class RoomWelcome extends StatelessWidget {
               ),
             ],
             if (currentRoom.hasSuggestions) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: SoliplexSpacing.s6),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
                 child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: SoliplexSpacing.s2,
+                  runSpacing: SoliplexSpacing.s2,
                   alignment: WrapAlignment.center,
                   children: [
                     for (final suggestion in currentRoom.suggestions)
@@ -92,7 +90,7 @@ class _SuggestionChip extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s4, vertical: SoliplexSpacing.s1),
             decoration: BoxDecoration(
               border: Border.all(color: theme.colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(8),

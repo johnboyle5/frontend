@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
+import '../../../../soliplex_frontend.dart';
 import '../compute_display_messages.dart';
 import '../execution_tracker.dart';
 import '../tracker_registry.dart' show awaitingTrackerKey;
@@ -193,7 +194,7 @@ class _MessageTimelineState extends State<MessageTimeline> {
           controller: _scrollController,
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(SoliplexSpacing.s9),
               sliver: SliverList.builder(
                 itemCount: displayMessages.length,
                 itemBuilder: (context, index) {
@@ -203,7 +204,7 @@ class _MessageTimelineState extends State<MessageTimeline> {
                     key: message is LoadingMessage
                         ? const ValueKey('loading')
                         : _keyFor(message.id),
-                    padding: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.only(bottom: SoliplexSpacing.s2),
                     child: MessageTile(
                       message: message,
                       runId: _runIdMap[message.id] ??

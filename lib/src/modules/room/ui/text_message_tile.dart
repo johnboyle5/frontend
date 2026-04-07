@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
+import '../../../../soliplex_frontend.dart';
 import '../execution_tracker.dart';
 import 'citations_section.dart';
 import 'execution/activity_indicator.dart';
@@ -51,17 +52,19 @@ class TextMessageTile extends StatelessWidget {
           _ThinkingBlock(text: message.thinkingText),
         Text(
           isUser ? 'You' : 'Assistant',
-          style: theme.textTheme.labelSmall?.copyWith(
+          style: theme.textTheme.labelMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 4),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: isUser
+              ? const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s5, vertical: SoliplexSpacing.s2)
+              : const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s5, vertical: SoliplexSpacing.s1),
           decoration: BoxDecoration(
             color: isUser
                 ? theme.colorScheme.primaryContainer
-                : theme.colorScheme.surfaceContainerLow,
+                : theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
           ),
           child: isUser
@@ -75,7 +78,7 @@ class TextMessageTile extends StatelessWidget {
                   ? const Text('...')
                   : FlutterMarkdownPlusRenderer(data: message.text),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: SoliplexSpacing.s2),
         Row(
           children: [
             CopyButton(text: message.text),
@@ -137,7 +140,7 @@ class _ThinkingBlock extends StatelessWidget {
       ),
       dense: true,
       tilePadding: EdgeInsets.zero,
-      childrenPadding: const EdgeInsets.only(bottom: 4),
+      childrenPadding: const EdgeInsets.only(bottom: SoliplexSpacing.s1),
       children: [
         Text(
           text,
