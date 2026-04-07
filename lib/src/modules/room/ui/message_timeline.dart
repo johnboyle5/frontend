@@ -194,7 +194,11 @@ class _MessageTimelineState extends State<MessageTimeline> {
           controller: _scrollController,
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.all(SoliplexSpacing.s9),
+              padding: EdgeInsets.all(
+                MediaQuery.sizeOf(context).width < SoliplexBreakpoints.desktop
+                    ? SoliplexSpacing.s6
+                    : SoliplexSpacing.s9,
+              ),
               sliver: SliverList.builder(
                 itemCount: displayMessages.length,
                 itemBuilder: (context, index) {

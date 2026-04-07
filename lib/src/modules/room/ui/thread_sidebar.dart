@@ -40,7 +40,7 @@ class ThreadSidebar extends StatelessWidget {
               icon: const Icon(Icons.arrow_back, size: 24),
               label: const Text('Lobby'),
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s2, vertical: SoliplexSpacing.s5),
+                padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s3, vertical: SoliplexSpacing.s5),
               ),
             ),
             const Spacer(),

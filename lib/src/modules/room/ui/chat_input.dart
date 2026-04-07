@@ -98,7 +98,7 @@ class _ChatInputState extends State<ChatInput> {
     final disabled = !widget.enabled || active;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(SoliplexSpacing.s6, SoliplexSpacing.s2, SoliplexSpacing.s2, SoliplexSpacing.s4),
+      padding: const EdgeInsets.fromLTRB(SoliplexSpacing.s9, SoliplexSpacing.s2, SoliplexSpacing.s2, SoliplexSpacing.s4),
       child: Row(
         children: [
           Expanded(
