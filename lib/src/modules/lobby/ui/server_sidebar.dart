@@ -65,13 +65,12 @@ class _ServerList extends StatelessWidget {
           padding: const EdgeInsets.only(left: SoliplexSpacing.s4),
           child: Row(
             children: [
-              Text(
-                'Servers (${servers.length})',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+              Expanded(
+                child: Text(
+                  'Servers (${servers.length})',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ),
-              const Spacer(),
               const ThemeToggleButton(),
             ],
           ),
@@ -84,7 +83,7 @@ class _ServerList extends StatelessWidget {
             onTap: onServerTap,
           ),
         Padding(
-          padding: const EdgeInsets.all(SoliplexSpacing.s2),
+          padding: const EdgeInsets.all(SoliplexSpacing.s4),
           child: OutlinedButton.icon(
             onPressed: onAddServer,
             icon: const Icon(Icons.add, size: 18),
@@ -140,25 +139,18 @@ class _ActionButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TextButton.icon(
           onPressed: onAddServer,
           icon: const Icon(Icons.home, size: 16),
           label: const Text('Home'),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s2),
-            visualDensity: VisualDensity.comfortable,
-          ),
         ),
+        const Divider(height: 4),
         TextButton.icon(
           onPressed: onNetworkInspector,
           icon: const Icon(Icons.network_cell, size: 16),
           label: const Text('Network Inspector'),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s2),
-            visualDensity: VisualDensity.comfortable,
-          ),
         ),
       ],
     );

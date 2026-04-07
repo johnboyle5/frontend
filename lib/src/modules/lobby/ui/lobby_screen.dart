@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 
+import '../../../../soliplex_frontend.dart';
 import '../../auth/server_entry.dart';
 import '../../auth/server_manager.dart';
 import '../lobby_state.dart';
@@ -263,23 +264,38 @@ class _ServerSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text(
-            heading,
-            style: Theme.of(context).textTheme.titleMedium,
+        SizedBox(
+          width: double.infinity,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: SoliplexSpacing.s9,
+              vertical: SoliplexSpacing.s4,
+            ),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+            ),
+            child: Text(
+              heading,
+              style: Theme.of(context).textTheme.headlineLarge,
+            ),
           ),
         ),
         switch (serverRooms) {
           RoomsLoading() => const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
+              padding: EdgeInsets.symmetric(horizontal: SoliplexSpacing.s9),
               child: LinearProgressIndicator(),
             ),
           RoomsFailed(:final error) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s9),
               child: Text('Failed to load rooms: $error'),
             ),
-          RoomsLoaded(:final rooms) => Column(
+          RoomsLoaded(:final rooms) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s9),
+            child: Column(
               children: [
                 for (final room in rooms)
                   RoomCard(
@@ -289,6 +305,7 @@ class _ServerSection extends StatelessWidget {
                   ),
               ],
             ),
+          ),
         },
       ],
     );
