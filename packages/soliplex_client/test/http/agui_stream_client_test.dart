@@ -396,6 +396,44 @@ void main() {
         expect(result[0], isA<RunStartedEvent>());
       });
 
+      test('calls onWarning with count when events are skipped', () async {
+        final warnings = <String>[];
+        final clientWithWarning = AgUiStreamClient(
+          httpTransport: mockTransport,
+          urlBuilder: UrlBuilder(baseUrl),
+          onWarning: warnings.add,
+        );
+        addTearDown(clientWithWarning.close);
+
+        final events = [
+          {'type': 'RUN_STARTED', 'threadId': 't-1', 'runId': 'r-1'},
+          {'type': 'TOTALLY_UNKNOWN_EVENT', 'foo': 'bar'},
+          {'type': 'RUN_FINISHED', 'threadId': 't-1', 'runId': 'r-1'},
+        ];
+
+        when(
+          () => mockTransport.requestStream(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer(
+          (_) async => StreamedHttpResponse(
+            statusCode: 200,
+            body: sseByteStream(events),
+          ),
+        );
+
+        final result =
+            await clientWithWarning.runAgent(endpoint, input).toList();
+
+        expect(result, hasLength(2));
+        expect(warnings, hasLength(1));
+        expect(warnings[0], contains('1 malformed event'));
+      });
+
       test('propagates CancelledException from transport', () async {
         when(
           () => mockTransport.requestStream(

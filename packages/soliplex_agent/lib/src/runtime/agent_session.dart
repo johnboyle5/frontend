@@ -361,7 +361,7 @@ class AgentSession implements ToolExecutionContext {
       case StepStartedEvent(:final stepName):
         emitEvent(StepProgress(stepName: stepName));
 
-      // Events handled by the event processor or not needing UI bridging.
+      // Events that don't need ExecutionEvent bridging.
       case RunStartedEvent() ||
             TextMessageStartEvent() ||
             TextMessageEndEvent() ||

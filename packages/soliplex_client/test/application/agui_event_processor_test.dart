@@ -765,6 +765,30 @@ void main() {
           expect(activity.allToolNames, contains('search'));
         });
 
+        test('ToolCallStartEvent during TextStreaming sets activity', () {
+          // Start streaming text
+          const textStart = TextMessageStartEvent(messageId: 'msg-1');
+          var result = processEvent(conversation, streaming, textStart);
+          expect(result.streaming, isA<app_streaming.TextStreaming>());
+
+          // Tool call starts while text is streaming
+          const toolStart = ToolCallStartEvent(
+            toolCallId: 'tc-1',
+            toolCallName: 'search',
+          );
+          result = processEvent(
+            result.conversation,
+            result.streaming,
+            toolStart,
+          );
+
+          final textStreaming = result.streaming as app_streaming.TextStreaming;
+          final activity =
+              textStreaming.currentActivity as app_streaming.ToolCallActivity;
+          expect(activity.allToolNames, contains('search'));
+          expect(activity.latestToolCallId, equals('tc-1'));
+        });
+
         test('text and tool calls coexist', () {
           // Start text
           const textStart = TextMessageStartEvent(messageId: 'msg-1');

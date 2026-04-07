@@ -58,7 +58,8 @@ EventProcessingResult processEvent(
         streaming: const AwaitingText(),
       ),
 
-    // Outer thinking lifecycle (wraps inner ThinkingTextMessage* events)
+    // Thinking lifecycle — both outer (ThinkingStart/End) and inner
+    // (ThinkingTextMessageStart/End) use the same idempotent handlers.
     ThinkingStartEvent() => _processThinkingStart(
         conversation,
         streaming,
@@ -67,8 +68,6 @@ EventProcessingResult processEvent(
         conversation,
         streaming,
       ),
-
-    // Inner thinking text events
     ThinkingTextMessageStartEvent() => _processThinkingStart(
         conversation,
         streaming,
@@ -161,7 +160,7 @@ EventProcessingResult processEvent(
         timestamp,
       ),
 
-    // Events not emitted by our backend — pass through unchanged.
+    // Unhandled event types — pass through unchanged.
     // Explicit cases ensure a compile error if ag_ui adds new event types.
     ThinkingContentEvent() ||
     TextMessageChunkEvent() ||
@@ -451,6 +450,11 @@ EventProcessingResult _processActivitySnapshot(
     );
   }
   // Unknown activity types pass through unchanged.
+  developer.log(
+    'Unhandled activityType: $activityType',
+    name: 'soliplex_client.event_processor',
+    level: 800,
+  );
   return EventProcessingResult(
     conversation: conversation,
     streaming: streaming,
