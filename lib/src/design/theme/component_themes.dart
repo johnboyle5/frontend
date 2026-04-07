@@ -279,6 +279,10 @@ FloatingActionButtonThemeData buildFloatingActionButtonTheme(
 }) {
   return FloatingActionButtonThemeData(
     shape: const RoundedRectangleBorder(),
+    elevation: 0,
+    focusElevation: 0,
+    hoverElevation: 0,
+    highlightElevation: 0,
     extendedTextStyle: TextStyle(
       fontFamily: fontConfig?.bodyFont,
       fontWeight: FontWeight.w600,
