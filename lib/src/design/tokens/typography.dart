@@ -48,44 +48,44 @@ TextTheme buildSoliplexTextTheme({String? bodyFont, String? displayFont}) {
     // Headline styles - section headers
     headlineLarge: TextStyle(
       fontFamily: bodyFont,
-      fontWeight: FontWeight.w600,
-      fontSize: 28,
+      fontWeight: FontWeight.w700,
+      fontSize: 32,
       letterSpacing: 0,
-      height: 1.25,
+      height: 2,
     ),
     headlineMedium: TextStyle(
       fontFamily: bodyFont,
       fontWeight: FontWeight.w600,
-      fontSize: 24,
+      fontSize: 28,
       letterSpacing: 0,
       height: 2.4,
     ),
     headlineSmall: TextStyle(
       fontFamily: bodyFont,
       fontWeight: FontWeight.w600,
-      fontSize: 20,
+      fontSize: 24,
       letterSpacing: 0,
-      height: 2.8,
+      height: 2.4,
     ),
 
     // Title styles - card titles, list headers
     titleLarge: TextStyle(
       fontFamily: bodyFont,
-      fontWeight: FontWeight.w500,
+      fontWeight: FontWeight.w600,
       fontSize: 24,
       letterSpacing: 0,
       height: 1.27,
     ),
     titleMedium: TextStyle(
       fontFamily: bodyFont,
-      fontWeight: FontWeight.w500,
+      fontWeight: FontWeight.w600,
       fontSize: 18,
       letterSpacing: 0.15,
       height: 1.5,
     ),
     titleSmall: TextStyle(
       fontFamily: bodyFont,
-      fontWeight: FontWeight.w500,
+      fontWeight: FontWeight.w600,
       fontSize: 14,
       letterSpacing: 0.1,
       height: 1.43,
