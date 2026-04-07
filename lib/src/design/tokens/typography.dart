@@ -119,22 +119,22 @@ TextTheme buildSoliplexTextTheme({String? bodyFont, String? displayFont}) {
       fontFamily: bodyFont,
       fontWeight: FontWeight.w500,
       fontSize: 18,
-      letterSpacing: 0.1,
+      letterSpacing: 0.2,
       height: 1.4,
     ),
     labelMedium: TextStyle(
       fontFamily: bodyFont,
       fontWeight: FontWeight.w500,
-      fontSize: 16,
-      letterSpacing: 0.5,
+      fontSize: 15,
+      letterSpacing: 0.2,
       height: 1.4,
     ),
     labelSmall: TextStyle(
       fontFamily: bodyFont,
       fontWeight: FontWeight.w500,
       fontSize: 13,
-      letterSpacing: 0.5,
-      height: 1.6,
+      letterSpacing: 0.2,
+      height: 1.4,
     ),
   );
 }
