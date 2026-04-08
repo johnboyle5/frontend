@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../design/theme/theme_extensions.dart';
 import '../../../shared/theme_toggle_button.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 import 'package:soliplex_client/soliplex_client.dart' hide Room, State;
@@ -83,6 +84,7 @@ class _RoomInfoScreenState extends State<RoomInfoScreen> {
           },
         ),
         title: const Text('Room Information'),
+        titleTextStyle: SoliplexTheme.appBarTitleStyle(context),
         actions: const [ThemeToggleButton()],
       ),
       body: FutureBuilder<Room>(

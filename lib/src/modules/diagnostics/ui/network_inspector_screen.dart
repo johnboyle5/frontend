@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../design/theme/theme_extensions.dart';
 import '../../../shared/theme_toggle_button.dart';
 import '../models/http_event_group.dart';
 import '../models/http_event_grouper.dart';
@@ -30,6 +31,7 @@ class _NetworkInspectorScreenState extends State<NetworkInspectorScreen> {
         return Scaffold(
           appBar: AppBar(
             title: Text('Requests (${sortedGroups.length})'),
+            titleTextStyle: SoliplexTheme.appBarTitleStyle(context),
             actions: [
               IconButton(
                 icon: const Icon(Icons.delete_outline),
@@ -165,7 +167,10 @@ class _NetworkInspectorScreenState extends State<NetworkInspectorScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => Scaffold(
-          appBar: AppBar(title: Text(group.pathWithQuery)),
+          appBar: AppBar(
+            title: Text(group.pathWithQuery),
+            titleTextStyle: SoliplexTheme.appBarTitleStyle(context),
+          ),
           body: RequestDetailView(group: group),
         ),
       ),

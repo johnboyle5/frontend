@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:soliplex_client/soliplex_client.dart' show SoliplexApi;
 
+import '../../../design/theme/theme_extensions.dart';
+
 @visibleForTesting
 class PageImage {
   const PageImage(this.bytes, this.width, this.height);
@@ -185,7 +187,7 @@ class _ChunkVisualizationPageState extends State<ChunkVisualizationPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.documentTitle),
-        titleTextStyle: Theme.of(context).textTheme.titleMedium,
+        titleTextStyle: SoliplexTheme.appBarTitleStyle(context),
       ),
       body: _buildContent(context),
     );

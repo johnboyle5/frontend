@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../design/theme/theme_extensions.dart';
 import '../models/http_event_group.dart';
 import 'http_event_tile.dart';
 import 'request_detail_view.dart';
@@ -16,14 +17,20 @@ class RunHttpDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     if (groups.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('HTTP Traffic')),
+        appBar: AppBar(
+          title: const Text('HTTP Traffic'),
+          titleTextStyle: SoliplexTheme.appBarTitleStyle(context),
+        ),
         body: _buildEmptyState(context),
       );
     }
 
     if (groups.length == 1) {
       return Scaffold(
-        appBar: AppBar(title: Text(groups[0].pathWithQuery)),
+        appBar: AppBar(
+          title: Text(groups[0].pathWithQuery),
+          titleTextStyle: SoliplexTheme.appBarTitleStyle(context),
+        ),
         body: RequestDetailView(group: groups[0]),
       );
     }
@@ -63,7 +70,10 @@ class _MultiGroupView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('HTTP Traffic (${groups.length})')),
+      appBar: AppBar(
+        title: Text('HTTP Traffic (${groups.length})'),
+        titleTextStyle: SoliplexTheme.appBarTitleStyle(context),
+      ),
       body: ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: groups.length,
@@ -75,7 +85,10 @@ class _MultiGroupView extends StatelessWidget {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (context) => Scaffold(
-                  appBar: AppBar(title: Text(group.pathWithQuery)),
+                  appBar: AppBar(
+                    title: Text(group.pathWithQuery),
+                    titleTextStyle: SoliplexTheme.appBarTitleStyle(context),
+                  ),
                   body: RequestDetailView(group: group),
                 ),
               ),

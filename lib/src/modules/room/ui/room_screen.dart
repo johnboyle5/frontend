@@ -205,6 +205,7 @@ class _RoomScreenState extends State<RoomScreen> {
                 ),
               ),
               title: Text(widget.roomId),
+              titleTextStyle: SoliplexTheme.appBarTitleStyle(context),
             ),
             drawer: Drawer(
               child: Builder(
