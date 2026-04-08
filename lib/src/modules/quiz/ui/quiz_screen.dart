@@ -16,11 +16,13 @@ class QuizScreen extends StatefulWidget {
     required this.serverEntry,
     required this.roomId,
     required this.quizId,
+    this.returnRoute,
   });
 
   final ServerEntry serverEntry;
   final String roomId;
   final String quizId;
+  final String? returnRoute;
 
   @override
   State<QuizScreen> createState() => _QuizScreenState();
@@ -185,7 +187,8 @@ class _QuizScreenState extends State<QuizScreen> {
       if (confirmed != true || !mounted) return;
     }
     if (mounted) {
-      context.go('/room/${widget.serverEntry.alias}/${widget.roomId}');
+      final fallback = '/room/${widget.serverEntry.alias}/${widget.roomId}';
+      context.go(widget.returnRoute ?? fallback);
     }
   }
 }

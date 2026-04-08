@@ -25,6 +25,7 @@ ModuleContribution quizModule({
               serverEntry: entry,
               roomId: state.pathParameters['roomId']!,
               quizId: state.pathParameters['quizId']!,
+              returnRoute: state.uri.queryParameters['from'],
             ),
           );
         },
