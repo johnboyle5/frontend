@@ -236,7 +236,7 @@ class _RoomScreenState extends State<RoomScreen> {
             quizzes: room?.quizzes ?? const {},
             onQuizTapped: (quizId) {
               final alias = widget.serverEntry.alias;
-              context.push('/room/$alias/${widget.roomId}/quiz/$quizId');
+              context.go('/room/$alias/${widget.roomId}/quiz/$quizId');
             },
           );
           final content = _buildContent();
@@ -289,10 +289,8 @@ class _RoomScreenState extends State<RoomScreen> {
                     onRetryThreads: () => _state.threadList.refresh(),
                     quizzes: room?.quizzes ?? const {},
                     onQuizTapped: (quizId) {
-                      Navigator.pop(drawerContext);
                       final alias = widget.serverEntry.alias;
-                      context
-                          .push('/room/$alias/${widget.roomId}/quiz/$quizId');
+                      context.go('/room/$alias/${widget.roomId}/quiz/$quizId');
                     },
                   ),
                 ),
@@ -345,7 +343,7 @@ class _RoomScreenState extends State<RoomScreen> {
                         ),
                 onQuizTapped: (quizId) {
                   final alias = widget.serverEntry.alias;
-                  context.push('/room/$alias/${widget.roomId}/quiz/$quizId');
+                  context.go('/room/$alias/${widget.roomId}/quiz/$quizId');
                 },
                 fallback: const Center(child: Text('Select a thread')),
               );
@@ -409,7 +407,7 @@ class _RoomScreenState extends State<RoomScreen> {
                       ),
                       onQuizTapped: (quizId) {
                         final alias = widget.serverEntry.alias;
-                        context.push(
+                        context.go(
                           '/room/$alias/${widget.roomId}/quiz/$quizId',
                         );
                       },

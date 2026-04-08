@@ -184,6 +184,8 @@ class _QuizScreenState extends State<QuizScreen> {
       );
       if (confirmed != true || !mounted) return;
     }
-    if (mounted) context.pop();
+    if (mounted) {
+      context.go('/room/${widget.serverEntry.alias}/${widget.roomId}');
+    }
   }
 }
