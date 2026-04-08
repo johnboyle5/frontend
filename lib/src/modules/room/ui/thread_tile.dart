@@ -18,8 +18,7 @@ class ThreadTile extends StatelessWidget {
     final theme = Theme.of(context);
     return ListTile(
       selected: isSelected,
-      selectedTileColor:
-          theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+      textColor: theme.colorScheme.onSurfaceVariant,
       title: Text(
         thread.hasName ? thread.name : 'Untitled',
         maxLines: 1,
@@ -29,7 +28,6 @@ class ThreadTile extends StatelessWidget {
         _formatRelativeTime(thread.createdAt),
         style: theme.textTheme.bodySmall,
       ),
-      dense: true,
       onTap: onTap,
     );
   }

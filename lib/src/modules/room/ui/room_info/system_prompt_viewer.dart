@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../../soliplex_frontend.dart';
 import '../../../../design/theme/theme_extensions.dart';
 import '../../../../shared/copy_button.dart';
 
@@ -42,6 +43,7 @@ class _SystemPromptViewerState extends State<SystemPromptViewer> {
               ),
             ],
           ),
+          const SizedBox(height: SoliplexSpacing.s2),
           LayoutBuilder(
             builder: (context, constraints) {
               final promptStyle = SoliplexTheme.mergeCode(
@@ -71,7 +73,6 @@ class _SystemPromptViewerState extends State<SystemPromptViewer> {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: SelectableText(
                       widget.prompt,

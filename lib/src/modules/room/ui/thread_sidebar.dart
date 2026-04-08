@@ -44,6 +44,12 @@ class ThreadSidebar extends StatelessWidget {
                 style: TextButton.styleFrom(
                   alignment: Alignment.centerLeft,
                   foregroundColor: Theme.of(context).colorScheme.onSurface,
+                  padding: const EdgeInsets.fromLTRB(
+                      SoliplexSpacing.s2,
+                      SoliplexSpacing.s8,
+                      SoliplexSpacing.s4,
+                      SoliplexSpacing.s8,
+                  ),
                 ),
               ),
               const Spacer(),

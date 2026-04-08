@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide AuthException;
 
+import '../../../../soliplex_frontend.dart';
 import '../auth_providers.dart';
 import '../connect_flow.dart';
 import '../consent_notice.dart';
@@ -173,13 +174,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           size: _logoSize,
           color: theme.colorScheme.primary,
         ),
-      const SizedBox(height: 16),
+      const SizedBox(height: SoliplexSpacing.s1),
       Text(
         widget.appName,
         style: theme.textTheme.headlineMedium,
         textAlign: TextAlign.center,
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: SoliplexSpacing.s1),
       Text(
         subtitle,
         style: theme.textTheme.bodyMedium?.copyWith(
@@ -187,7 +188,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
         textAlign: TextAlign.center,
       ),
-      const SizedBox(height: 32),
+      const SizedBox(height: SoliplexSpacing.s4),
     ];
   }
 

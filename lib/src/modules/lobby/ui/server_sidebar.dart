@@ -62,7 +62,7 @@ class _ServerList extends StatelessWidget {
     return ListView(
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: SoliplexSpacing.s5),
+          padding: const EdgeInsets.fromLTRB(SoliplexSpacing.s5, SoliplexSpacing.s4, 0, SoliplexSpacing.s3),
           child: Row(
             children: [
               Expanded(
@@ -82,14 +82,11 @@ class _ServerList extends StatelessWidget {
             profile: profiles[entry.key],
             onTap: onServerTap,
           ),
-        Padding(
-          padding: const EdgeInsets.all(SoliplexSpacing.s5),
-          child: OutlinedButton.icon(
-            onPressed: onAddServer,
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add Server'),
-            style: TextButton.styleFrom(alignment: Alignment.centerLeft),
-          ),
+        TextButton.icon(
+          onPressed: onAddServer,
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Add Server'),
+          style: TextButton.styleFrom(alignment: Alignment.centerLeft),
         ),
       ],
     );
