@@ -22,6 +22,7 @@ import '../modules/diagnostics/network_inspector.dart';
 import '../modules/lobby/lobby_module.dart';
 import '../modules/room/agent_runtime_manager.dart';
 import '../modules/room/document_selections.dart';
+import '../modules/quiz/quiz_module.dart';
 import '../modules/room/room_module.dart';
 import '../modules/room/run_registry.dart';
 import '../modules/room/ui/markdown/markdown_theme_extension.dart';
@@ -152,6 +153,7 @@ Future<ShellConfig> standard({
         registry: registry,
         documentSelections: DocumentSelections(),
       ),
+      quizModule(serverManager: serverManager),
       authModule(
         serverManager: serverManager,
         authFlow: authFlow,
