@@ -16,6 +16,7 @@ import '../room_state.dart';
 import '../run_registry.dart';
 import '../thread_list_state.dart';
 import '../thread_view_state.dart';
+import '../compute_display_messages.dart';
 import 'chat_input.dart';
 import 'chunk_visualization_page.dart';
 import 'document_picker.dart';
@@ -397,41 +398,53 @@ class _RoomScreenState extends State<RoomScreen> {
                 onRetry: threadView.refresh,
               ),
             MessagesLoaded(:final messages, :final messageStates) =>
-              MessageTimeline(
-                messages: messages,
-                messageStates: messageStates,
-                streamingState: streaming,
-                executionTrackers: threadView.executionTrackers,
-                room: room,
-                onSuggestionTapped: (suggestion) => threadView.sendMessage(
-                  suggestion,
-                  _state.runtime,
-                  stateOverlay: _buildStateOverlay(),
-                ),
-                onFeedbackSubmit: threadView.submitFeedback,
-                onInspect: (runId) {
-                  final inspector = ProviderScope.containerOf(context)
-                      .read(networkInspectorProvider);
-                  final filtered = filterEventsByRunId(
-                    inspector.events,
-                    runId,
-                  );
-                  final groups = groupHttpEvents(filtered);
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => RunHttpDetailPage(groups: groups),
+              computeDisplayMessages(messages, streaming).isEmpty
+                  ? RoomWelcome(
+                      room: room,
+                      onSuggestionTapped: (suggestion) =>
+                          threadView.sendMessage(
+                        suggestion,
+                        _state.runtime,
+                        stateOverlay: _buildStateOverlay(),
+                      ),
+                      onQuizTapped: (quizId) {
+                        final alias = widget.serverEntry.alias;
+                        context.push(
+                          '/room/$alias/${widget.roomId}/quiz/$quizId',
+                        );
+                      },
+                      fallback: _threadEmptyFallback(context),
+                    )
+                  : MessageTimeline(
+                      messages: messages,
+                      messageStates: messageStates,
+                      streamingState: streaming,
+                      executionTrackers: threadView.executionTrackers,
+                      onFeedbackSubmit: threadView.submitFeedback,
+                      onInspect: (runId) {
+                        final inspector = ProviderScope.containerOf(context)
+                            .read(networkInspectorProvider);
+                        final filtered = filterEventsByRunId(
+                          inspector.events,
+                          runId,
+                        );
+                        final groups = groupHttpEvents(filtered);
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => RunHttpDetailPage(groups: groups),
+                          ),
+                        );
+                      },
+                      onShowChunkVisualization: (ref) =>
+                          ChunkVisualizationPage.show(
+                        context: context,
+                        api: widget.serverEntry.connection.api,
+                        roomId: widget.roomId,
+                        chunkId: ref.chunkId,
+                        documentTitle: ref.displayTitle,
+                        pageNumbers: ref.pageNumbers,
+                      ),
                     ),
-                  );
-                },
-                onShowChunkVisualization: (ref) => ChunkVisualizationPage.show(
-                  context: context,
-                  api: widget.serverEntry.connection.api,
-                  roomId: widget.roomId,
-                  chunkId: ref.chunkId,
-                  documentTitle: ref.displayTitle,
-                  pageNumbers: ref.pageNumbers,
-                ),
-              ),
           },
         ),
         if (sendError != null)
@@ -459,6 +472,26 @@ class _RoomScreenState extends State<RoomScreen> {
       ],
     );
   }
+}
+
+Widget _threadEmptyFallback(BuildContext context) {
+  final theme = Theme.of(context);
+  return Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.chat_bubble_outline,
+            size: 48, color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+        const SizedBox(height: 12),
+        Text(
+          'Type a message to get started',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SendErrorBanner extends StatelessWidget {

@@ -34,4 +34,29 @@ void main() {
     ));
     expect(find.byIcon(Icons.quiz), findsNothing);
   });
+
+  testWidgets('shows fallback when room is null', (tester) async {
+    await tester.pumpWidget(wrap(
+      const RoomWelcome(
+        room: null,
+        fallback: Text('fallback'),
+      ),
+    ));
+    expect(find.text('fallback'), findsOneWidget);
+  });
+
+  testWidgets('shows welcome message when present', (tester) async {
+    await tester.pumpWidget(wrap(
+      const RoomWelcome(
+        room: Room(
+          id: 'room-1',
+          name: 'Research Bot',
+          welcomeMessage: 'Welcome! Ask me anything.',
+        ),
+        fallback: Text('fallback'),
+      ),
+    ));
+    expect(find.text('Research Bot'), findsOneWidget);
+    expect(find.text('Welcome! Ask me anything.'), findsOneWidget);
+  });
 }
