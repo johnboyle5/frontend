@@ -38,6 +38,7 @@ class _ChatInputState extends State<ChatInput> {
   late FocusNode _focusNode;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  bool _chipsExpanded = true;
 
   @override
   void initState() {
@@ -114,34 +115,103 @@ class _ChatInputState extends State<ChatInput> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (widget.selectedDocuments.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final doc in widget.selectedDocuments)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: Chip(
-                          avatar: Icon(
-                            getFileTypeIcon(documentIconPath(doc)),
-                            size: 16,
-                          ),
-                          label: Text(documentDisplayName(doc)),
-                          deleteIcon: const Icon(Icons.close, size: 16),
-                          onDeleted:
-                              widget.onDocumentRemoved == null || disabled
-                                  ? null
-                                  : () => widget.onDocumentRemoved!(doc),
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                  ],
-                ),
+            Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(8),
               ),
+              width: double.infinity,
+              child: _chipsExpanded
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() => _chipsExpanded = false),
+                          child: Row(
+                            children: [
+                              const Spacer(),
+                              Text(
+                                'Hide',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                    ),
+                              ),
+                              Icon(
+                                Icons.expand_more,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ],
+                          ),
+                        ),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 160),
+                          child: SingleChildScrollView(
+                            child: Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              children: [
+                                for (final doc in widget.selectedDocuments)
+                                  Chip(
+                                    avatar: Icon(
+                                      getFileTypeIcon(
+                                        documentIconPath(doc),
+                                      ),
+                                      size: 16,
+                                    ),
+                                    label: Text(documentDisplayName(doc)),
+                                    deleteIcon: const Icon(
+                                      Icons.close,
+                                      size: 16,
+                                    ),
+                                    onDeleted:
+                                        widget.onDocumentRemoved == null ||
+                                                disabled
+                                            ? null
+                                            : () => widget.onDocumentRemoved!(
+                                                  doc,
+                                                ),
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _chipsExpanded = true),
+                      child: Row(
+                        children: [
+                          Text(
+                            '${widget.selectedDocuments.length} documents selected',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                          ),
+                          const Spacer(),
+                          Icon(
+                            Icons.expand_less,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                    ),
             ),
           Row(
             children: [

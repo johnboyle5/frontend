@@ -85,12 +85,12 @@ class _RoomScreenState extends State<RoomScreen> {
   // TODO: If a selected document is deleted server-side before send,
   // the backend silently returns empty results. Consider reconciling
   // selections against the fetched document list.
-  Map<String, dynamic>? _buildStateOverlay() {
+  Map<String, dynamic> _buildStateOverlay() {
     final selected = _selectedForCurrentThread;
-    if (selected.isEmpty) return null;
     return {
       'rag': <String, dynamic>{
-        'document_filter': buildDocumentFilter(selected.toList()),
+        'document_filter':
+            selected.isEmpty ? null : buildDocumentFilter(selected.toList()),
       },
     };
   }
