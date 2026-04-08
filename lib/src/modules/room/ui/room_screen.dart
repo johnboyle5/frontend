@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_client/soliplex_client.dart'
-    show SourceReferenceFormatting;
+    show RagDocument, SourceReferenceFormatting, buildDocumentFilter;
 import '../../auth/server_entry.dart';
 import '../../diagnostics/diagnostics_providers.dart';
 import '../../diagnostics/models/http_event_grouper.dart';
@@ -16,6 +16,7 @@ import '../run_registry.dart';
 import '../thread_list_state.dart';
 import '../thread_view_state.dart';
 import 'chat_input.dart';
+import 'document_picker.dart';
 import 'chunk_visualization_page.dart';
 import 'error_retry_panel.dart';
 import 'message_timeline.dart';
@@ -50,12 +51,57 @@ class _RoomScreenState extends State<RoomScreen> {
   void Function()? _autoSelectUnsub;
   final _chatController = TextEditingController();
   final _chatFocusNode = FocusNode();
+  Map<String?, Set<RagDocument>> _documentSelections = {};
+  Future<List<RagDocument>>? _documentsFuture;
+
+  Set<RagDocument> get _selectedForCurrentThread =>
+      _documentSelections[widget.threadId] ?? {};
+
+  void _updateSelection(Set<RagDocument> selection) {
+    setState(() {
+      _documentSelections = {
+        ..._documentSelections,
+        widget.threadId: selection,
+      };
+    });
+  }
+
+  void _fetchDocuments() {
+    _documentsFuture =
+        widget.serverEntry.connection.api.getDocuments(widget.roomId);
+  }
+
+  Future<void> _openDocumentPicker() async {
+    final threadId = widget.threadId;
+    final result = await showDocumentPicker(
+      context: context,
+      documentsFuture: _documentsFuture,
+      selected: _documentSelections[threadId] ?? {},
+    );
+    if (result != null && mounted) {
+      setState(() {
+        _documentSelections = {..._documentSelections, threadId: result};
+      });
+    }
+  }
+
+  Map<String, dynamic>? _buildStateOverlay() {
+    final selected = _selectedForCurrentThread;
+    if (selected.isEmpty) return null;
+    final titles = selected.map((d) => d.title).toList();
+    return {
+      'rag': <String, dynamic>{
+        'document_filter': buildDocumentFilter(titles),
+      },
+    };
+  }
 
   @override
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleKey);
     _state = _createRoomState();
+    _fetchDocuments();
     if (widget.threadId != null) {
       _state.selectThread(widget.threadId!);
     } else {
@@ -71,7 +117,9 @@ class _RoomScreenState extends State<RoomScreen> {
       _cancelAutoSelect();
       _state.dispose();
       _chatController.clear();
+      _documentSelections = {};
       _state = _createRoomState();
+      _fetchDocuments();
       if (widget.threadId != null) {
         _state.selectThread(widget.threadId!);
       } else {
@@ -81,6 +129,13 @@ class _RoomScreenState extends State<RoomScreen> {
       if (widget.threadId != null) {
         _cancelAutoSelect();
         _chatController.clear();
+        // Migrate selection from no-thread view to the newly created thread.
+        if (oldWidget.threadId == null) {
+          final pending = _documentSelections.remove(null);
+          if (pending != null && pending.isNotEmpty) {
+            _documentSelections[widget.threadId] = pending;
+          }
+        }
         _state.selectThread(widget.threadId!);
         setState(() {});
       } else {
@@ -156,6 +211,7 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   void _onThreadSelected(String threadId) {
+    _documentSelections.remove(null);
     context.go(
       '/room/${widget.serverEntry.alias}/${widget.roomId}/thread/$threadId',
     );
@@ -274,7 +330,10 @@ class _RoomScreenState extends State<RoomScreen> {
                 room: room,
                 onSuggestionTapped: sessionState != null
                     ? null
-                    : (suggestion) => _state.sendToNewThread(suggestion),
+                    : (suggestion) => _state.sendToNewThread(
+                          suggestion,
+                          stateOverlay: _buildStateOverlay(),
+                        ),
                 fallback: const Center(child: Text('Select a thread')),
               );
             },
@@ -286,11 +345,19 @@ class _RoomScreenState extends State<RoomScreen> {
             onDismiss: _state.clearError,
           ),
         ChatInput(
-          onSend: (text) => _state.sendToNewThread(text),
+          onSend: (text) => _state.sendToNewThread(
+            text,
+            stateOverlay: _buildStateOverlay(),
+          ),
           onCancel: _state.cancelSpawn,
           sessionState: _state.sessionState,
           controller: _chatController,
           focusNode: _chatFocusNode,
+          selectedDocuments: _selectedForCurrentThread,
+          onFilterTap: _openDocumentPicker,
+          onDocumentRemoved: (doc) => _updateSelection(
+            Set.of(_selectedForCurrentThread)..remove(doc),
+          ),
         ),
       ],
     );
@@ -324,8 +391,11 @@ class _RoomScreenState extends State<RoomScreen> {
                 streamingState: streaming,
                 executionTrackers: threadView.executionTrackers,
                 room: room,
-                onSuggestionTapped: (suggestion) =>
-                    threadView.sendMessage(suggestion, _state.runtime),
+                onSuggestionTapped: (suggestion) => threadView.sendMessage(
+                  suggestion,
+                  _state.runtime,
+                  stateOverlay: _buildStateOverlay(),
+                ),
                 onFeedbackSubmit: threadView.submitFeedback,
                 onInspect: (runId) {
                   final inspector = ProviderScope.containerOf(context)
@@ -358,12 +428,21 @@ class _RoomScreenState extends State<RoomScreen> {
             onDismiss: () => threadView.clearSendError(),
           ),
         ChatInput(
-          onSend: (text) => threadView.sendMessage(text, _state.runtime),
+          onSend: (text) => threadView.sendMessage(
+            text,
+            _state.runtime,
+            stateOverlay: _buildStateOverlay(),
+          ),
           onCancel: threadView.cancelRun,
           sessionState: threadView.sessionState,
           controller: _chatController,
           focusNode: _chatFocusNode,
           enabled: status is MessagesLoaded,
+          selectedDocuments: _selectedForCurrentThread,
+          onFilterTap: _openDocumentPicker,
+          onDocumentRemoved: (doc) => _updateSelection(
+            Set.of(_selectedForCurrentThread)..remove(doc),
+          ),
         ),
       ],
     );

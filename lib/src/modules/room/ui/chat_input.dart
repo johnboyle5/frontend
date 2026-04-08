@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
+import '../../../shared/file_type_icons.dart';
+
 class ChatInput extends StatefulWidget {
   const ChatInput({
     super.key,
@@ -12,6 +14,9 @@ class ChatInput extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.enabled = true,
+    this.selectedDocuments = const {},
+    this.onFilterTap,
+    this.onDocumentRemoved,
   });
 
   final void Function(String text) onSend;
@@ -20,6 +25,9 @@ class ChatInput extends StatefulWidget {
   final TextEditingController? controller;
   final FocusNode? focusNode;
   final bool enabled;
+  final Set<RagDocument> selectedDocuments;
+  final VoidCallback? onFilterTap;
+  final void Function(RagDocument doc)? onDocumentRemoved;
 
   @override
   State<ChatInput> createState() => _ChatInputState();
@@ -97,40 +105,82 @@ class _ChatInputState extends State<ChatInput> {
 
     return Padding(
       padding: const EdgeInsets.all(8),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: CallbackShortcuts(
-              bindings: {
-                const SingleActivator(LogicalKeyboardKey.enter): _send,
-              },
-              child: TextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                readOnly: disabled,
-                maxLines: null,
-                textInputAction: TextInputAction.newline,
-                decoration: const InputDecoration(
-                  hintText: 'Type a message...',
-                  border: OutlineInputBorder(),
+          if (widget.selectedDocuments.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  for (final doc in widget.selectedDocuments)
+                    Chip(
+                      avatar: Icon(
+                        getFileTypeIcon(documentIconPath(doc)),
+                        size: 16,
+                      ),
+                      label: Text(documentDisplayName(doc)),
+                      deleteIcon: const Icon(Icons.close, size: 16),
+                      onDeleted: widget.onDocumentRemoved == null
+                          ? null
+                          : () => widget.onDocumentRemoved!(doc),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+            ),
+          Row(
+            children: [
+              if (widget.onFilterTap != null)
+                IconButton(
+                  icon: Icon(
+                    Icons.filter_alt,
+                    color: widget.selectedDocuments.isNotEmpty
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                  tooltip: 'Filter documents',
+                  onPressed: disabled ? null : widget.onFilterTap,
+                ),
+              Expanded(
+                child: CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.enter): _send,
+                  },
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    readOnly: disabled,
+                    maxLines: null,
+                    textInputAction: TextInputAction.newline,
+                    decoration: const InputDecoration(
+                      hintText: 'Type a message...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 8),
+              if (active)
+                IconButton(
+                  icon: const Icon(Icons.stop),
+                  onPressed: widget.onCancel,
+                )
+              else
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _controller,
+                  builder: (context, value, _) => IconButton(
+                    icon: const Icon(Icons.send),
+                    onPressed:
+                        value.text.trim().isEmpty || disabled ? null : _send,
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(width: 8),
-          if (active)
-            IconButton(
-              icon: const Icon(Icons.stop),
-              onPressed: widget.onCancel,
-            )
-          else
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _controller,
-              builder: (context, value, _) => IconButton(
-                icon: const Icon(Icons.send),
-                onPressed: value.text.trim().isEmpty || disabled ? null : _send,
-              ),
-            ),
         ],
       ),
     );

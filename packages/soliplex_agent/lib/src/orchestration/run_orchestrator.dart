@@ -137,13 +137,20 @@ class RunOrchestrator {
     required ToolExecutorCallback toolExecutor,
     String? existingRunId,
     ThreadHistory? cachedHistory,
+    Map<String, dynamic>? stateOverlay,
   }) async {
     _guardRunToCompletion();
     _runToCompletionActive = true;
     _toolDepth = 0;
     try {
       try {
-        await _initializeStream(key, userMessage, existingRunId, cachedHistory);
+        await _initializeStream(
+          key,
+          userMessage,
+          existingRunId,
+          cachedHistory,
+          stateOverlay,
+        );
       } on Object catch (error, stackTrace) {
         _handleStartError(key, error, stackTrace);
         return _currentState;
@@ -171,7 +178,8 @@ class RunOrchestrator {
     _guardNotRunning();
     _toolDepth = 0;
     try {
-      final conversation = _buildConversation(key, userMessage, cachedHistory);
+      final conversation =
+          _buildConversation(key, userMessage, cachedHistory, null);
       final input = _buildInput(key, conversation);
       final handle = await _llmProvider.startRun(
         key: key,
@@ -316,8 +324,10 @@ class RunOrchestrator {
     String userMessage,
     String? existingRunId,
     ThreadHistory? cachedHistory,
+    Map<String, dynamic>? stateOverlay,
   ) async {
-    final conversation = _buildConversation(key, userMessage, cachedHistory);
+    final conversation =
+        _buildConversation(key, userMessage, cachedHistory, stateOverlay);
     final input = _buildInput(key, conversation);
     final handle = await _llmProvider.startRun(
       key: key,
@@ -541,6 +551,7 @@ class RunOrchestrator {
     ThreadKey key,
     String userMessage,
     ThreadHistory? cachedHistory,
+    Map<String, dynamic>? stateOverlay,
   ) {
     final priorMessages = cachedHistory?.messages ?? <ChatMessage>[];
     final userMsg = TextMessage.create(
@@ -548,7 +559,9 @@ class RunOrchestrator {
       user: ChatUser.user,
       text: userMessage,
     );
-    final aguiState = cachedHistory?.aguiState ?? const {};
+    final baseState = cachedHistory?.aguiState ?? const {};
+    final aguiState =
+        stateOverlay == null ? baseState : _mergeState(baseState, stateOverlay);
     _preRunAguiState = aguiState;
     _userMessageId = userMsg.id;
     return Conversation(
@@ -557,6 +570,31 @@ class RunOrchestrator {
       aguiState: aguiState,
       messageStates: cachedHistory?.messageStates ?? const {},
     );
+  }
+
+  /// Merges [overlay] into [base] one level deep.
+  ///
+  /// When both sides have a `Map` for the same key the inner maps are
+  /// spread-merged (overlay wins per inner key). Otherwise the [overlay]
+  /// value wins outright.
+  static Map<String, dynamic> _mergeState(
+    Map<String, dynamic> base,
+    Map<String, dynamic> overlay,
+  ) {
+    final result = Map<String, dynamic>.of(base);
+    for (final entry in overlay.entries) {
+      final existing = result[entry.key];
+      if (existing is Map<String, dynamic> &&
+          entry.value is Map<String, dynamic>) {
+        result[entry.key] = <String, dynamic>{
+          ...existing,
+          ...entry.value as Map<String, dynamic>,
+        };
+      } else {
+        result[entry.key] = entry.value;
+      }
+    }
+    return result;
   }
 
   SimpleRunAgentInput _buildInput(ThreadKey key, Conversation conversation) {
@@ -570,7 +608,10 @@ class RunOrchestrator {
     );
   }
 
-  void _subscribeToStream(Stream<BaseEvent> events, RunningState initialState) {
+  void _subscribeToStream(
+    Stream<BaseEvent> events,
+    RunningState initialState,
+  ) {
     // Cancel stale subscription from the previous run.
     unawaited(_subscription?.cancel());
     _subscription = null;

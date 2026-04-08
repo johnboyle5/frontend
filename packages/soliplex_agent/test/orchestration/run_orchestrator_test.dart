@@ -517,6 +517,60 @@ void main() {
     });
   });
 
+  group('stateOverlay', () {
+    test('runToCompletion merges stateOverlay into aguiState', () async {
+      stubCreateRun();
+      stubRunAgent(stream: Stream.fromIterable(_happyPathEvents()));
+
+      final result = await orchestrator.runToCompletion(
+        key: _key,
+        userMessage: 'test',
+        toolExecutor: (_) async => [],
+        stateOverlay: {
+          'rag': <String, dynamic>{'document_filter': "title = 'Report'"},
+        },
+      );
+
+      expect(result, isA<CompletedState>());
+      final completed = result as CompletedState;
+      final rag = completed.conversation.aguiState['rag'] as Map;
+      expect(rag['document_filter'], "title = 'Report'");
+    });
+
+    test('runToCompletion merges stateOverlay with cachedHistory aguiState',
+        () async {
+      stubCreateRun();
+      stubRunAgent(stream: Stream.fromIterable(_happyPathEvents()));
+
+      final history = ThreadHistory(
+        messages: const [],
+        aguiState: const {
+          'rag': <String, dynamic>{
+            'citations': <int>[1, 2, 3],
+          },
+          'other': 'data',
+        },
+      );
+
+      final result = await orchestrator.runToCompletion(
+        key: _key,
+        userMessage: 'test',
+        toolExecutor: (_) async => [],
+        cachedHistory: history,
+        stateOverlay: {
+          'rag': <String, dynamic>{'document_filter': "title = 'Report'"},
+        },
+      );
+
+      expect(result, isA<CompletedState>());
+      final completed = result as CompletedState;
+      final rag = completed.conversation.aguiState['rag'] as Map;
+      expect(rag['document_filter'], "title = 'Report'");
+      expect(rag['citations'], [1, 2, 3]);
+      expect(completed.conversation.aguiState['other'], 'data');
+    });
+  });
+
   group('tool yielding', () {
     test('pending client tools → ToolYieldingState', () async {
       orchestrator = RunOrchestrator(

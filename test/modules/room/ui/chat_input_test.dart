@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:signals_flutter/signals_flutter.dart';
-import 'package:soliplex_agent/soliplex_agent.dart';
+import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
 import 'package:soliplex_frontend/src/modules/room/ui/chat_input.dart';
 
@@ -123,5 +123,65 @@ void main() {
     expect(sentText, 'Hello');
 
     sessionState.dispose();
+  });
+
+  group('document chips', () {
+    testWidgets('displays selected document chips', (tester) async {
+      final docs = {
+        const RagDocument(id: '1', title: 'Report.pdf'),
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChatInput(
+              onSend: (_) {},
+              onCancel: () {},
+              selectedDocuments: docs,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Report.pdf'), findsOneWidget);
+    });
+
+    testWidgets('shows filter button when onFilterTap provided',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChatInput(
+              onSend: (_) {},
+              onCancel: () {},
+              onFilterTap: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byIcon(Icons.filter_alt), findsOneWidget);
+    });
+
+    testWidgets('calls onDocumentRemoved when chip deleted', (tester) async {
+      const doc = RagDocument(id: '1', title: 'Report.pdf');
+      RagDocument? removed;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChatInput(
+              onSend: (_) {},
+              onCancel: () {},
+              selectedDocuments: {doc},
+              onDocumentRemoved: (d) => removed = d,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.close).first);
+      expect(removed, doc);
+    });
   });
 }
