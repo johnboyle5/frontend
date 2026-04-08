@@ -572,11 +572,10 @@ class RunOrchestrator {
     );
   }
 
-  /// Merges [overlay] into [base] one level deep.
+  /// Recursively deep-merges [overlay] into [base].
   ///
-  /// When both sides have a `Map` for the same key the inner maps are
-  /// spread-merged (overlay wins per inner key). Otherwise the [overlay]
-  /// value wins outright.
+  /// When both sides have a `Map<String, dynamic>` for the same key the
+  /// maps are merged recursively. Otherwise the [overlay] value wins.
   static Map<String, dynamic> _mergeState(
     Map<String, dynamic> base,
     Map<String, dynamic> overlay,
@@ -586,10 +585,10 @@ class RunOrchestrator {
       final existing = result[entry.key];
       if (existing is Map<String, dynamic> &&
           entry.value is Map<String, dynamic>) {
-        result[entry.key] = <String, dynamic>{
-          ...existing,
-          ...entry.value as Map<String, dynamic>,
-        };
+        result[entry.key] = _mergeState(
+          existing,
+          entry.value as Map<String, dynamic>,
+        );
       } else {
         result[entry.key] = entry.value;
       }

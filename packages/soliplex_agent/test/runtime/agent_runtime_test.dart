@@ -225,7 +225,7 @@ void main() {
     });
 
     test('sends initial AG-UI state from createThread to backend', () async {
-      final stateOverlay = <String, dynamic>{
+      final initialState = <String, dynamic>{
         'rag': <String, dynamic>{
           'citations': <dynamic>[],
           'qa_history': <dynamic>[],
@@ -234,7 +234,7 @@ void main() {
       when(
         () => api.createThread(any()),
       ).thenAnswer(
-        (_) async => (_threadInfo(), stateOverlay),
+        (_) async => (_threadInfo(), initialState),
       );
       stubCreateRun();
       stubDeleteThread();
@@ -259,17 +259,17 @@ void main() {
       await session.result;
 
       expect(capturedInput, isNotNull);
-      expect(capturedInput!.state, equals(stateOverlay));
+      expect(capturedInput!.state, equals(initialState));
     });
 
     test('seedThreadState makes initial state available for spawn', () async {
-      final stateOverlay = <String, dynamic>{
+      final initialState = <String, dynamic>{
         'rag': <String, dynamic>{
           'citations': <dynamic>[],
           'qa_history': <dynamic>[],
         },
       };
-      runtime.seedThreadState(_threadId, stateOverlay);
+      runtime.seedThreadState(_threadId, initialState);
 
       stubCreateRun();
       stubDeleteThread();
@@ -295,7 +295,7 @@ void main() {
       await session.result;
 
       expect(capturedInput, isNotNull);
-      expect(capturedInput!.state, equals(stateOverlay));
+      expect(capturedInput!.state, equals(initialState));
     });
 
     test('session appears in activeSessions', () async {

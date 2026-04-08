@@ -64,6 +64,20 @@ void main() {
         );
       });
 
+      test('ignores blank titles', () {
+        expect(
+          buildDocumentFilter(['Report', '', '  ', 'Summary']),
+          equals("title IN ('Report', 'Summary')"),
+        );
+      });
+
+      test('throws when all titles are blank', () {
+        expect(
+          () => buildDocumentFilter(['', '  ']),
+          throwsArgumentError,
+        );
+      });
+
       test('throws on empty list', () {
         expect(
           () => buildDocumentFilter([]),

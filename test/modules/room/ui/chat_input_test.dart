@@ -184,6 +184,47 @@ void main() {
     sessionState.dispose();
   });
 
+  testWidgets('filter button disabled during active run', (tester) async {
+    bool filterTapped = false;
+    final sessionState = signal<AgentSessionState?>(AgentSessionState.running);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatInput(
+            onSend: (_) {},
+            onCancel: () {},
+            sessionState: sessionState,
+            onFilterTap: () => filterTapped = true,
+          ),
+        ),
+      ),
+    );
+
+    final button = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.filter_alt),
+    );
+    expect(button.onPressed, isNull);
+    expect(filterTapped, isFalse);
+
+    sessionState.dispose();
+  });
+
+  testWidgets('filter button hidden when onFilterTap is null', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatInput(
+            onSend: (_) {},
+            onCancel: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.filter_alt), findsNothing);
+  });
+
   group('document chips', () {
     testWidgets('displays selected document chips', (tester) async {
       final docs = {

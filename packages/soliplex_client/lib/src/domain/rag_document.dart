@@ -2,13 +2,20 @@ import 'package:meta/meta.dart';
 
 /// Builds a SQL-style filter expression for the given document [titles].
 ///
+/// Duplicate titles are collapsed. Blank titles are ignored.
+///
 /// Single title: `title = 'Report'`
 /// Multiple titles: `title IN ('Report', 'Summary')`
 String buildDocumentFilter(List<String> titles) {
-  if (titles.isEmpty) {
-    throw ArgumentError.value(titles, 'titles', 'must not be empty');
+  final nonBlank = titles.where((t) => t.trim().isNotEmpty).toSet();
+  if (nonBlank.isEmpty) {
+    throw ArgumentError.value(
+      titles,
+      'titles',
+      'must contain non-blank titles',
+    );
   }
-  final escaped = titles.toSet().map((t) => t.replaceAll("'", "''")).toList();
+  final escaped = nonBlank.map((t) => t.replaceAll("'", "''")).toList();
   if (escaped.length == 1) {
     return "title = '${escaped.first}'";
   }

@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:soliplex_client/soliplex_client.dart' hide State;
 
@@ -135,23 +137,25 @@ class _DocumentPickerState extends State<DocumentPicker> {
 
 /// Shows a document picker dialog and returns the updated selection.
 ///
-/// Accepts a [Future] so the dialog can open immediately and show a loading
-/// state while documents are being fetched.
+/// Accepts a [fetchDocuments] factory so the dialog can show a loading state
+/// and retry on failure.
 ///
 /// Returns `null` if the dialog is dismissed without confirming.
 Future<Set<RagDocument>?> showDocumentPicker({
   required BuildContext context,
-  required Future<List<RagDocument>>? documentsFuture,
+  required Future<List<RagDocument>> Function() fetchDocuments,
   required Set<RagDocument> selected,
 }) {
   var current = Set<RagDocument>.of(selected);
   int? filteredCount;
+  late Future<List<RagDocument>> documentsFuture;
+  documentsFuture = fetchDocuments();
   return showDialog<Set<RagDocument>>(
     context: context,
-    builder: (context) => FutureBuilder<List<RagDocument>>(
-      future: documentsFuture,
-      builder: (context, snapshot) => StatefulBuilder(
-        builder: (context, setDialogState) {
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => FutureBuilder<List<RagDocument>>(
+        future: documentsFuture,
+        builder: (context, snapshot) {
           final docs = snapshot.data;
           final String title;
           if (docs == null) {
@@ -164,21 +168,43 @@ Future<Set<RagDocument>?> showDocumentPicker({
           }
 
           final Widget content;
+          final bool canConfirm;
           if (snapshot.connectionState == ConnectionState.waiting) {
+            canConfirm = false;
             content = const SizedBox(
               height: 200,
               child: Center(child: CircularProgressIndicator()),
             );
           } else if (snapshot.hasError) {
+            canConfirm = false;
+            developer.log(
+              'Failed to load documents',
+              error: snapshot.error,
+              stackTrace: snapshot.stackTrace,
+            );
             content = Center(
-              child: Text(
-                'Failed to load documents.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Failed to load documents.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: () => setDialogState(() {
+                      documentsFuture = fetchDocuments();
+                    }),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
               ),
             );
           } else if (docs == null || docs.isEmpty) {
+            canConfirm = true;
             content = Center(
               child: Text(
                 'No documents in this room.',
@@ -188,6 +214,7 @@ Future<Set<RagDocument>?> showDocumentPicker({
               ),
             );
           } else {
+            canConfirm = true;
             content = DocumentPicker(
               documents: docs,
               selected: current,
@@ -209,7 +236,8 @@ Future<Set<RagDocument>?> showDocumentPicker({
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: () => Navigator.pop(context, current),
+                onPressed:
+                    canConfirm ? () => Navigator.pop(context, current) : null,
                 child: const Text('Done'),
               ),
             ],

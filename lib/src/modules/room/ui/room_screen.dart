@@ -16,8 +16,8 @@ import '../run_registry.dart';
 import '../thread_list_state.dart';
 import '../thread_view_state.dart';
 import 'chat_input.dart';
-import 'document_picker.dart';
 import 'chunk_visualization_page.dart';
+import 'document_picker.dart';
 import 'error_retry_panel.dart';
 import 'message_timeline.dart';
 import 'room_welcome.dart';
@@ -52,7 +52,6 @@ class _RoomScreenState extends State<RoomScreen> {
   final _chatController = TextEditingController();
   final _chatFocusNode = FocusNode();
   Map<String?, Set<RagDocument>> _documentSelections = {};
-  Future<List<RagDocument>>? _documentsFuture;
 
   Set<RagDocument> get _selectedForCurrentThread =>
       _documentSelections[widget.threadId] ?? {};
@@ -66,17 +65,12 @@ class _RoomScreenState extends State<RoomScreen> {
     });
   }
 
-  void _fetchDocuments() {
-    _documentsFuture =
-        widget.serverEntry.connection.api.getDocuments(widget.roomId);
-  }
-
   Future<void> _openDocumentPicker() async {
-    _fetchDocuments();
     final threadId = widget.threadId;
     final result = await showDocumentPicker(
       context: context,
-      documentsFuture: _documentsFuture,
+      fetchDocuments: () =>
+          widget.serverEntry.connection.api.getDocuments(widget.roomId),
       selected: _documentSelections[threadId] ?? {},
     );
     if (result != null && mounted) {
