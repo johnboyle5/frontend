@@ -1,0 +1,147 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:soliplex_client/soliplex_client.dart';
+
+import 'package:soliplex_frontend/src/modules/quiz/quiz_session.dart';
+import 'package:soliplex_frontend/src/modules/quiz/quiz_session_controller.dart';
+
+import '../../helpers/fakes.dart';
+
+void main() {
+  late FakeSoliplexApi api;
+  late QuizSessionController controller;
+
+  setUp(() {
+    api = FakeSoliplexApi();
+    controller = QuizSessionController(
+      api: api,
+      roomId: 'room-1',
+      quizId: 'quiz-1',
+    );
+  });
+
+  tearDown(() => controller.dispose());
+
+  test('initial state is QuizNotStarted', () {
+    expect(controller.session.value, isA<QuizNotStarted>());
+  });
+
+  test('start transitions to QuizInProgress', () {
+    controller.start(_quiz());
+    final state = controller.session.value;
+    expect(state, isA<QuizInProgress>());
+    expect((state as QuizInProgress).currentIndex, 0);
+  });
+
+  test('start throws on empty quiz', () {
+    expect(
+      () => controller.start(Quiz(
+        id: 'q',
+        title: 'Empty',
+        questions: const [],
+      )),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('updateInput transitions to Composing', () {
+    controller.start(_quiz());
+    controller.updateInput(const TextInput('hello'));
+    final state = controller.session.value as QuizInProgress;
+    expect(state.questionState, isA<Composing>());
+  });
+
+  test('clearInput returns to AwaitingInput', () {
+    controller.start(_quiz());
+    controller.updateInput(const TextInput('hello'));
+    controller.clearInput();
+    final state = controller.session.value as QuizInProgress;
+    expect(state.questionState, isA<AwaitingInput>());
+  });
+
+  test('submitAnswer transitions through Submitting to Answered', () async {
+    api.nextQuizAnswerResult = const CorrectAnswer();
+    controller.start(_quiz());
+    controller.updateInput(const TextInput('answer'));
+    await controller.submitAnswer();
+    final state = controller.session.value as QuizInProgress;
+    expect(state.questionState, isA<Answered>());
+    expect(
+      (state.questionState as Answered).result.isCorrect,
+      isTrue,
+    );
+    expect(controller.submissionError.value, isNull);
+  });
+
+  test('submitAnswer sets error on failure and preserves input', () async {
+    api.nextQuizAnswerError = Exception('network down');
+    controller.start(_quiz());
+    controller.updateInput(const TextInput('answer'));
+    await controller.submitAnswer();
+    final state = controller.session.value as QuizInProgress;
+    expect(state.questionState, isA<Composing>());
+    expect(controller.submissionError.value, contains('network down'));
+  });
+
+  test('updateInput clears submissionError', () async {
+    api.nextQuizAnswerError = Exception('fail');
+    controller.start(_quiz());
+    controller.updateInput(const TextInput('answer'));
+    await controller.submitAnswer();
+    expect(controller.submissionError.value, isNotNull);
+    controller.updateInput(const TextInput('new'));
+    expect(controller.submissionError.value, isNull);
+  });
+
+  test('nextQuestion advances index', () async {
+    api.nextQuizAnswerResult = const CorrectAnswer();
+    controller.start(_quiz());
+    controller.updateInput(const TextInput('a'));
+    await controller.submitAnswer();
+    controller.nextQuestion();
+    final state = controller.session.value as QuizInProgress;
+    expect(state.currentIndex, 1);
+    expect(state.questionState, isA<AwaitingInput>());
+  });
+
+  test('nextQuestion on last question transitions to QuizCompleted', () async {
+    final quiz = Quiz(
+      id: 'q',
+      title: 'One Q',
+      questions: const [
+        QuizQuestion(id: 'q-1', text: 'Q1', type: FreeForm()),
+      ],
+    );
+    api.nextQuizAnswerResult = const CorrectAnswer();
+    controller.start(quiz);
+    controller.updateInput(const TextInput('a'));
+    await controller.submitAnswer();
+    controller.nextQuestion();
+    expect(controller.session.value, isA<QuizCompleted>());
+  });
+
+  test('retake restarts from beginning', () async {
+    api.nextQuizAnswerResult = const CorrectAnswer();
+    controller.start(_quiz());
+    controller.updateInput(const TextInput('a'));
+    await controller.submitAnswer();
+    controller.retake();
+    final state = controller.session.value as QuizInProgress;
+    expect(state.currentIndex, 0);
+    expect(state.results, isEmpty);
+  });
+
+  test('reset returns to QuizNotStarted', () {
+    controller.start(_quiz());
+    controller.reset();
+    expect(controller.session.value, isA<QuizNotStarted>());
+  });
+}
+
+Quiz _quiz() => Quiz(
+      id: 'quiz-1',
+      title: 'Test',
+      questions: const [
+        QuizQuestion(id: 'q-1', text: 'Q1', type: FreeForm()),
+        QuizQuestion(id: 'q-2', text: 'Q2', type: FreeForm()),
+      ],
+    );
