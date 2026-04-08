@@ -7,12 +7,10 @@ class QuizSessionController {
   QuizSessionController({
     required SoliplexApi api,
     required this.roomId,
-    required this.quizId,
   }) : _api = api;
 
   final SoliplexApi _api;
   final String roomId;
-  final String quizId;
 
   final Signal<QuizSession> _session =
       Signal<QuizSession>(const QuizNotStarted());
@@ -22,6 +20,7 @@ class QuizSessionController {
   ReadonlySignal<String?> get submissionError => _submissionError;
 
   bool _isDisposed = false;
+  bool get isDisposed => _isDisposed;
 
   void start(Quiz quiz) {
     if (!quiz.hasQuestions) {
@@ -86,12 +85,17 @@ class QuizSessionController {
         results: newResults,
         questionState: Answered(input, result),
       );
-    } catch (e) {
+    } on Exception catch (e) {
       if (_isDisposed) return;
       final afterState = _session.value;
       if (afterState is! QuizInProgress) return;
       _session.value = afterState.copyWith(questionState: Composing(input));
-      _submissionError.value = '$e';
+      _submissionError.value = switch (e) {
+        NotFoundException() => 'This question is no longer available.',
+        NetworkException() =>
+          'Could not reach the server. Check your connection and try again.',
+        _ => 'Could not submit your answer. Please try again.',
+      };
     }
   }
 

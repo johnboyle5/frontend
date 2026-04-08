@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 
@@ -15,11 +17,12 @@ void main() {
     controller = QuizSessionController(
       api: api,
       roomId: 'room-1',
-      quizId: 'quiz-1',
     );
   });
 
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    if (!controller.isDisposed) controller.dispose();
+  });
 
   test('initial state is QuizNotStarted', () {
     expect(controller.session.value, isA<QuizNotStarted>());
@@ -79,7 +82,7 @@ void main() {
     await controller.submitAnswer();
     final state = controller.session.value as QuizInProgress;
     expect(state.questionState, isA<Composing>());
-    expect(controller.submissionError.value, contains('network down'));
+    expect(controller.submissionError.value, isNotNull);
   });
 
   test('updateInput clears submissionError', () async {
@@ -134,6 +137,90 @@ void main() {
     controller.start(_quiz());
     controller.reset();
     expect(controller.session.value, isA<QuizNotStarted>());
+  });
+
+  group('guard clauses', () {
+    test('updateInput ignored when Submitting', () async {
+      api.submitQuizAnswerCompleter = Completer<QuizAnswerResult>();
+      controller.start(_quiz());
+      controller.updateInput(const TextInput('original'));
+      // Start submit — transitions to Submitting
+      final future = controller.submitAnswer();
+      controller.updateInput(const TextInput('changed'));
+      final state = controller.session.value as QuizInProgress;
+      // Should still be Submitting with original input
+      expect(state.questionState, isA<Submitting>());
+      expect((state.questionState as Submitting).input.answerText, 'original');
+      // Complete the future to avoid dangling
+      api.submitQuizAnswerCompleter!.complete(const CorrectAnswer());
+      await future;
+    });
+
+    test('updateInput ignored when Answered', () async {
+      api.nextQuizAnswerResult = const CorrectAnswer();
+      controller.start(_quiz());
+      controller.updateInput(const TextInput('answer'));
+      await controller.submitAnswer();
+      controller.updateInput(const TextInput('new'));
+      final state = controller.session.value as QuizInProgress;
+      expect(state.questionState, isA<Answered>());
+    });
+
+    test('submitAnswer no-op when AwaitingInput', () async {
+      controller.start(_quiz());
+      await controller.submitAnswer();
+      final state = controller.session.value as QuizInProgress;
+      expect(state.questionState, isA<AwaitingInput>());
+    });
+
+    test('submitAnswer no-op when QuizNotStarted', () async {
+      await controller.submitAnswer();
+      expect(controller.session.value, isA<QuizNotStarted>());
+    });
+
+    test('nextQuestion no-op when Composing', () {
+      controller.start(_quiz());
+      controller.updateInput(const TextInput('hello'));
+      controller.nextQuestion();
+      final state = controller.session.value as QuizInProgress;
+      expect(state.currentIndex, 0);
+      expect(state.questionState, isA<Composing>());
+    });
+
+    test('clearInput no-op when AwaitingInput', () {
+      controller.start(_quiz());
+      controller.clearInput();
+      final state = controller.session.value as QuizInProgress;
+      expect(state.questionState, isA<AwaitingInput>());
+    });
+
+    test('retake no-op when QuizNotStarted', () {
+      controller.retake();
+      expect(controller.session.value, isA<QuizNotStarted>());
+    });
+  });
+
+  test('dispose during in-flight submit does not throw', () async {
+    final completer = Completer<QuizAnswerResult>();
+    api.submitQuizAnswerCompleter = completer;
+    controller.start(_quiz());
+    controller.updateInput(const TextInput('answer'));
+    final future = controller.submitAnswer();
+    controller.dispose();
+    completer.complete(const CorrectAnswer());
+    // Should complete without error
+    await future;
+  });
+
+  test('submission error uses user-friendly message', () async {
+    api.nextQuizAnswerError = Exception('raw error text');
+    controller.start(_quiz());
+    controller.updateInput(const TextInput('answer'));
+    await controller.submitAnswer();
+    expect(
+      controller.submissionError.value,
+      'Could not submit your answer. Please try again.',
+    );
   });
 }
 

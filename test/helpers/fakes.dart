@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:soliplex_agent/soliplex_agent.dart' hide AuthException;
 import 'package:soliplex_client/soliplex_client.dart'
     show
@@ -252,6 +254,8 @@ class FakeSoliplexApi extends SoliplexApi {
     throw StateError('FakeSoliplexApi: set nextQuiz or nextQuizError');
   }
 
+  Completer<QuizAnswerResult>? submitQuizAnswerCompleter;
+
   @override
   Future<QuizAnswerResult> submitQuizAnswer(
     String roomId,
@@ -260,6 +264,9 @@ class FakeSoliplexApi extends SoliplexApi {
     String answer, {
     CancelToken? cancelToken,
   }) async {
+    if (submitQuizAnswerCompleter != null) {
+      return submitQuizAnswerCompleter!.future;
+    }
     if (nextQuizAnswerError != null) throw nextQuizAnswerError!;
     if (nextQuizAnswerResult != null) return nextQuizAnswerResult!;
     throw StateError(

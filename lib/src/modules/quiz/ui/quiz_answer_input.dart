@@ -1,4 +1,3 @@
-// lib/src/modules/quiz/ui/quiz_answer_input.dart
 import 'package:flutter/material.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 

@@ -1,10 +1,6 @@
 import 'package:flutter/foundation.dart' show immutable, mapEquals;
 import 'package:soliplex_client/soliplex_client.dart';
 
-// ============================================================
-// QuizInput - answer input types
-// ============================================================
-
 sealed class QuizInput {
   const QuizInput();
 
@@ -65,10 +61,6 @@ class TextInput extends QuizInput {
   @override
   String toString() => 'TextInput($text)';
 }
-
-// ============================================================
-// QuestionState - submission state machine (null-free)
-// ============================================================
 
 /// State machine for the current question's answer submission.
 ///
@@ -174,10 +166,6 @@ class Answered extends QuestionState {
   String toString() => 'Answered($input, correct: ${result.isCorrect})';
 }
 
-// ============================================================
-// QuizSession - sealed state for quiz progression
-// ============================================================
-
 /// Sealed class representing the quiz session state.
 ///
 /// Use pattern matching for exhaustive handling:
@@ -234,6 +222,14 @@ class QuizInProgress extends QuizSession {
     required Map<String, QuizAnswerResult> results,
     required this.questionState,
   })  : assert(currentIndex >= 0, 'currentIndex must be non-negative'),
+        assert(
+          quiz.hasQuestions,
+          'Quiz must have at least one question',
+        ),
+        assert(
+          currentIndex < quiz.questionCount,
+          'currentIndex must be less than questionCount',
+        ),
         results = Map.unmodifiable(results);
 
   /// The quiz being taken.

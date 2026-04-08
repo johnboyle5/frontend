@@ -1,4 +1,3 @@
-// test/modules/quiz/ui/quiz_question_test.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_client/soliplex_client.dart';
@@ -87,5 +86,55 @@ void main() {
     ));
     expect(find.text('Network error'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
+  });
+
+  testWidgets('shows Next Question button when not last question',
+      (tester) async {
+    final session = QuizInProgress(
+      quiz: Quiz(id: 'q', title: 'T', questions: const [
+        QuizQuestion(id: 'q1', text: 'Q1', type: FreeForm()),
+        QuizQuestion(id: 'q2', text: 'Q2', type: FreeForm()),
+      ]),
+      currentIndex: 0,
+      results: const {'q1': CorrectAnswer()},
+      questionState: const Answered(TextInput('a'), CorrectAnswer()),
+    );
+    await tester.pumpWidget(wrap(
+      QuizQuestionView(
+        session: session,
+        answerController: TextEditingController(),
+        submissionError: null,
+        onSelectOption: (_) {},
+        onTextChanged: (_) {},
+        onSubmit: () {},
+        onNext: () {},
+        onRetry: () {},
+      ),
+    ));
+    expect(find.text('Next Question'), findsOneWidget);
+  });
+
+  testWidgets('shows See Results button on last question', (tester) async {
+    final session = QuizInProgress(
+      quiz: Quiz(id: 'q', title: 'T', questions: const [
+        QuizQuestion(id: 'q1', text: 'Q', type: FreeForm()),
+      ]),
+      currentIndex: 0,
+      results: const {'q1': CorrectAnswer()},
+      questionState: const Answered(TextInput('a'), CorrectAnswer()),
+    );
+    await tester.pumpWidget(wrap(
+      QuizQuestionView(
+        session: session,
+        answerController: TextEditingController(),
+        submissionError: null,
+        onSelectOption: (_) {},
+        onTextChanged: (_) {},
+        onSubmit: () {},
+        onNext: () {},
+        onRetry: () {},
+      ),
+    ));
+    expect(find.text('See Results'), findsOneWidget);
   });
 }

@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
-import '../../../modules/auth/server_entry.dart';
+import '../../auth/server_entry.dart';
 import '../quiz_session.dart';
 import '../quiz_session_controller.dart';
 import 'quiz_question.dart';
@@ -39,7 +39,6 @@ class _QuizScreenState extends State<QuizScreen> {
     _controller = QuizSessionController(
       api: api,
       roomId: widget.roomId,
-      quizId: widget.quizId,
     );
   }
 

@@ -47,4 +47,35 @@ void main() {
     await tester.tap(find.text('Intro Quiz'));
     expect(tapped, 'q1');
   });
+
+  testWidgets('shows expandable header for multiple quizzes', (tester) async {
+    await tester.pumpWidget(buildSidebar(
+      quizzes: {'q1': 'Quiz A', 'q2': 'Quiz B'},
+    ));
+    expect(find.text('Quizzes (2)'), findsOneWidget);
+    // Individual quizzes hidden until expanded
+    expect(find.text('Quiz A'), findsNothing);
+  });
+
+  testWidgets('expands to show individual quizzes on tap', (tester) async {
+    await tester.pumpWidget(buildSidebar(
+      quizzes: {'q1': 'Quiz A', 'q2': 'Quiz B'},
+    ));
+    await tester.tap(find.text('Quizzes (2)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Quiz A'), findsOneWidget);
+    expect(find.text('Quiz B'), findsOneWidget);
+  });
+
+  testWidgets('fires onQuizTapped for expanded quiz', (tester) async {
+    String? tapped;
+    await tester.pumpWidget(buildSidebar(
+      quizzes: {'q1': 'Quiz A', 'q2': 'Quiz B'},
+      onQuizTapped: (id) => tapped = id,
+    ));
+    await tester.tap(find.text('Quizzes (2)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Quiz B'));
+    expect(tapped, 'q2');
+  });
 }
