@@ -223,6 +223,7 @@ class _RoomScreenState extends State<RoomScreen> {
     final selectedThreadId = _state.activeThreadView?.threadId;
     final roomStatus = _state.room.watch(context);
     final room = roomStatus is RoomLoaded ? roomStatus.room : null;
+    final roomName = room?.name ?? widget.roomId;
 
     return Focus(
       autofocus: true,
@@ -237,6 +238,7 @@ class _RoomScreenState extends State<RoomScreen> {
             onCreateThread: _state.createThread,
             onNetworkInspector: _onNetworkInspector,
             onRoomInfo: _onRoomInfo,
+            roomName: roomName,
             onRetryThreads: () => _state.threadList.refresh(),
             quizzes: room?.quizzes ?? const {},
             onQuizTapped: _onQuizTapped,
@@ -288,6 +290,7 @@ class _RoomScreenState extends State<RoomScreen> {
                       Navigator.pop(drawerContext);
                       _onRoomInfo();
                     },
+                    roomName: roomName,
                     onRetryThreads: () => _state.threadList.refresh(),
                     quizzes: room?.quizzes ?? const {},
                     onQuizTapped: _onQuizTapped,

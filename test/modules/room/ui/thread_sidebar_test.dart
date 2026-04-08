@@ -17,6 +17,7 @@ void main() {
           onCreateThread: () {},
           onNetworkInspector: () {},
           onRoomInfo: () {},
+          roomName: 'Test Room',
           onRetryThreads: () {},
         ),
       ),
@@ -50,6 +51,7 @@ void main() {
           onCreateThread: () {},
           onNetworkInspector: () {},
           onRoomInfo: () {},
+          roomName: 'Test Room',
           onRetryThreads: () {},
         ),
       ),
@@ -80,6 +82,7 @@ void main() {
           onCreateThread: () {},
           onNetworkInspector: () {},
           onRoomInfo: () {},
+          roomName: 'Test Room',
           onRetryThreads: () {},
         ),
       ),
@@ -102,6 +105,7 @@ void main() {
           onCreateThread: () {},
           onNetworkInspector: () {},
           onRoomInfo: () {},
+          roomName: 'Test Room',
           onRetryThreads: () {},
         ),
       ),
@@ -125,6 +129,7 @@ void main() {
           onCreateThread: () {},
           onNetworkInspector: () => inspectorCalled = true,
           onRoomInfo: () {},
+          roomName: 'Test Room',
           onRetryThreads: () {},
         ),
       ),
@@ -134,7 +139,7 @@ void main() {
     expect(inspectorCalled, isTrue);
   });
 
-  testWidgets('shows Room Info button that fires callback', (tester) async {
+  testWidgets('shows room name button that fires onRoomInfo', (tester) async {
     bool infoCalled = false;
 
     await tester.pumpWidget(MaterialApp(
@@ -147,12 +152,13 @@ void main() {
           onCreateThread: () {},
           onNetworkInspector: () {},
           onRoomInfo: () => infoCalled = true,
+          roomName: 'My Room',
           onRetryThreads: () {},
         ),
       ),
     ));
 
-    await tester.tap(find.text('Room Info'));
+    await tester.tap(find.text('My Room'));
     expect(infoCalled, isTrue);
   });
 }
