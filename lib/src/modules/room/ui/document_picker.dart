@@ -95,30 +95,39 @@ class _DocumentPickerState extends State<DocumentPicker> {
             ),
           ),
         Flexible(
-          child: ListView.builder(
-            itemCount: filtered.length,
-            itemBuilder: (context, index) {
-              final doc = filtered[index];
-              final selected = widget.selected.contains(doc);
-              return CheckboxListTile(
-                secondary: Icon(getFileTypeIcon(documentIconPath(doc))),
-                title: Text(
-                  documentDisplayName(doc),
-                  overflow: TextOverflow.ellipsis,
+          child: filtered.isEmpty
+              ? Center(
+                  child: Text(
+                    'No documents found',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final doc = filtered[index];
+                    final selected = widget.selected.contains(doc);
+                    return CheckboxListTile(
+                      secondary: Icon(getFileTypeIcon(documentIconPath(doc))),
+                      title: Text(
+                        documentDisplayName(doc),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: doc.uri.isNotEmpty
+                          ? Text(
+                              doc.uri,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            )
+                          : null,
+                      value: selected,
+                      onChanged: (_) => _toggle(doc),
+                    );
+                  },
                 ),
-                subtitle: doc.uri.isNotEmpty
-                    ? Text(
-                        doc.uri,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      )
-                    : null,
-                value: selected,
-                onChanged: (_) => _toggle(doc),
-              );
-            },
-          ),
         ),
       ],
     );

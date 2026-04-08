@@ -149,7 +149,7 @@ class _ChatInputState extends State<ChatInput> {
                 IconButton(
                   icon: Icon(
                     Icons.filter_alt,
-                    color: widget.selectedDocuments.isNotEmpty
+                    color: widget.selectedDocuments.isNotEmpty && !disabled
                         ? Theme.of(context).colorScheme.primary
                         : null,
                   ),

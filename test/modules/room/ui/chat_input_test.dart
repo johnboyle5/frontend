@@ -175,10 +175,10 @@ void main() {
       ),
     );
 
-    // The close icon should still be present but the chip's onDeleted
-    // should be null, so tapping it should have no effect.
+    // onDeleted is null, which removes the delete icon entirely.
     final chip = tester.widget<Chip>(find.byType(Chip));
     expect(chip.onDeleted, isNull);
+    expect(find.byIcon(Icons.close), findsNothing);
     expect(removed, isNull);
 
     sessionState.dispose();

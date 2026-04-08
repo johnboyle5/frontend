@@ -254,6 +254,32 @@ void main() {
       expect(result, {_docs[0], _docs[2]});
     });
 
+    testWidgets('shows empty state when no documents', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDocumentPicker(
+                context: context,
+                fetchDocuments: () => Future.value(const []),
+                selected: const {},
+              ),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No documents in this room.'), findsOneWidget);
+      final doneButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Done'),
+      );
+      expect(doneButton.onPressed, isNotNull);
+    });
+
     testWidgets('cancel returns null', (tester) async {
       Set<RagDocument>? result;
 
