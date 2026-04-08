@@ -8,7 +8,8 @@ import 'package:soliplex_frontend/src/modules/room/ui/thread_sidebar.dart';
 
 void main() {
   testWidgets('shows loading indicator when loading', (tester) async {
-    await tester.pumpWidget(ProviderScope(child: MaterialApp(
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
       home: Scaffold(
         body: ThreadSidebar(
           threadListStatus: ThreadsLoading(),
@@ -41,7 +42,8 @@ void main() {
       ),
     ];
 
-    await tester.pumpWidget(ProviderScope(child: MaterialApp(
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
       home: Scaffold(
         body: ThreadSidebar(
           threadListStatus: ThreadsLoaded(threads),
@@ -71,7 +73,8 @@ void main() {
       ),
     ];
 
-    await tester.pumpWidget(ProviderScope(child: MaterialApp(
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
       home: Scaffold(
         body: ThreadSidebar(
           threadListStatus: ThreadsLoaded(threads),
@@ -93,7 +96,8 @@ void main() {
   testWidgets('shows back to lobby button', (tester) async {
     bool backCalled = false;
 
-    await tester.pumpWidget(ProviderScope(child: MaterialApp(
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
       home: Scaffold(
         body: ThreadSidebar(
           threadListStatus: ThreadsLoaded(const []),
@@ -116,7 +120,8 @@ void main() {
       (tester) async {
     bool inspectorCalled = false;
 
-    await tester.pumpWidget(ProviderScope(child: MaterialApp(
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
       home: Scaffold(
         body: ThreadSidebar(
           threadListStatus: ThreadsLoaded(const []),
@@ -138,7 +143,8 @@ void main() {
   testWidgets('shows Room Info button that fires callback', (tester) async {
     bool infoCalled = false;
 
-    await tester.pumpWidget(ProviderScope(child: MaterialApp(
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
       home: Scaffold(
         body: ThreadSidebar(
           threadListStatus: ThreadsLoaded(const []),

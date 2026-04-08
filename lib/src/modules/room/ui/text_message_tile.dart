@@ -59,8 +59,10 @@ class TextMessageTile extends StatelessWidget {
         const SizedBox(height: 4),
         Container(
           padding: isUser
-              ? const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s5, vertical: SoliplexSpacing.s2)
-              : const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s5, vertical: SoliplexSpacing.s1),
+              ? const EdgeInsets.symmetric(
+                  horizontal: SoliplexSpacing.s5, vertical: SoliplexSpacing.s2)
+              : const EdgeInsets.symmetric(
+                  horizontal: SoliplexSpacing.s5, vertical: SoliplexSpacing.s1),
           decoration: BoxDecoration(
             color: isUser
                 ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)

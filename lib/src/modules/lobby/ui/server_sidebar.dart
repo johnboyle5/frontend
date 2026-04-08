@@ -62,7 +62,8 @@ class _ServerList extends StatelessWidget {
     return ListView(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(SoliplexSpacing.s5, SoliplexSpacing.s4, 0, SoliplexSpacing.s3),
+          padding: const EdgeInsets.fromLTRB(
+              SoliplexSpacing.s5, SoliplexSpacing.s4, 0, SoliplexSpacing.s3),
           child: Row(
             children: [
               Expanded(

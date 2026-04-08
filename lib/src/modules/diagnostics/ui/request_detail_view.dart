@@ -182,8 +182,7 @@ class _RequestDetailViewState extends State<RequestDetailView>
                     : null,
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                border: OutlineInputBorder(
-                ),
+                border: OutlineInputBorder(),
               ),
             ),
           ),

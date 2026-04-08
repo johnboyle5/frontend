@@ -22,8 +22,8 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
-          child: MaterialApp(
-              home: NetworkInspectorScreen(inspector: inspector)),
+          child:
+              MaterialApp(home: NetworkInspectorScreen(inspector: inspector)),
         ),
       );
       expect(find.text('No HTTP requests yet'), findsOneWidget);
@@ -46,8 +46,8 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          child: MaterialApp(
-              home: NetworkInspectorScreen(inspector: inspector)),
+          child:
+              MaterialApp(home: NetworkInspectorScreen(inspector: inspector)),
         ),
       );
       expect(find.text('GET'), findsOneWidget);
@@ -56,8 +56,8 @@ void main() {
     testWidgets('clear button is disabled when no events', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
-          child: MaterialApp(
-              home: NetworkInspectorScreen(inspector: inspector)),
+          child:
+              MaterialApp(home: NetworkInspectorScreen(inspector: inspector)),
         ),
       );
       final button = tester.widget<IconButton>(
@@ -70,8 +70,8 @@ void main() {
       inspector.onRequest(createRequestEvent());
       await tester.pumpWidget(
         ProviderScope(
-          child: MaterialApp(
-              home: NetworkInspectorScreen(inspector: inspector)),
+          child:
+              MaterialApp(home: NetworkInspectorScreen(inspector: inspector)),
         ),
       );
       final button = tester.widget<IconButton>(
@@ -90,8 +90,8 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          child: MaterialApp(
-              home: NetworkInspectorScreen(inspector: inspector)),
+          child:
+              MaterialApp(home: NetworkInspectorScreen(inspector: inspector)),
         ),
       );
 

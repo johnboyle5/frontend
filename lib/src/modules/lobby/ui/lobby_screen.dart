@@ -280,9 +280,10 @@ class _ServerSection extends StatelessWidget {
             ),
             child: Text(
               heading,
-              style: MediaQuery.sizeOf(context).width < SoliplexBreakpoints.tablet
-                  ? Theme.of(context).textTheme.headlineSmall
-                  : Theme.of(context).textTheme.headlineLarge,
+              style:
+                  MediaQuery.sizeOf(context).width < SoliplexBreakpoints.tablet
+                      ? Theme.of(context).textTheme.headlineSmall
+                      : Theme.of(context).textTheme.headlineLarge,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -294,22 +295,24 @@ class _ServerSection extends StatelessWidget {
               child: LinearProgressIndicator(),
             ),
           RoomsFailed(:final error) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s9),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s9),
               child: Text('Failed to load rooms: $error'),
             ),
           RoomsLoaded(:final rooms) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s9),
-            child: Column(
-              children: [
-                for (final room in rooms)
-                  RoomCard(
-                    room: room,
-                    onTap: () => onRoomTap(serverId, room.id),
-                    onInfoTap: () => onInfoTap(serverId, room.id),
-                  ),
-              ],
+              padding:
+                  const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s9),
+              child: Column(
+                children: [
+                  for (final room in rooms)
+                    RoomCard(
+                      room: room,
+                      onTap: () => onRoomTap(serverId, room.id),
+                      onInfoTap: () => onInfoTap(serverId, room.id),
+                    ),
+                ],
+              ),
             ),
-          ),
         },
       ],
     );

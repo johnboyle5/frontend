@@ -90,7 +90,8 @@ class _SuggestionChip extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s4, vertical: SoliplexSpacing.s1),
+            padding: const EdgeInsets.symmetric(
+                horizontal: SoliplexSpacing.s4, vertical: SoliplexSpacing.s1),
             decoration: BoxDecoration(
               border: Border.all(color: theme.colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(8),
