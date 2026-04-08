@@ -167,7 +167,7 @@ class _RoomScreenState extends State<RoomScreen> {
     if (!mounted) return;
     final path =
         '/room/${widget.serverEntry.alias}/${widget.roomId}/thread/$threadId';
-    if (replace) {
+    if (replace || widget.threadId == null) {
       context.replace(path);
     } else {
       context.go(path);

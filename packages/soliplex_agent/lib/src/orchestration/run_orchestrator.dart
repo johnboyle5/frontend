@@ -575,7 +575,8 @@ class RunOrchestrator {
   /// Recursively deep-merges [overlay] into [base].
   ///
   /// When both sides have a `Map` for the same key the maps are merged
-  /// recursively. Otherwise the [overlay] value wins.
+  /// recursively. Otherwise the [overlay] value wins — including `List`s,
+  /// which are replaced entirely, not concatenated.
   static Map<String, dynamic> _mergeState(
     Map<String, dynamic> base,
     Map<String, dynamic> overlay,

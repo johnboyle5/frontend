@@ -57,6 +57,15 @@ void main() {
         );
       });
 
+      test('escapes multiple single quotes in one id', () {
+        expect(
+          buildDocumentFilter(
+            [const RagDocument(id: "o'connor's", title: 'Report')],
+          ),
+          equals("id = 'o''connor''s'"),
+        );
+      });
+
       test('deduplicates by id', () {
         expect(
           buildDocumentFilter([

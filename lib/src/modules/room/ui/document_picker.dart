@@ -59,6 +59,7 @@ class _DocumentPickerState extends State<DocumentPicker> {
               suffixIcon: _query.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear),
+                      tooltip: 'Clear search',
                       onPressed: () {
                         setState(() {
                           _searchController.clear();
