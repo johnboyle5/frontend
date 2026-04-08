@@ -37,6 +37,69 @@ void main() {
       expect(selected, 'A');
     });
 
+    testWidgets('shows check icon on correct selected option', (tester) async {
+      await tester.pumpWidget(wrap(
+        QuizMultipleChoiceInput(
+          options: const ['A', 'B'],
+          selectedOption: 'A',
+          questionState: const Answered(
+            MultipleChoiceInput('A'),
+            CorrectAnswer(),
+          ),
+          onSelected: (_) {},
+        ),
+      ));
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    });
+
+    testWidgets('shows cancel icon on wrong selected option', (tester) async {
+      await tester.pumpWidget(wrap(
+        QuizMultipleChoiceInput(
+          options: const ['A', 'B'],
+          selectedOption: 'A',
+          questionState: const Answered(
+            MultipleChoiceInput('A'),
+            IncorrectAnswer(expectedAnswer: 'B'),
+          ),
+          onSelected: (_) {},
+        ),
+      ));
+      expect(find.byIcon(Icons.cancel), findsOneWidget);
+    });
+
+    testWidgets('highlights correct option when answer is incorrect',
+        (tester) async {
+      await tester.pumpWidget(wrap(
+        QuizMultipleChoiceInput(
+          options: const ['A', 'B'],
+          selectedOption: 'A',
+          questionState: const Answered(
+            MultipleChoiceInput('A'),
+            IncorrectAnswer(expectedAnswer: 'B'),
+          ),
+          onSelected: (_) {},
+        ),
+      ));
+      // The correct option 'B' should show check_circle
+      // The wrong selected option 'A' should show cancel
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+      expect(find.byIcon(Icons.cancel), findsOneWidget);
+    });
+
+    testWidgets('disables options when submitting', (tester) async {
+      String? selected;
+      await tester.pumpWidget(wrap(
+        QuizMultipleChoiceInput(
+          options: const ['A', 'B'],
+          selectedOption: 'A',
+          questionState: const Submitting(MultipleChoiceInput('A')),
+          onSelected: (v) => selected = v,
+        ),
+      ));
+      await tester.tap(find.text('B'));
+      expect(selected, isNull);
+    });
+
     testWidgets('disables options when answered', (tester) async {
       String? selected;
       await tester.pumpWidget(wrap(
@@ -80,6 +143,19 @@ void main() {
       ));
       await tester.enterText(find.byType(TextField), 'hello');
       expect(changed, 'hello');
+    });
+
+    testWidgets('disables text field when submitting', (tester) async {
+      await tester.pumpWidget(wrap(
+        QuizTextInput(
+          controller: TextEditingController(text: 'answer'),
+          questionState: const Submitting(TextInput('answer')),
+          onChanged: (_) {},
+          onSubmitted: () {},
+        ),
+      ));
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(textField.enabled, isFalse);
     });
 
     testWidgets('disables text field when answered', (tester) async {

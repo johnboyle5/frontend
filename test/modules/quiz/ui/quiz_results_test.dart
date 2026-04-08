@@ -34,6 +34,69 @@ void main() {
     expect(find.text('1 of 2 correct'), findsOneWidget);
   });
 
+  testWidgets('shows trophy icon for score >= 70%', (tester) async {
+    await tester.pumpWidget(wrap(
+      QuizResultsView(
+        session: QuizCompleted(
+          quiz: Quiz(id: 'q', title: 'T', questions: const [
+            QuizQuestion(id: 'q1', text: 'Q', type: FreeForm()),
+            QuizQuestion(id: 'q2', text: 'Q', type: FreeForm()),
+            QuizQuestion(id: 'q3', text: 'Q', type: FreeForm()),
+          ]),
+          results: const {
+            'q1': CorrectAnswer(),
+            'q2': CorrectAnswer(),
+            'q3': IncorrectAnswer(expectedAnswer: 'X'),
+          },
+        ),
+        onBack: () {},
+        onRetake: () {},
+      ),
+    ));
+    expect(find.text('66%'), findsOneWidget);
+    expect(find.byIcon(Icons.thumb_up), findsOneWidget);
+  });
+
+  testWidgets('shows refresh icon for score < 40%', (tester) async {
+    await tester.pumpWidget(wrap(
+      QuizResultsView(
+        session: QuizCompleted(
+          quiz: Quiz(id: 'q', title: 'T', questions: const [
+            QuizQuestion(id: 'q1', text: 'Q', type: FreeForm()),
+            QuizQuestion(id: 'q2', text: 'Q', type: FreeForm()),
+            QuizQuestion(id: 'q3', text: 'Q', type: FreeForm()),
+          ]),
+          results: const {
+            'q1': CorrectAnswer(),
+            'q2': IncorrectAnswer(expectedAnswer: 'X'),
+            'q3': IncorrectAnswer(expectedAnswer: 'Y'),
+          },
+        ),
+        onBack: () {},
+        onRetake: () {},
+      ),
+    ));
+    expect(find.text('33%'), findsOneWidget);
+    expect(find.byIcon(Icons.refresh), findsOneWidget);
+  });
+
+  testWidgets('shows trophy icon for perfect score', (tester) async {
+    await tester.pumpWidget(wrap(
+      QuizResultsView(
+        session: QuizCompleted(
+          quiz: Quiz(id: 'q', title: 'T', questions: const [
+            QuizQuestion(id: 'q1', text: 'Q', type: FreeForm()),
+          ]),
+          results: const {'q1': CorrectAnswer()},
+        ),
+        onBack: () {},
+        onRetake: () {},
+      ),
+    ));
+    expect(find.text('100%'), findsOneWidget);
+    expect(find.byIcon(Icons.emoji_events), findsOneWidget);
+  });
+
   testWidgets('back and retake buttons fire callbacks', (tester) async {
     bool backCalled = false;
     bool retakeCalled = false;

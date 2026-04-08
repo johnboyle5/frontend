@@ -87,6 +87,21 @@ void main() {
     expect(find.text('Quiz B'), findsOneWidget);
   });
 
+  testWidgets('collapses expanded quizzes on second tap', (tester) async {
+    await tester.pumpWidget(buildSidebar(
+      quizzes: {'q1': 'Quiz A', 'q2': 'Quiz B'},
+    ));
+    // Expand
+    await tester.tap(find.text('Quizzes (2)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Quiz A'), findsOneWidget);
+
+    // Collapse
+    await tester.tap(find.text('Quizzes (2)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Quiz A'), findsNothing);
+  });
+
   testWidgets('fires onQuizTapped for expanded quiz', (tester) async {
     String? tapped;
     await tester.pumpWidget(buildSidebar(

@@ -140,6 +140,16 @@ void main() {
     expect(controller.session.value, isA<QuizNotStarted>());
   });
 
+  test('reset clears submissionError', () async {
+    api.nextQuizAnswerError = Exception('fail');
+    controller.start(_quiz());
+    controller.updateInput(const TextInput('answer'));
+    await controller.submitAnswer();
+    expect(controller.submissionError.value, isNotNull);
+    controller.reset();
+    expect(controller.submissionError.value, isNull);
+  });
+
   group('guard clauses', () {
     test('updateInput ignored when Submitting', () async {
       api.submitQuizAnswerCompleter = Completer<QuizAnswerResult>();

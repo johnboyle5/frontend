@@ -149,6 +149,121 @@ void main() {
     expect(find.text('1 of 1 correct'), findsOneWidget);
   });
 
+  testWidgets('multiple choice flow: select, submit, see result',
+      (tester) async {
+    api.nextQuiz = Quiz(
+      id: 'quiz-1',
+      title: 'MC Quiz',
+      questions: [
+        QuizQuestion(
+          id: 'q1',
+          text: 'Pick the capital of France',
+          type: MultipleChoice(['London', 'Paris', 'Berlin']),
+        ),
+      ],
+    );
+    api.nextQuizAnswerResult = const CorrectAnswer();
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    // Start the quiz
+    await tester.tap(find.text('Start Quiz'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pick the capital of France'), findsOneWidget);
+
+    // Select an option
+    await tester.tap(find.text('Paris'));
+    await tester.pumpAndSettle();
+
+    // Submit
+    await tester.tap(find.text('Submit Answer'));
+    await tester.pumpAndSettle();
+
+    // See result and proceed
+    expect(find.text('Correct!'), findsOneWidget);
+    await tester.tap(find.text('See Results'));
+    await tester.pumpAndSettle();
+    expect(find.text('Quiz Complete!'), findsOneWidget);
+    expect(find.text('100%'), findsOneWidget);
+  });
+
+  testWidgets('submission error displays and clears on new input',
+      (tester) async {
+    api.nextQuiz = Quiz(
+      id: 'quiz-1',
+      title: 'Test Quiz',
+      questions: const [
+        QuizQuestion(id: 'q1', text: 'Q?', type: FreeForm()),
+      ],
+    );
+    api.nextQuizAnswerError = Exception('server error');
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    // Start quiz and submit
+    await tester.tap(find.text('Start Quiz'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'answer');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Submit Answer'));
+    await tester.pumpAndSettle();
+
+    // Error should be visible
+    expect(
+      find.text('Could not submit your answer. Please try again.'),
+      findsOneWidget,
+    );
+
+    // Typing new input should clear the error
+    await tester.enterText(find.byType(TextField), 'new answer');
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Could not submit your answer. Please try again.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('returnRoute parameter navigates to custom route',
+      (tester) async {
+    api.nextQuiz = Quiz(
+      id: 'quiz-1',
+      title: 'Test Quiz',
+      questions: const [
+        QuizQuestion(id: 'q1', text: 'Q?', type: FreeForm()),
+      ],
+    );
+    final entry = createTestServerEntry(api: api);
+    final router = GoRouter(
+      initialLocation: '/room/test-server-8000/room-1/quiz/quiz-1',
+      routes: [
+        GoRoute(
+          path: '/room/:alias/:roomId/quiz/:quizId',
+          builder: (_, state) => QuizScreen(
+            serverEntry: entry,
+            roomId: 'room-1',
+            quizId: 'quiz-1',
+            returnRoute: '/lobby',
+          ),
+        ),
+        GoRoute(
+          path: '/room/:alias/:roomId',
+          builder: (_, __) => const Scaffold(body: Text('Room screen')),
+        ),
+        GoRoute(
+          path: '/lobby',
+          builder: (_, __) => const Scaffold(body: Text('Lobby screen')),
+        ),
+      ],
+    );
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    // On start screen, back should navigate to returnRoute (/lobby)
+    await tester.tap(find.byTooltip('Back to room'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lobby screen'), findsOneWidget);
+  });
+
   testWidgets('retake clears state and restarts quiz', (tester) async {
     api.nextQuiz = Quiz(
       id: 'quiz-1',

@@ -25,6 +25,44 @@ void main() {
     expect(tappedQuizId, 'q1');
   });
 
+  testWidgets('shows singular header for one quiz', (tester) async {
+    await tester.pumpWidget(wrap(
+      RoomWelcome(
+        room: Room(
+          id: 'room-1',
+          name: 'Test Room',
+          quizzes: {'q1': 'Intro Quiz'},
+        ),
+        fallback: const Text('fallback'),
+      ),
+    ));
+    expect(find.text('Quiz Available'), findsOneWidget);
+  });
+
+  testWidgets('shows plural header for multiple quizzes', (tester) async {
+    await tester.pumpWidget(wrap(
+      RoomWelcome(
+        room: Room(
+          id: 'room-1',
+          name: 'Test Room',
+          quizzes: {'q1': 'Quiz A', 'q2': 'Quiz B'},
+        ),
+        fallback: const Text('fallback'),
+      ),
+    ));
+    expect(find.text('2 Quizzes Available'), findsOneWidget);
+  });
+
+  testWidgets('shows fallback when room has no content', (tester) async {
+    await tester.pumpWidget(wrap(
+      const RoomWelcome(
+        room: Room(id: 'room-1', name: 'Empty Room'),
+        fallback: Text('fallback'),
+      ),
+    ));
+    expect(find.text('fallback'), findsOneWidget);
+  });
+
   testWidgets('hides quiz section when no quizzes', (tester) async {
     await tester.pumpWidget(wrap(
       RoomWelcome(
