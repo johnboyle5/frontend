@@ -38,6 +38,7 @@ class RoomScreen extends StatefulWidget {
     required this.threadId,
     required this.runtimeManager,
     required this.registry,
+    this.enableDocumentFilter = false,
     required this.documentSelections,
   });
 
@@ -46,6 +47,7 @@ class RoomScreen extends StatefulWidget {
   final String? threadId;
   final AgentRuntimeManager runtimeManager;
   final RunRegistry registry;
+  final bool enableDocumentFilter;
   final DocumentSelections documentSelections;
 
   @override
@@ -58,14 +60,17 @@ class _RoomScreenState extends State<RoomScreen> {
   final _chatController = TextEditingController();
   final _chatFocusNode = FocusNode();
 
-  DocumentSelections get _selections => widget.documentSelections;
+  bool get _filterEnabled => widget.enableDocumentFilter;
 
-  Set<RagDocument> get _selectedForCurrentThread =>
-      _selections.get(widget.roomId, widget.threadId);
+  DocumentSelections get _documentSelections => widget.documentSelections;
+
+  Set<RagDocument> get _selectedDocuments => _filterEnabled
+      ? _documentSelections.get(widget.roomId, widget.threadId)
+      : const {};
 
   void _updateSelection(Set<RagDocument> selection) {
     setState(() {
-      _selections.set(widget.roomId, widget.threadId, selection);
+      _documentSelections.set(widget.roomId, widget.threadId, selection);
     });
   }
 
@@ -76,11 +81,11 @@ class _RoomScreenState extends State<RoomScreen> {
       context: context,
       fetchDocuments: () =>
           widget.serverEntry.connection.api.getDocuments(roomId),
-      selected: _selections.get(roomId, threadId),
+      selected: _documentSelections.get(roomId, threadId),
     );
     if (result != null && mounted) {
       setState(() {
-        _selections.set(roomId, threadId, result);
+        _documentSelections.set(roomId, threadId, result);
       });
     }
   }
@@ -88,8 +93,9 @@ class _RoomScreenState extends State<RoomScreen> {
   // TODO: If a selected document is deleted server-side before send,
   // the backend silently returns empty results. Consider reconciling
   // selections against the fetched document list.
-  Map<String, dynamic> _buildStateOverlay() {
-    final selected = _selectedForCurrentThread;
+  Map<String, dynamic>? _buildStateOverlay() {
+    if (!_filterEnabled) return null;
+    final selected = _selectedDocuments;
     return {
       'rag': <String, dynamic>{
         'document_filter':
@@ -129,10 +135,8 @@ class _RoomScreenState extends State<RoomScreen> {
       if (widget.threadId != null) {
         _cancelAutoSelect();
         _chatController.clear();
-        // User may select documents before a thread exists; carry that
-        // selection forward into the newly created thread.
-        if (oldWidget.threadId == null) {
-          _selections.migrateToThread(widget.roomId, widget.threadId!);
+        if (_filterEnabled && oldWidget.threadId == null) {
+          _documentSelections.migrateToThread(widget.roomId, widget.threadId!);
         }
         _state.selectThread(widget.threadId!);
         setState(() {});
@@ -360,11 +364,13 @@ class _RoomScreenState extends State<RoomScreen> {
           sessionState: _state.sessionState,
           controller: _chatController,
           focusNode: _chatFocusNode,
-          selectedDocuments: _selectedForCurrentThread,
-          onFilterTap: _openDocumentPicker,
-          onDocumentRemoved: (doc) => _updateSelection(
-            Set.of(_selectedForCurrentThread)..remove(doc),
-          ),
+          selectedDocuments: _selectedDocuments,
+          onFilterTap: _filterEnabled ? _openDocumentPicker : null,
+          onDocumentRemoved: _filterEnabled
+              ? (doc) => _updateSelection(
+                    Set.of(_selectedDocuments)..remove(doc),
+                  )
+              : null,
         ),
       ],
     );
@@ -450,11 +456,13 @@ class _RoomScreenState extends State<RoomScreen> {
           controller: _chatController,
           focusNode: _chatFocusNode,
           enabled: status is MessagesLoaded,
-          selectedDocuments: _selectedForCurrentThread,
-          onFilterTap: _openDocumentPicker,
-          onDocumentRemoved: (doc) => _updateSelection(
-            Set.of(_selectedForCurrentThread)..remove(doc),
-          ),
+          selectedDocuments: _selectedDocuments,
+          onFilterTap: _filterEnabled ? _openDocumentPicker : null,
+          onDocumentRemoved: _filterEnabled
+              ? (doc) => _updateSelection(
+                    Set.of(_selectedDocuments)..remove(doc),
+                  )
+              : null,
         ),
       ],
     );
