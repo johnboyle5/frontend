@@ -49,19 +49,24 @@ class ThreadListState {
   }
 
   Future<void> renameThread(String threadId, String name) async {
+    if (name.trim().isEmpty) {
+      throw ArgumentError.value(name, 'name', 'must not be empty');
+    }
     if (_isDisposed) return;
 
     // The backend replaces all metadata on update, so we must re-send
     // existing fields to avoid losing them.
     final current = _threads.value;
-    String? description;
-    if (current is ThreadsLoaded) {
-      final raw = current.threads
-          .where((t) => t.id == threadId)
-          .firstOrNull
-          ?.description;
-      if (raw != null && raw.isNotEmpty) description = raw;
+    if (current is! ThreadsLoaded) {
+      throw StateError(
+        'Cannot rename: thread list not loaded. '
+        'Existing metadata would be lost.',
+      );
     }
+    final existing = current.threads.where((t) => t.id == threadId).firstOrNull;
+    final rawDesc = existing?.description;
+    final description =
+        (rawDesc != null && rawDesc.isNotEmpty) ? rawDesc : null;
 
     await _connection.api.updateThreadMetadata(
       _roomId,

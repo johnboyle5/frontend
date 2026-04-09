@@ -416,6 +416,9 @@ class SoliplexApi {
   }) async {
     _requireNonEmpty(roomId, 'roomId');
     _requireNonEmpty(threadId, 'threadId');
+    if (name == null && description == null) {
+      throw ArgumentError('At least one metadata field must be provided');
+    }
 
     await _transport.request<void>(
       'POST',

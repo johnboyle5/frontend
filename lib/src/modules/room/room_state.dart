@@ -124,22 +124,23 @@ class RoomState {
   /// thread. Navigates to the next available thread, or null if none.
   Future<void> deleteThread(String threadId) async {
     await threadList.deleteThread(threadId);
-    unawaited(threadList.refresh());
 
-    if (_activeThreadView?.threadId != threadId) return;
+    if (_activeThreadView?.threadId == threadId) {
+      _activeThreadView?.cancelRun();
+      _activeThreadView?.dispose();
+      _activeThreadView = null;
 
-    _activeThreadView?.cancelRun();
-    _activeThreadView?.dispose();
-    _activeThreadView = null;
-
-    final current = threadList.threads.value;
-    if (current is ThreadsLoaded && current.threads.isNotEmpty) {
-      final nextId = current.threads.first.id;
-      selectThread(nextId);
-      onNavigateToThread?.call(nextId);
-    } else {
-      onNavigateToThread?.call(null);
+      final current = threadList.threads.value;
+      if (current is ThreadsLoaded && current.threads.isNotEmpty) {
+        final nextId = current.threads.first.id;
+        selectThread(nextId);
+        onNavigateToThread?.call(nextId);
+      } else {
+        onNavigateToThread?.call(null);
+      }
     }
+
+    unawaited(threadList.refresh());
   }
 
   Future<void> renameThread(String threadId, String name) async {

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,6 +24,7 @@ import 'chunk_visualization_page.dart';
 import 'document_picker.dart';
 import 'error_retry_panel.dart';
 import 'message_timeline.dart';
+import 'async_action_dialog.dart';
 import 'room_welcome.dart';
 import 'thread_sidebar.dart';
 
@@ -240,7 +240,7 @@ class _RoomScreenState extends State<RoomScreen> {
 
     await showDialog<void>(
       context: context,
-      builder: (_) => _RenameDialog(
+      builder: (_) => RenameDialog(
         initialName: thread.name,
         onAction: (name) => _state.renameThread(threadId, name),
       ),
@@ -250,7 +250,7 @@ class _RoomScreenState extends State<RoomScreen> {
   Future<void> _showDeleteDialog(String threadId) async {
     await showDialog<void>(
       context: context,
-      builder: (_) => _AsyncActionDialog(
+      builder: (_) => AsyncActionDialog(
         title: 'Delete Thread',
         content: const Text('Delete this thread? This cannot be undone.'),
         actionLabel: 'Delete',
@@ -570,175 +570,6 @@ class _SendErrorBanner extends StatelessWidget {
             constraints: const BoxConstraints(),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Dialog that runs an async action with loading/error states.
-///
-/// Shows a spinner while in progress, inline error on failure,
-/// and pops itself on success.
-class _AsyncActionDialog extends StatefulWidget {
-  const _AsyncActionDialog({
-    required this.title,
-    required this.content,
-    required this.actionLabel,
-    required this.onAction,
-    this.isDestructive = false,
-    this.canSubmit = true,
-  });
-
-  final String title;
-  final Widget content;
-  final String actionLabel;
-  final Future<void> Function() onAction;
-  final bool isDestructive;
-
-  /// External gate (e.g., text field validation). The action button is
-  /// disabled when false, independent of the in-progress state.
-  final bool canSubmit;
-
-  @override
-  State<_AsyncActionDialog> createState() => _AsyncActionDialogState();
-}
-
-class _AsyncActionDialogState extends State<_AsyncActionDialog> {
-  bool _busy = false;
-  String? _error;
-
-  Future<void> _run() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.onAction();
-      if (mounted) Navigator.pop(context);
-    } on Exception catch (e) {
-      debugPrint('${widget.title} failed: $e');
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = e.toString();
-        });
-      }
-    } catch (e, st) {
-      FlutterError.reportError(FlutterErrorDetails(
-        exception: e,
-        stack: st,
-        library: 'room_screen',
-        context: ErrorDescription('during ${widget.title}'),
-      ));
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = kDebugMode ? 'BUG: $e' : 'An unexpected error occurred.';
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      title: Text(widget.title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          widget.content,
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _error!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        if (_busy)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          )
-        else
-          TextButton(
-            onPressed: widget.canSubmit ? _run : null,
-            style: widget.isDestructive
-                ? TextButton.styleFrom(
-                    foregroundColor: theme.colorScheme.error,
-                  )
-                : null,
-            child: Text(widget.actionLabel),
-          ),
-      ],
-    );
-  }
-}
-
-/// Rename dialog: wraps [_AsyncActionDialog] with a pre-filled text field.
-class _RenameDialog extends StatefulWidget {
-  const _RenameDialog({
-    required this.initialName,
-    required this.onAction,
-  });
-
-  final String initialName;
-  final Future<void> Function(String name) onAction;
-
-  @override
-  State<_RenameDialog> createState() => _RenameDialogState();
-}
-
-class _RenameDialogState extends State<_RenameDialog> {
-  late final TextEditingController _controller;
-
-  bool get _canSave =>
-      _controller.text.trim().isNotEmpty &&
-      _controller.text.trim() != widget.initialName;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialName);
-    _controller.selection = TextSelection(
-      baseOffset: 0,
-      extentOffset: _controller.text.length,
-    );
-    _controller.addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _AsyncActionDialog(
-      title: 'Rename Thread',
-      actionLabel: 'Save',
-      canSubmit: _canSave,
-      onAction: () => widget.onAction(_controller.text.trim()),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: const InputDecoration(labelText: 'Thread name'),
       ),
     );
   }

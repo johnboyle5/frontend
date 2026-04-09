@@ -884,6 +884,13 @@ void main() {
         );
       });
 
+      test('rejects call with no metadata fields', () {
+        expect(
+          () => api.updateThreadMetadata('room-123', 'thread-456'),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+
       test('propagates exceptions', () async {
         when(
           () => mockTransport.request<void>(
