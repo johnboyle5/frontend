@@ -172,6 +172,15 @@ class FakeSoliplexApi extends SoliplexApi {
   (ThreadInfo, Map<String, dynamic>)? nextCreateThread;
   Exception? nextCreateThreadError;
 
+  Exception? nextDeleteThreadError;
+  int deleteThreadCallCount = 0;
+  String? lastDeletedThreadId;
+
+  Exception? nextUpdateMetadataError;
+  int updateMetadataCallCount = 0;
+  String? lastUpdatedThreadId;
+  String? lastUpdatedName;
+
   @override
   Future<List<Room>> getRooms({CancelToken? cancelToken}) async {
     if (nextError != null) throw nextError!;
@@ -221,6 +230,31 @@ class FakeSoliplexApi extends SoliplexApi {
     throw StateError(
       'FakeSoliplexApi: set nextCreateThread or nextCreateThreadError',
     );
+  }
+
+  @override
+  Future<void> deleteThread(
+    String roomId,
+    String threadId, {
+    CancelToken? cancelToken,
+  }) async {
+    deleteThreadCallCount++;
+    lastDeletedThreadId = threadId;
+    if (nextDeleteThreadError != null) throw nextDeleteThreadError!;
+  }
+
+  @override
+  Future<void> updateThreadMetadata(
+    String roomId,
+    String threadId, {
+    String? name,
+    String? description,
+    CancelToken? cancelToken,
+  }) async {
+    updateMetadataCallCount++;
+    lastUpdatedThreadId = threadId;
+    lastUpdatedName = name;
+    if (nextUpdateMetadataError != null) throw nextUpdateMetadataError!;
   }
 
   @override
