@@ -168,13 +168,13 @@ class _RoomScreenState extends State<RoomScreen> {
         roomId: widget.roomId,
         runtimeManager: widget.runtimeManager,
         registry: widget.registry,
-        onNavigateToThread: (id) => _navigateToThread(id!),
+        onNavigateToThread: (id) => _navigateToThread(id),
       );
 
-  void _navigateToThread(String threadId, {bool replace = false}) {
+  void _navigateToThread(String? threadId, {bool replace = false}) {
     if (!mounted) return;
-    final path =
-        '/room/${widget.serverEntry.alias}/${widget.roomId}/thread/$threadId';
+    final base = '/room/${widget.serverEntry.alias}/${widget.roomId}';
+    final path = threadId != null ? '$base/thread/$threadId' : base;
     if (replace || widget.threadId == null) {
       context.replace(path);
     } else {
