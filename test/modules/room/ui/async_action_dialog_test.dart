@@ -17,7 +17,7 @@ void main() {
                 context: context,
                 builder: (_) => AsyncActionDialog(
                   title: 'Test',
-                  content: const Text('body'),
+                  contentBuilder: (_) => const Text('body'),
                   actionLabel: 'Go',
                   onAction: () async => called = true,
                 ),
@@ -46,7 +46,7 @@ void main() {
                 context: context,
                 builder: (_) => AsyncActionDialog(
                   title: 'Test',
-                  content: const Text('body'),
+                  contentBuilder: (_) => const Text('body'),
                   actionLabel: 'Go',
                   onAction: () => completer.future,
                 ),
@@ -81,7 +81,7 @@ void main() {
                 context: context,
                 builder: (_) => AsyncActionDialog(
                   title: 'Test',
-                  content: const Text('body'),
+                  contentBuilder: (_) => const Text('body'),
                   actionLabel: 'Go',
                   onAction: () => completer.future,
                 ),
@@ -116,7 +116,7 @@ void main() {
                 context: context,
                 builder: (_) => AsyncActionDialog(
                   title: 'Test',
-                  content: const Text('body'),
+                  contentBuilder: (_) => const Text('body'),
                   actionLabel: 'Go',
                   onAction: () async => throw Exception('something went wrong'),
                 ),
@@ -148,7 +148,7 @@ void main() {
                 context: context,
                 builder: (_) => AsyncActionDialog(
                   title: 'Test',
-                  content: const Text('body'),
+                  contentBuilder: (_) => const Text('body'),
                   actionLabel: 'Go',
                   onAction: () async {},
                 ),
@@ -179,7 +179,7 @@ void main() {
                 context: context,
                 builder: (_) => AsyncActionDialog(
                   title: 'Test',
-                  content: const Text('body'),
+                  contentBuilder: (_) => const Text('body'),
                   actionLabel: 'Go',
                   canSubmit: false,
                   onAction: () async {},
@@ -210,7 +210,7 @@ void main() {
                 context: context,
                 builder: (_) => AsyncActionDialog(
                   title: 'Delete',
-                  content: const Text('body'),
+                  contentBuilder: (_) => const Text('body'),
                   actionLabel: 'Delete',
                   isDestructive: true,
                   onAction: () async {},
@@ -359,6 +359,69 @@ void main() {
         find.widgetWithText(TextButton, 'Save'),
       );
       expect(saveButton.onPressed, isNotNull);
+    });
+
+    testWidgets('pressing Enter submits when Save is enabled', (tester) async {
+      String? submittedName;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => RenameDialog(
+                  initialName: 'Original',
+                  onAction: (name) async => submittedName = name,
+                ),
+              ),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'New Name');
+      await tester.pump();
+
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(submittedName, 'New Name');
+    });
+
+    testWidgets('pressing Enter does nothing when Save is disabled',
+        (tester) async {
+      bool called = false;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => RenameDialog(
+                  initialName: 'Original',
+                  onAction: (_) async => called = true,
+                ),
+              ),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // Text matches initial name — Save should be disabled
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(called, isFalse);
+      // Dialog should still be open
+      expect(find.text('Rename Thread'), findsOneWidget);
     });
 
     testWidgets('submitted name is trimmed', (tester) async {

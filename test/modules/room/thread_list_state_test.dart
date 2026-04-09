@@ -263,6 +263,57 @@ void main() {
     state.dispose();
   });
 
+  test('renameThread omits empty description instead of sending empty string',
+      () async {
+    api.nextThreads = [
+      ThreadInfo(
+        id: 'thread-1',
+        roomId: 'room-1',
+        name: 'Old Name',
+        // description defaults to '' (empty string)
+        createdAt: DateTime(2026, 3, 1),
+      ),
+    ];
+
+    final state = ThreadListState(
+      connection: connection,
+      roomId: 'room-1',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    await state.renameThread('thread-1', 'New Name');
+
+    expect(api.lastUpdatedDescription, isNull);
+
+    state.dispose();
+  });
+
+  test('renameThread throws StateError when thread not in cached list',
+      () async {
+    api.nextThreads = [
+      ThreadInfo(
+        id: 'thread-1',
+        roomId: 'room-1',
+        name: 'Only Thread',
+        createdAt: DateTime(2026, 3, 1),
+      ),
+    ];
+
+    final state = ThreadListState(
+      connection: connection,
+      roomId: 'room-1',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      () => state.renameThread('nonexistent-id', 'New Name'),
+      throwsA(isA<StateError>()),
+    );
+    expect(api.updateMetadataCallCount, 0);
+
+    state.dispose();
+  });
+
   test('renameThread propagates API error', () async {
     api.nextThreads = [
       ThreadInfo(

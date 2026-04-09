@@ -252,7 +252,8 @@ class _RoomScreenState extends State<RoomScreen> {
       context: context,
       builder: (_) => AsyncActionDialog(
         title: 'Delete Thread',
-        content: const Text('Delete this thread? This cannot be undone.'),
+        contentBuilder: (_) =>
+            const Text('Delete this thread? This cannot be undone.'),
         actionLabel: 'Delete',
         isDestructive: true,
         onAction: () => _state.deleteThread(threadId),

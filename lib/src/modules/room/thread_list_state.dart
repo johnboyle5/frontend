@@ -64,9 +64,14 @@ class ThreadListState {
       );
     }
     final existing = current.threads.where((t) => t.id == threadId).firstOrNull;
-    final rawDesc = existing?.description;
-    final description =
-        (rawDesc != null && rawDesc.isNotEmpty) ? rawDesc : null;
+    if (existing == null) {
+      throw StateError(
+        'Cannot rename thread $threadId: not in cached list. '
+        'Existing metadata would be lost.',
+      );
+    }
+    final rawDesc = existing.description;
+    final description = rawDesc.isNotEmpty ? rawDesc : null;
 
     await _connection.api.updateThreadMetadata(
       _roomId,

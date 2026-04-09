@@ -9,7 +9,7 @@ class AsyncActionDialog extends StatefulWidget {
   const AsyncActionDialog({
     super.key,
     required this.title,
-    required this.content,
+    required this.contentBuilder,
     required this.actionLabel,
     required this.onAction,
     this.isDestructive = false,
@@ -17,7 +17,10 @@ class AsyncActionDialog extends StatefulWidget {
   });
 
   final String title;
-  final Widget content;
+
+  /// Builds the dialog body. Receives a submit callback that is non-null
+  /// when the action can be triggered (canSubmit is true and not busy).
+  final Widget Function(VoidCallback? onSubmit) contentBuilder;
   final String actionLabel;
   final Future<void> Function() onAction;
   final bool isDestructive;
@@ -75,7 +78,9 @@ class _AsyncActionDialogState extends State<AsyncActionDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          widget.content,
+          widget.contentBuilder(
+            widget.canSubmit && !_busy ? _run : null,
+          ),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -163,10 +168,11 @@ class _RenameDialogState extends State<RenameDialog> {
       actionLabel: 'Save',
       canSubmit: _canSave,
       onAction: () => widget.onAction(_controller.text.trim()),
-      content: TextField(
+      contentBuilder: (onSubmit) => TextField(
         controller: _controller,
         autofocus: true,
         decoration: const InputDecoration(labelText: 'Thread name'),
+        onSubmitted: onSubmit != null ? (_) => onSubmit() : null,
       ),
     );
   }
