@@ -440,6 +440,20 @@ Map<String, dynamic> threadInfoToJson(ThreadInfo thread) {
   };
 }
 
+/// Converts thread metadata fields to the backend JSON format.
+///
+/// Only includes non-null fields. The backend replaces all metadata on
+/// update — omitted fields are dropped, not preserved.
+Map<String, dynamic> threadMetadataToJson({
+  String? name,
+  String? description,
+}) {
+  return {
+    if (name != null) 'name': name,
+    if (description != null) 'description': description,
+  };
+}
+
 // ============================================================
 // RunInfo mappers
 // ============================================================
