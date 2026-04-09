@@ -394,6 +394,43 @@ class SoliplexApi {
     );
   }
 
+  /// Updates metadata for a thread.
+  ///
+  /// Parameters:
+  /// - [roomId]: The room ID (must not be empty)
+  /// - [threadId]: The thread ID (must not be empty)
+  /// - [name]: New thread name (null leaves unchanged)
+  /// - [description]: New thread description (null leaves unchanged)
+  ///
+  /// The backend returns 205 (Reset Content) on success.
+  ///
+  /// Throws:
+  /// - [ArgumentError] if [roomId] or [threadId] is empty
+  /// - [NotFoundException] if thread not found (404)
+  /// - [AuthException] if not authenticated (401/403)
+  /// - [NetworkException] if connection fails
+  /// - [ApiException] for other server errors
+  /// - [CancelledException] if cancelled via [cancelToken]
+  Future<void> updateThreadMetadata(
+    String roomId,
+    String threadId, {
+    String? name,
+    String? description,
+    CancelToken? cancelToken,
+  }) async {
+    _requireNonEmpty(roomId, 'roomId');
+    _requireNonEmpty(threadId, 'threadId');
+
+    await _transport.request<void>(
+      'POST',
+      _urlBuilder.build(
+        pathSegments: ['rooms', roomId, 'agui', threadId, 'meta'],
+      ),
+      body: threadMetadataToJson(name: name, description: description),
+      cancelToken: cancelToken,
+    );
+  }
+
   // ============================================================
   // Runs
   // ============================================================

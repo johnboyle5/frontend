@@ -838,6 +838,76 @@ void main() {
       });
     });
 
+    group('updateThreadMetadata', () {
+      test('sends POST to correct URL with metadata body', () async {
+        Uri? capturedUri;
+        Object? capturedBody;
+        when(
+          () => mockTransport.request<void>(
+            'POST',
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((invocation) async {
+          capturedUri = invocation.positionalArguments[1] as Uri;
+          capturedBody = invocation.namedArguments[#body];
+        });
+
+        await api.updateThreadMetadata(
+          'room-123',
+          'thread-456',
+          name: 'New Name',
+        );
+
+        expect(
+          capturedUri?.path,
+          equals('/api/v1/rooms/room-123/agui/thread-456/meta'),
+        );
+        expect(capturedBody, {'name': 'New Name', 'description': null});
+      });
+
+      test('validates non-empty roomId', () {
+        expect(
+          () => api.updateThreadMetadata('', 'thread-123', name: 'x'),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+
+      test('validates non-empty threadId', () {
+        expect(
+          () => api.updateThreadMetadata('room-123', '', name: 'x'),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+
+      test('propagates exceptions', () async {
+        when(
+          () => mockTransport.request<void>(
+            'POST',
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenThrow(const NotFoundException(message: 'Not found'));
+
+        expect(
+          () => api.updateThreadMetadata(
+            'room-123',
+            'thread-456',
+            name: 'x',
+          ),
+          throwsA(isA<NotFoundException>()),
+        );
+      });
+    });
+
     // ============================================================
     // Runs
     // ============================================================
