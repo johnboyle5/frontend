@@ -18,6 +18,8 @@ class ThreadSidebar extends StatelessWidget {
     this.onRetryThreads,
     this.quizzes = const {},
     this.onQuizTapped,
+    this.onRenameThread,
+    this.onDeleteThread,
   });
 
   final ThreadListStatus threadListStatus;
@@ -31,6 +33,8 @@ class ThreadSidebar extends StatelessWidget {
   final Future<void> Function()? onRetryThreads;
   final Map<String, String> quizzes;
   final void Function(String quizId)? onQuizTapped;
+  final void Function(String threadId, String currentName)? onRenameThread;
+  final void Function(String threadId)? onDeleteThread;
 
   @override
   Widget build(BuildContext context) {
@@ -125,6 +129,9 @@ class ThreadSidebar extends StatelessWidget {
                       thread: thread,
                       isSelected: thread.id == selectedThreadId,
                       onTap: () => onThreadSelected(thread.id),
+                      onRename: () =>
+                          onRenameThread?.call(thread.id, thread.name),
+                      onDelete: () => onDeleteThread?.call(thread.id),
                     );
                   },
                 ),

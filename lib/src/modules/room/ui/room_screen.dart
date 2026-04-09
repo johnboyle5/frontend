@@ -24,6 +24,7 @@ import 'chunk_visualization_page.dart';
 import 'document_picker.dart';
 import 'error_retry_panel.dart';
 import 'message_timeline.dart';
+import 'async_action_dialog.dart';
 import 'room_welcome.dart';
 import 'thread_sidebar.dart';
 
@@ -168,13 +169,13 @@ class _RoomScreenState extends State<RoomScreen> {
         roomId: widget.roomId,
         runtimeManager: widget.runtimeManager,
         registry: widget.registry,
-        onNavigateToThread: _navigateToThread,
+        onNavigateToThread: (id) => _navigateToThread(id),
       );
 
-  void _navigateToThread(String threadId, {bool replace = false}) {
+  void _navigateToThread(String? threadId, {bool replace = false}) {
     if (!mounted) return;
-    final path =
-        '/room/${widget.serverEntry.alias}/${widget.roomId}/thread/$threadId';
+    final base = '/room/${widget.serverEntry.alias}/${widget.roomId}';
+    final path = threadId != null ? '$base/thread/$threadId' : base;
     if (replace || widget.threadId == null) {
       context.replace(path);
     } else {
@@ -224,6 +225,30 @@ class _RoomScreenState extends State<RoomScreen> {
     context.go('/room/$alias/${widget.roomId}/quiz/$quizId');
   }
 
+  Future<void> _showRenameDialog(String threadId, String currentName) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => RenameDialog(
+        initialName: currentName,
+        onAction: (name) => _state.renameThread(threadId, name),
+      ),
+    );
+  }
+
+  Future<void> _showDeleteDialog(String threadId) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AsyncActionDialog(
+        title: 'Delete Thread',
+        contentBuilder: (_) =>
+            const Text('Delete this thread? This cannot be undone.'),
+        actionLabel: 'Delete',
+        isDestructive: true,
+        onAction: () => _state.deleteThread(threadId),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final threadListStatus = _state.threadList.threads.watch(context);
@@ -249,6 +274,8 @@ class _RoomScreenState extends State<RoomScreen> {
             onRetryThreads: () => _state.threadList.refresh(),
             quizzes: room?.quizzes ?? const {},
             onQuizTapped: _onQuizTapped,
+            onRenameThread: _showRenameDialog,
+            onDeleteThread: _showDeleteDialog,
           );
           final content = _buildContent(room);
 
@@ -301,6 +328,14 @@ class _RoomScreenState extends State<RoomScreen> {
                     onRetryThreads: () => _state.threadList.refresh(),
                     quizzes: room?.quizzes ?? const {},
                     onQuizTapped: _onQuizTapped,
+                    onRenameThread: (id, name) {
+                      Navigator.pop(drawerContext);
+                      _showRenameDialog(id, name);
+                    },
+                    onDeleteThread: (id) {
+                      Navigator.pop(drawerContext);
+                      _showDeleteDialog(id);
+                    },
                   ),
                 ),
               ),

@@ -1856,4 +1856,27 @@ void main() {
       });
     });
   });
+
+  group('threadMetadataToJson', () {
+    test('includes only name when description is null', () {
+      expect(
+        threadMetadataToJson(name: 'My Thread'),
+        equals({'name': 'My Thread'}),
+      );
+    });
+
+    test('includes only description when name is null', () {
+      expect(
+        threadMetadataToJson(description: 'A description'),
+        equals({'description': 'A description'}),
+      );
+    });
+
+    test('includes both fields when both provided', () {
+      expect(
+        threadMetadataToJson(name: 'My Thread', description: 'A description'),
+        equals({'name': 'My Thread', 'description': 'A description'}),
+      );
+    });
+  });
 }

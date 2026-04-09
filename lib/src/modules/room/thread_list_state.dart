@@ -37,6 +37,59 @@ class ThreadListState {
 
   Future<void> refresh() => _fetch();
 
+  Future<void> deleteThread(String threadId) async {
+    if (_isDisposed) return;
+    await _connection.api.deleteThread(_roomId, threadId);
+
+    final latest = _threads.value;
+    if (latest is ThreadsLoaded) {
+      final updated = latest.threads.where((t) => t.id != threadId).toList();
+      _threads.value = ThreadsLoaded(updated);
+    }
+  }
+
+  Future<void> renameThread(String threadId, String name) async {
+    if (name.trim().isEmpty) {
+      throw ArgumentError.value(name, 'name', 'must not be empty');
+    }
+    if (_isDisposed) return;
+
+    // The backend replaces all metadata on update, so we must re-send
+    // existing fields to avoid losing them.
+    final current = _threads.value;
+    if (current is! ThreadsLoaded) {
+      throw StateError(
+        'Cannot rename: thread list not loaded. '
+        'Existing metadata would be lost.',
+      );
+    }
+    final existing = current.threads.where((t) => t.id == threadId).firstOrNull;
+    if (existing == null) {
+      throw StateError(
+        'Cannot rename thread $threadId: not in cached list. '
+        'Existing metadata would be lost.',
+      );
+    }
+    final rawDesc = existing.description;
+    final description = rawDesc.isNotEmpty ? rawDesc : null;
+
+    await _connection.api.updateThreadMetadata(
+      _roomId,
+      threadId,
+      name: name,
+      description: description,
+    );
+
+    final latest = _threads.value;
+    if (latest is ThreadsLoaded) {
+      final updated = latest.threads.map((t) {
+        if (t.id == threadId) return t.copyWith(name: name);
+        return t;
+      }).toList();
+      _threads.value = ThreadsLoaded(updated);
+    }
+  }
+
   Future<void> _fetch() async {
     if (_isDisposed) return;
     _cancelToken?.cancel('re-fetch');
