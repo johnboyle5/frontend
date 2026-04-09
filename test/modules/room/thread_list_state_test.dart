@@ -102,6 +102,126 @@ void main() {
     state.dispose();
   });
 
+  test('deleteThread removes thread from list', () async {
+    api.nextThreads = [
+      ThreadInfo(
+        id: 'thread-1',
+        roomId: 'room-1',
+        name: 'First',
+        createdAt: DateTime(2026, 1, 1),
+      ),
+      ThreadInfo(
+        id: 'thread-2',
+        roomId: 'room-1',
+        name: 'Second',
+        createdAt: DateTime(2026, 3, 1),
+      ),
+    ];
+
+    final state = ThreadListState(
+      connection: connection,
+      roomId: 'room-1',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    await state.deleteThread('thread-1');
+
+    final loaded = state.threads.value as ThreadsLoaded;
+    expect(loaded.threads.length, 1);
+    expect(loaded.threads.single.id, 'thread-2');
+    expect(api.deleteThreadCallCount, 1);
+    expect(api.lastDeletedThreadId, 'thread-1');
+
+    state.dispose();
+  });
+
+  test('deleteThread propagates API error', () async {
+    api.nextThreads = [
+      ThreadInfo(
+        id: 'thread-1',
+        roomId: 'room-1',
+        name: 'First',
+        createdAt: DateTime(2026, 1, 1),
+      ),
+    ];
+
+    final state = ThreadListState(
+      connection: connection,
+      roomId: 'room-1',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    api.nextDeleteThreadError = Exception('server error');
+
+    expect(
+      () => state.deleteThread('thread-1'),
+      throwsA(isA<Exception>()),
+    );
+
+    // Thread should still be in the list (pessimistic — failed, no removal).
+    final loaded = state.threads.value as ThreadsLoaded;
+    expect(loaded.threads.length, 1);
+
+    state.dispose();
+  });
+
+  test('renameThread updates thread name in list', () async {
+    api.nextThreads = [
+      ThreadInfo(
+        id: 'thread-1',
+        roomId: 'room-1',
+        name: 'Old Name',
+        createdAt: DateTime(2026, 3, 1),
+      ),
+    ];
+
+    final state = ThreadListState(
+      connection: connection,
+      roomId: 'room-1',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    await state.renameThread('thread-1', 'New Name');
+
+    final loaded = state.threads.value as ThreadsLoaded;
+    expect(loaded.threads.single.name, 'New Name');
+    expect(api.updateMetadataCallCount, 1);
+    expect(api.lastUpdatedThreadId, 'thread-1');
+    expect(api.lastUpdatedName, 'New Name');
+
+    state.dispose();
+  });
+
+  test('renameThread propagates API error', () async {
+    api.nextThreads = [
+      ThreadInfo(
+        id: 'thread-1',
+        roomId: 'room-1',
+        name: 'Old Name',
+        createdAt: DateTime(2026, 3, 1),
+      ),
+    ];
+
+    final state = ThreadListState(
+      connection: connection,
+      roomId: 'room-1',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    api.nextUpdateMetadataError = Exception('server error');
+
+    expect(
+      () => state.renameThread('thread-1', 'New Name'),
+      throwsA(isA<Exception>()),
+    );
+
+    // Name should remain unchanged (pessimistic — failed, no update).
+    final loaded = state.threads.value as ThreadsLoaded;
+    expect(loaded.threads.single.name, 'Old Name');
+
+    state.dispose();
+  });
+
   test('refresh() returns a Future that completes after fetch', () async {
     api.nextThreads = [
       ThreadInfo(

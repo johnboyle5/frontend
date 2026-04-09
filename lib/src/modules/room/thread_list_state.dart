@@ -37,6 +37,33 @@ class ThreadListState {
 
   Future<void> refresh() => _fetch();
 
+  Future<void> deleteThread(String threadId) async {
+    await _connection.api.deleteThread(_roomId, threadId);
+
+    final current = _threads.value;
+    if (current is ThreadsLoaded) {
+      final updated = current.threads.where((t) => t.id != threadId).toList();
+      _threads.value = ThreadsLoaded(updated);
+    }
+  }
+
+  Future<void> renameThread(String threadId, String name) async {
+    await _connection.api.updateThreadMetadata(
+      _roomId,
+      threadId,
+      name: name,
+    );
+
+    final current = _threads.value;
+    if (current is ThreadsLoaded) {
+      final updated = current.threads.map((t) {
+        if (t.id == threadId) return t.copyWith(name: name);
+        return t;
+      }).toList();
+      _threads.value = ThreadsLoaded(updated);
+    }
+  }
+
   Future<void> _fetch() async {
     if (_isDisposed) return;
     _cancelToken?.cancel('re-fetch');
