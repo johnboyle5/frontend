@@ -70,9 +70,10 @@ jobs:
 
       - name: Run package tests
         run: |
+          # Exclude integration-tagged tests (require a live backend)
           for pkg in packages/soliplex_agent packages/soliplex_client packages/soliplex_logging; do
             echo "::group::Testing $pkg"
-            (cd "$pkg" && dart test)
+            (cd "$pkg" && dart test --exclude-tags integration)
             echo "::endgroup::"
           done
           echo "::group::Testing packages/soliplex_client_native"
