@@ -401,7 +401,8 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
     return SectionCard(
       title: title,
       children: [
-        const EmptyMessage(label: 'uploaded files (pending backend)'),
+        if (_uploads.isEmpty)
+          const EmptyMessage(label: 'uploaded files (pending backend)'),
         if (_uploads.isNotEmpty) ...[
           const SizedBox(height: 8),
           for (final upload in _uploads)
