@@ -1,18 +1,15 @@
 import 'dart:async';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:mime/mime.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_client/soliplex_client.dart'
     show RagDocument, Room, SourceReferenceFormatting, buildDocumentFilter;
 import '../../auth/server_entry.dart';
 import '../document_selections.dart';
-import '../read_file_bytes.dart'
-    if (dart.library.html) '../read_file_bytes_web.dart';
+import '../pick_file.dart';
 import '../../diagnostics/diagnostics_providers.dart';
 import '../../diagnostics/models/http_event_grouper.dart';
 import '../../diagnostics/models/run_event_filter.dart';
@@ -31,7 +28,7 @@ import 'message_timeline.dart';
 import 'async_action_dialog.dart';
 import 'room_welcome.dart';
 import 'thread_sidebar.dart';
-import 'upload_file_list.dart';
+import '../upload_tracker.dart';
 
 const double _sidebarWidth = 300;
 const double _wideBreakpoint = 600;
@@ -65,6 +62,7 @@ class _RoomScreenState extends State<RoomScreen> {
   void Function()? _autoSelectUnsub;
   final _chatController = TextEditingController();
   final _chatFocusNode = FocusNode();
+  bool _filesExpanded = false;
 
   bool get _filterEnabled => widget.enableDocumentFilter;
 
@@ -220,41 +218,44 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   Future<void> _pickAndUploadToRoom(Room room) async {
-    final result = await FilePicker.pickFiles();
-    if (result == null || result.files.isEmpty || !mounted) return;
-    final file = result.files.first;
-    if (file.bytes == null && file.path == null) return;
-
-    final bytes = file.bytes ?? await readFileBytes(file.path!);
-    if (bytes == null || !mounted) return;
-
-    final mimeType = lookupMimeType(file.name) ?? 'application/octet-stream';
+    final file = await pickFile();
+    if (file == null || !mounted) return;
     _state.uploadTracker.uploadToRoom(
       api: widget.serverEntry.connection.api,
       roomId: widget.roomId,
       filename: file.name,
-      fileBytes: bytes,
-      mimeType: mimeType,
+      fileBytes: file.bytes,
+      mimeType: file.mimeType,
     );
   }
 
   Future<void> _pickAndUploadToThread(Room room, String threadId) async {
-    final result = await FilePicker.pickFiles();
-    if (result == null || result.files.isEmpty || !mounted) return;
-    final file = result.files.first;
-    if (file.bytes == null && file.path == null) return;
-
-    final bytes = file.bytes ?? await readFileBytes(file.path!);
-    if (bytes == null || !mounted) return;
-
-    final mimeType = lookupMimeType(file.name) ?? 'application/octet-stream';
+    final file = await pickFile();
+    if (file == null || !mounted) return;
     _state.uploadTracker.uploadToThread(
       api: widget.serverEntry.connection.api,
       roomId: widget.roomId,
       threadId: threadId,
       filename: file.name,
-      fileBytes: bytes,
-      mimeType: mimeType,
+      fileBytes: file.bytes,
+      mimeType: file.mimeType,
+    );
+  }
+
+  Future<void> _pickAndUploadToNewThread(Room room) async {
+    final file = await pickFile();
+    if (file == null || !mounted) return;
+
+    final threadId = await _state.createThread();
+    if (threadId == null || !mounted) return;
+
+    _state.uploadTracker.uploadToThread(
+      api: widget.serverEntry.connection.api,
+      roomId: widget.roomId,
+      threadId: threadId,
+      filename: file.name,
+      fileBytes: file.bytes,
+      mimeType: file.mimeType,
     );
   }
 
@@ -405,17 +406,25 @@ class _RoomScreenState extends State<RoomScreen> {
     final threadView = _state.activeThreadView;
     final attachEnabled = room?.enableAttachments ?? false;
 
+    final roomEntries = attachEnabled
+        ? _state.uploadTracker.roomUploads(widget.roomId).watch(context)
+        : <UploadEntry>[];
+    final threadId = threadView?.threadId;
+    final threadEntries = attachEnabled && threadId != null
+        ? _state.uploadTracker
+            .threadUploads(widget.roomId, threadId)
+            .watch(context)
+        : <UploadEntry>[];
+
     return Column(
       children: [
-        _buildRoomHeader(room, attachEnabled),
-        if (attachEnabled)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: UploadFileList(
-              uploads: _state.uploadTracker.roomUploads(widget.roomId),
-              onDismiss: _state.uploadTracker.dismiss,
-            ),
-          ),
+        _buildRoomHeader(
+          room,
+          attachEnabled,
+          roomEntries,
+          threadEntries,
+        ),
+        if (_filesExpanded) _buildFilePanel(roomEntries, threadEntries),
         Expanded(
           child: threadView == null
               ? _buildNoThreadBody(room)
@@ -425,9 +434,18 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
-  Widget _buildRoomHeader(Room? room, bool attachEnabled) {
+  Widget _buildRoomHeader(
+    Room? room,
+    bool attachEnabled,
+    List<UploadEntry> roomEntries,
+    List<UploadEntry> threadEntries,
+  ) {
     final theme = Theme.of(context);
     final roomName = room?.name ?? widget.roomId;
+    final allEntries = [...roomEntries, ...threadEntries];
+    final hasFiles = allEntries.isNotEmpty;
+    final anyUploading = allEntries.any((e) => e.status is UploadUploading);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
@@ -439,11 +457,164 @@ class _RoomScreenState extends State<RoomScreen> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          if (hasFiles)
+            GestureDetector(
+              onTap: () => setState(() => _filesExpanded = !_filesExpanded),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (anyUploading)
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: theme.colorScheme.primary,
+                      ),
+                    )
+                  else
+                    Icon(
+                      Icons.attach_file,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _chipLabel(
+                      roomEntries.length,
+                      threadEntries.length,
+                    ),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  Icon(
+                    _filesExpanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: theme.colorScheme.primary,
+                  ),
+                ],
+              ),
+            ),
           if (attachEnabled && room != null)
             IconButton(
               icon: const Icon(Icons.upload_file, size: 20),
               tooltip: 'Upload file to room',
               onPressed: () => _pickAndUploadToRoom(room),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _chipLabel(int roomCount, int threadCount) {
+    if (roomCount > 0 && threadCount > 0) {
+      return '$roomCount room \u00b7 $threadCount thread';
+    }
+    if (roomCount > 0) return '$roomCount room';
+    return '$threadCount thread';
+  }
+
+  Widget _buildFilePanel(
+    List<UploadEntry> roomEntries,
+    List<UploadEntry> threadEntries,
+  ) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (roomEntries.isNotEmpty) ...[
+              Text(
+                'Room',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+              for (final e in roomEntries) _buildFileRow(e),
+            ],
+            if (roomEntries.isNotEmpty && threadEntries.isNotEmpty)
+              const Divider(height: 12),
+            if (threadEntries.isNotEmpty) ...[
+              Text(
+                'Thread',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+              for (final e in threadEntries) _buildFileRow(e),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFileRow(UploadEntry entry) {
+    final theme = Theme.of(context);
+    final (icon, color) = switch (entry.status) {
+      UploadUploading() => (null, theme.colorScheme.primary),
+      UploadSuccess() => (
+          Icons.check_circle_outline,
+          theme.colorScheme.primary
+        ),
+      UploadError() => (Icons.error_outline, theme.colorScheme.error),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          if (icon != null)
+            Icon(icon, size: 16, color: color)
+          else
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: color,
+              ),
+            ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.filename,
+                  style: theme.textTheme.bodySmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (entry.status is UploadError)
+                  Text(
+                    (entry.status as UploadError).message,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.error,
+                      fontSize: 11,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          if (entry.status is! UploadUploading)
+            IconButton(
+              icon: const Icon(Icons.close, size: 14),
+              onPressed: () => _state.uploadTracker.dismiss(entry.id),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              visualDensity: VisualDensity.compact,
             ),
         ],
       ),
@@ -490,6 +661,9 @@ class _RoomScreenState extends State<RoomScreen> {
               ? (doc) => _updateSelection(
                     Set.of(_selectedDocuments)..remove(doc),
                   )
+              : null,
+          onAttachFile: (room?.enableAttachments ?? false) && room != null
+              ? () => _pickAndUploadToNewThread(room)
               : null,
         ),
       ],
@@ -561,17 +735,6 @@ class _RoomScreenState extends State<RoomScreen> {
                     ),
           },
         ),
-        if (attachEnabled)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: UploadFileList(
-              uploads: _state.uploadTracker.threadUploads(
-                widget.roomId,
-                threadView.threadId,
-              ),
-              onDismiss: _state.uploadTracker.dismiss,
-            ),
-          ),
         if (sendError != null)
           _SendErrorBanner(
             error: sendError,

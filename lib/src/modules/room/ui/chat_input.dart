@@ -231,7 +231,7 @@ class _ChatInputState extends State<ChatInput> {
               if (widget.onAttachFile != null)
                 IconButton(
                   icon: const Icon(Icons.attach_file),
-                  tooltip: 'Attach file',
+                  tooltip: 'Upload file to thread',
                   onPressed: disabled ? null : widget.onAttachFile,
                 ),
               Expanded(
