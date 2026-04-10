@@ -452,7 +452,7 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
         const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerLeft,
-          child: TextButton.icon(
+          child: FilledButton.icon(
             onPressed: _uploading ? null : _pickAndUpload,
             icon: const Icon(Icons.upload_file, size: 18),
             label: const Text('Upload file to room'),
