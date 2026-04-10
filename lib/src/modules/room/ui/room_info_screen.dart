@@ -394,8 +394,12 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final successCount =
+        _uploads.where((u) => u.status == _UploadStatus.success).length;
+    final title =
+        successCount > 0 ? 'UPLOADED FILES ($successCount)' : 'UPLOADED FILES';
     return SectionCard(
-      title: 'UPLOADED FILES',
+      title: title,
       children: [
         const EmptyMessage(label: 'uploaded files (pending backend)'),
         if (_uploads.isNotEmpty) ...[
