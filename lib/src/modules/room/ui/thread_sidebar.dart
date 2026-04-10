@@ -207,10 +207,6 @@ class _QuizRowState extends State<_QuizRow> {
       icon: Icon(icon, size: 16),
       label: Text(label),
       style: TextButton.styleFrom(
-        padding: EdgeInsets.symmetric(
-          horizontal: indent ? 24 : 8,
-        ),
-        visualDensity: VisualDensity.compact,
         alignment: Alignment.centerLeft,
       ),
     );
