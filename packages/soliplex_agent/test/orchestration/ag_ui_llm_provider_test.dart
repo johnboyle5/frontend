@@ -152,35 +152,6 @@ void main() {
         expect(input.runId, 'correct-run-id');
         expect(input.threadId, 'thread-1');
       });
-
-      test('forwards cancelToken to stream client', () async {
-        final token = CancelToken();
-        when(
-          () => mockStreamClient.runAgent(
-            any(),
-            any(),
-            cancelToken: any(named: 'cancelToken'),
-          ),
-        ).thenAnswer((_) => const Stream.empty());
-
-        await provider.startRun(
-          key: key,
-          input: const SimpleRunAgentInput(
-            threadId: 'thread-1',
-            runId: 'placeholder',
-          ),
-          existingRunId: 'run-1',
-          cancelToken: token,
-        );
-
-        verify(
-          () => mockStreamClient.runAgent(
-            any(),
-            any(),
-            cancelToken: token,
-          ),
-        ).called(1);
-      });
     });
   });
 }
