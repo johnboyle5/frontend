@@ -56,7 +56,7 @@ class TextMessageTile extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: SoliplexSpacing.s1),
         Container(
           padding: isUser
               ? const EdgeInsets.symmetric(
@@ -84,7 +84,7 @@ class TextMessageTile extends StatelessWidget {
           children: [
             CopyButton(text: message.text),
             if (isUser && onInspect != null) ...[
-              const SizedBox(width: 8),
+              const SizedBox(width: SoliplexSpacing.s2),
               Tooltip(
                 message: 'Inspect HTTP traffic',
                 child: InkWell(
@@ -99,7 +99,7 @@ class TextMessageTile extends StatelessWidget {
               ),
             ],
             if (showFeedback) ...[
-              const SizedBox(width: 8),
+              const SizedBox(width: SoliplexSpacing.s2),
               FeedbackButtons(onFeedbackSubmit: onFeedbackSubmit!),
             ],
           ],

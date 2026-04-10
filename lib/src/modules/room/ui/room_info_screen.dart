@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../design/theme/theme_extensions.dart';
 import '../../../shared/theme_toggle_button.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 import 'package:soliplex_client/soliplex_client.dart' hide Room, State;
@@ -15,6 +14,7 @@ import 'room_info/quizzes_card.dart';
 import 'room_info/room_info_widgets.dart';
 import 'room_info/skill_card.dart';
 import 'room_info/system_prompt_viewer.dart';
+import '../../../../soliplex_frontend.dart';
 
 class RoomInfoScreen extends StatefulWidget {
   const RoomInfoScreen({
@@ -140,12 +140,12 @@ class _RoomInfoBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(SoliplexSpacing.s4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.only(bottom: SoliplexSpacing.s4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -153,7 +153,7 @@ class _RoomInfoBody extends StatelessWidget {
                   'Server',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: SoliplexSpacing.s1),
                 Text(
                   formatServerUrl(serverUrl),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -164,7 +164,7 @@ class _RoomInfoBody extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.only(bottom: SoliplexSpacing.s4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -172,7 +172,7 @@ class _RoomInfoBody extends StatelessWidget {
                   'Room',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: SoliplexSpacing.s1),
                 Text(
                   room.name,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -184,7 +184,7 @@ class _RoomInfoBody extends StatelessWidget {
           ),
           if (room.hasDescription)
             Padding(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.only(bottom: SoliplexSpacing.s4),
               child: Text(
                 room.description,
                 style: Theme.of(context).textTheme.bodyLarge,
@@ -300,7 +300,8 @@ class _AgentCard extends StatelessWidget {
             ],
           FactoryRoomAgent(:final extraConfig) when extraConfig.isNotEmpty => [
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(vertical: SoliplexSpacing.s1),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -311,7 +312,7 @@ class _AgentCard extends StatelessWidget {
                                 Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: SoliplexSpacing.s1),
                     formatDynamicValue(
                       context,
                       extraConfig,

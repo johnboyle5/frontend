@@ -118,8 +118,8 @@ class _ChatInputState extends State<ChatInput> {
         children: [
           if (widget.selectedDocuments.isNotEmpty)
             Container(
-              margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(bottom: SoliplexSpacing.s1),
+              padding: const EdgeInsets.all(SoliplexSpacing.s2),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(8),

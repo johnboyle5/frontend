@@ -72,7 +72,7 @@ class RoomWelcome extends StatelessWidget {
               ),
             ],
             if (currentRoom.hasQuizzes) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: SoliplexSpacing.s6),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
                 child: Column(

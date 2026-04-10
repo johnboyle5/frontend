@@ -220,8 +220,8 @@ class _MessageTimelineState extends State<MessageTimeline> {
           ],
         ),
         Positioned(
-          right: 16,
-          bottom: 16,
+          right: SoliplexSpacing.s4,
+          bottom: SoliplexSpacing.s4,
           child: ScrollToBottomButton(
             controller: _scrollToBottomController,
             onPressed: _onScrollToBottom,

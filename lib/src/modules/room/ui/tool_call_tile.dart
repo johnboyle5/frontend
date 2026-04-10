@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
-import '../../../design/theme/theme_extensions.dart';
+import '../../../../soliplex_frontend.dart';
 
 class ToolCallTile extends StatelessWidget {
   const ToolCallTile({super.key, required this.message});
@@ -41,7 +41,7 @@ class _ToolCallCard extends StatelessWidget {
                     ?.copyWith(fontWeight: FontWeight.w500),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: SoliplexSpacing.s2),
             Text(
               toolCall.status.name,
               style: theme.textTheme.labelSmall?.copyWith(
@@ -81,7 +81,7 @@ class _CodeBlock extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: SoliplexSpacing.s1),
           SelectableText(
             text,
             style: SoliplexTheme.mergeCode(context, theme.textTheme.bodySmall),

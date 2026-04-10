@@ -22,7 +22,7 @@ class _SystemPromptViewerState extends State<SystemPromptViewer> {
     final colorScheme = theme.colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: SoliplexSpacing.s2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -69,7 +69,7 @@ class _SystemPromptViewerState extends State<SystemPromptViewer> {
                 children: [
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(SoliplexSpacing.s2),
                     decoration: BoxDecoration(
                       color: colorScheme.surfaceContainerHighest,
                     ),

@@ -116,7 +116,7 @@ class ThreadSidebar extends StatelessWidget {
                   children: const [
                     Center(
                         child: Padding(
-                      padding: EdgeInsets.only(top: 32),
+                      padding: EdgeInsets.only(top: SoliplexSpacing.s8),
                       child: Text('No threads'),
                     )),
                   ],

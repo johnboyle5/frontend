@@ -3,6 +3,7 @@ import 'package:signals_flutter/signals_flutter.dart';
 
 import '../../execution_step.dart';
 import '../../execution_tracker.dart';
+import '../../../../../soliplex_frontend.dart';
 
 class StepLog extends StatefulWidget {
   const StepLog({super.key, required this.tracker});
@@ -22,11 +23,12 @@ class _StepLogState extends State<StepLog> {
     if (steps.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: SoliplexSpacing.s2),
       child: GestureDetector(
         onTap: () => setState(() => _expanded = !_expanded),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(
+              horizontal: SoliplexSpacing.s3, vertical: 6),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(6),
@@ -41,7 +43,7 @@ class _StepLogState extends State<StepLog> {
                     size: 16,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: SoliplexSpacing.s1),
                   Text(
                     '${steps.length} step${steps.length == 1 ? '' : 's'}',
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -51,14 +53,14 @@ class _StepLogState extends State<StepLog> {
                 ],
               ),
               if (_expanded) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: SoliplexSpacing.s1),
                 for (final step in steps)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2),
                     child: Row(
                       children: [
                         _stepIcon(step, theme),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: SoliplexSpacing.s2),
                         Expanded(
                           child: Text(
                             step.label,

@@ -216,7 +216,7 @@ class _RoomContent extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('No servers connected'),
-            const SizedBox(height: 16),
+            const SizedBox(height: SoliplexSpacing.s4),
             FilledButton(
               onPressed: onAddServer,
               child: const Text('Add Server'),

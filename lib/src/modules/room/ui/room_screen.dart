@@ -514,7 +514,7 @@ class _RoomScreenState extends State<RoomScreen> {
           Icon(Icons.chat_bubble_outline,
               size: 48,
               color: theme.colorScheme.outline.withValues(alpha: 0.3)),
-          const SizedBox(height: 12),
+          const SizedBox(height: SoliplexSpacing.s3),
           Text(
             'Type a message to get started',
             style: theme.textTheme.bodyMedium?.copyWith(
@@ -538,12 +538,13 @@ class _SendErrorBanner extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+          horizontal: SoliplexSpacing.s3, vertical: SoliplexSpacing.s2),
       color: theme.colorScheme.errorContainer,
       child: Row(
         children: [
           Icon(Icons.error_outline, size: 16, color: theme.colorScheme.error),
-          const SizedBox(width: 8),
+          const SizedBox(width: SoliplexSpacing.s2),
           Expanded(
             child: Text(
               error.error.toString(),

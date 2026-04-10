@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../../../../design/theme/theme_extensions.dart';
+import '../../../../../soliplex_frontend.dart';
 
 class SectionCard extends StatelessWidget {
   const SectionCard({super.key, required this.title, required this.children});
@@ -13,11 +13,11 @@ class SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: SoliplexSpacing.s3),
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(SoliplexSpacing.s4),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -28,7 +28,7 @@ class SectionCard extends StatelessWidget {
                       letterSpacing: 0.5,
                     ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: SoliplexSpacing.s2),
               ...children,
             ],
           ),
@@ -107,7 +107,8 @@ class DialogButton extends StatelessWidget {
       child: TextButton(
         style: TextButton.styleFrom(
           textStyle: theme.textTheme.labelSmall,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(
+              horizontal: SoliplexSpacing.s4, vertical: SoliplexSpacing.s2),
         ),
         onPressed: onPressed,
         child: Text(label),
