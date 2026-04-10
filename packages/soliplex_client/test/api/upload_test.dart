@@ -109,6 +109,12 @@ void main() {
       final bodyString = utf8.decode(body);
       expect(bodyString, contains('filename="report.pdf"'));
       expect(bodyString, contains('thread file'));
+
+      final headers = captured[2] as Map<String, String>;
+      expect(
+        headers['content-type'],
+        startsWith('multipart/form-data; boundary='),
+      );
     });
   });
 }

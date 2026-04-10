@@ -20,7 +20,7 @@ class PickedFile {
 /// bytes loaded, or null if the user cancelled or the file couldn't
 /// be read.
 Future<PickedFile?> pickFile() async {
-  final result = await FilePicker.pickFiles();
+  final result = await FilePicker.pickFiles(withData: true);
   if (result == null || result.files.isEmpty) return null;
   final file = result.files.first;
   if (file.bytes == null && file.path == null) return null;

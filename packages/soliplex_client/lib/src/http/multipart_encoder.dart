@@ -26,8 +26,11 @@ MultipartEncoded encodeMultipart({
   String mimeType = 'application/octet-stream',
 }) {
   final boundary = _generateBoundary();
-  final escapedFilename =
-      filename.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+  final escapedFilename = filename
+      .replaceAll(r'\', r'\\')
+      .replaceAll('"', r'\"')
+      .replaceAll('\r', ' ')
+      .replaceAll('\n', ' ');
 
   final preamble = '--$boundary\r\n'
       'Content-Disposition: form-data; '

@@ -349,14 +349,16 @@ class _UploadedFilesCard extends StatefulWidget {
 class _UploadedFilesCardState extends State<_UploadedFilesCard> {
   final _uploads = <_UploadInfo>[];
   bool _uploading = false;
+  int _nextId = 0;
 
   Future<void> _pickAndUpload() async {
     final file = await pickFile();
     if (file == null || !mounted) return;
 
+    final id = _nextId++;
     setState(() {
       _uploading = true;
-      _uploads.add(_UploadInfo(file.name, _UploadStatus.uploading));
+      _uploads.add(_UploadInfo(id, file.name, _UploadStatus.uploading));
     });
 
     try {
@@ -368,26 +370,27 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
       );
       if (!mounted) return;
       setState(() {
-        _updateStatus(file.name, _UploadStatus.success);
+        _updateStatus(id, file.name, _UploadStatus.success);
         _uploading = false;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _updateStatus(file.name, _UploadStatus.error, '$e');
+        _updateStatus(id, file.name, _UploadStatus.error, '$e');
         _uploading = false;
       });
     }
   }
 
   void _updateStatus(
+    int id,
     String filename,
     _UploadStatus status, [
     String? error,
   ]) {
-    final i = _uploads.lastIndexWhere((u) => u.filename == filename);
+    final i = _uploads.indexWhere((u) => u.id == id);
     if (i >= 0) {
-      _uploads[i] = _UploadInfo(filename, status, error);
+      _uploads[i] = _UploadInfo(id, filename, status, error);
     }
   }
 
@@ -471,7 +474,8 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
 enum _UploadStatus { uploading, success, error }
 
 class _UploadInfo {
-  _UploadInfo(this.filename, this.status, [this.error]);
+  _UploadInfo(this.id, this.filename, this.status, [this.error]);
+  final int id;
   final String filename;
   final _UploadStatus status;
   final String? error;

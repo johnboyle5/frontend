@@ -460,6 +460,7 @@ class _RoomScreenState extends State<RoomScreen> {
           ),
           if (hasFiles)
             GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: () => setState(() => _filesExpanded = !_filesExpanded),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
