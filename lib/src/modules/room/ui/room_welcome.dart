@@ -82,25 +82,32 @@ class RoomWelcome extends StatelessWidget {
                       children: [
                         Icon(Icons.quiz,
                             size: 20, color: theme.colorScheme.primary),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: SoliplexSpacing.s2),
                         Text(
                           currentRoom.quizzes.length == 1
                               ? 'Quiz Available'
                               : '${currentRoom.quizzes.length} Quizzes Available',
-                          style: theme.textTheme.titleSmall,
+                          style: theme.textTheme.titleMedium,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: SoliplexSpacing.s2),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: SoliplexSpacing.s2,
+                      runSpacing: SoliplexSpacing.s2,
                       alignment: WrapAlignment.center,
                       children: [
                         for (final entry in currentRoom.quizzes.entries)
                           ActionChip(
-                            avatar: const Icon(Icons.play_arrow, size: 16),
+                            avatar: Icon(Icons.play_arrow,
+                                size: 16, color: theme.colorScheme.onPrimary),
                             label: Text(entry.value),
+                            labelStyle: TextStyle(
+                              color: theme.colorScheme.onPrimary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            backgroundColor: theme.colorScheme.primary,
+                            side: BorderSide.none,
                             onPressed: onQuizTapped != null
                                 ? () => onQuizTapped!(entry.key)
                                 : null,
