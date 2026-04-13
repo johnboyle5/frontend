@@ -378,6 +378,34 @@ void main() {
       state.dispose();
     });
 
+    test('navigates to null when thread list is not Loaded', () async {
+      // Initial thread-list fetch fails so ThreadListState is in
+      // ThreadsFailed, not ThreadsLoaded.
+      api.nextRoom = Room(id: 'room-1', name: 'Test');
+      api.nextThreadsError = Exception('list fetch failed');
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+
+      String? navigatedId = 'not-called';
+      final state = RoomState(
+        connection: connection,
+        roomId: 'room-1',
+        runtimeManager: runtimeManager,
+        registry: registry,
+        onNavigateToThread: (id) => navigatedId = id,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      state.selectThread('thread-1');
+      // Allow the subsequent delete API call to succeed.
+      api.nextThreadsError = null;
+      await state.deleteThread('thread-1');
+
+      expect(state.activeThreadView, isNull);
+      expect(navigatedId, isNull);
+
+      state.dispose();
+    });
+
     test('preserves active view on API error', () async {
       final threads = [
         ThreadInfo(

@@ -14,6 +14,27 @@ void main() {
     createdAt: DateTime(2026, 3, 1),
   );
 
+  testWidgets('renders "New Thread" for a thread with no name', (tester) async {
+    final nameless = ThreadInfo(
+      id: 't-2',
+      roomId: 'room-1',
+      createdAt: DateTime(2026, 3, 1),
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ThreadTile(
+          thread: nameless,
+          isSelected: false,
+          onTap: () {},
+          onRename: () {},
+          onDelete: () {},
+        ),
+      ),
+    ));
+
+    expect(find.text('New Thread'), findsOneWidget);
+  });
+
   testWidgets('overflow menu shows Rename and Delete options', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(

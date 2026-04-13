@@ -126,10 +126,10 @@ class RoomState {
   /// Deletes a thread. Disposes the active view if it belongs to this
   /// thread. Navigates to the next available thread, or null if none.
   Future<void> deleteThread(String threadId) async {
-    // Pick the next thread BEFORE the mutation. threadList.deleteThread
-    // may flip the list into a transient Loading state (its non-Loaded
-    // fallback path calls _fetch()); reading after the await would miss
-    // the list we actually had and land the user on an empty screen.
+    // Pick the next thread from the list we can *see now*. Reading after
+    // the await risks seeing a list that a concurrent fetch has replaced
+    // (e.g., with ThreadsLoading). If we can't see a Loaded list now,
+    // there's no successor to pick and we'll navigate to null.
     final nextThreadId = _pickNextThreadId(excluding: threadId);
 
     await threadList.deleteThread(threadId);

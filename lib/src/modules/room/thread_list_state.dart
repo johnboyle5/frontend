@@ -100,7 +100,13 @@ class ThreadListState {
   }
 
   Future<void> renameThread(String threadId, String name) async {
-    assert(name.trim().isNotEmpty, 'caller must not submit an empty name');
+    // Defense-in-depth: the RenameDialog UI prevents empty submissions, but
+    // the backend accepts empty strings and would silently store a thread
+    // with name="". FormatException is caught by AsyncActionDialog and
+    // surfaced inline, unlike Error subclasses.
+    if (name.trim().isEmpty) {
+      throw const FormatException('Thread name must not be empty');
+    }
     if (_isDisposed) return;
 
     // The backend replaces all metadata on update, so we must re-send
