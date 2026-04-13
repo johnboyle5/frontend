@@ -71,8 +71,8 @@ ListTileThemeData buildListTileTheme(
 
 /// Builds the Divider theme with custom styling.
 DividerThemeData buildDividerTheme(ColorScheme colorScheme) => DividerThemeData(
-      color: colorScheme.outlineVariant.withValues(alpha: 0.8),
-      thickness: 1,
+      color: colorScheme.outlineVariant,
+      thickness: 2,
       space: 0,
     );
 
@@ -198,7 +198,7 @@ IconButtonThemeData buildIconButtonTheme(ColorScheme colorScheme) {
         borderRadius: BorderRadius.zero,
       ),
       padding: const EdgeInsets.symmetric(
-        horizontal: SoliplexSpacing.s4,
+        horizontal: SoliplexSpacing.s3,
         vertical: SoliplexSpacing.s3,
       ),
     ),

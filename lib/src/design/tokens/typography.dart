@@ -51,7 +51,7 @@ TextTheme buildSoliplexTextTheme({String? bodyFont, String? displayFont}) {
       fontWeight: FontWeight.w700,
       fontSize: 32,
       letterSpacing: 0,
-      height: 1.4,
+      height: 1.455,
     ),
     headlineMedium: TextStyle(
       fontFamily: bodyFont,
@@ -81,7 +81,7 @@ TextTheme buildSoliplexTextTheme({String? bodyFont, String? displayFont}) {
       fontWeight: FontWeight.w600,
       fontSize: 18,
       letterSpacing: 0.15,
-      height: 1.5,
+      height: 1.8,
     ),
     titleSmall: TextStyle(
       fontFamily: bodyFont,

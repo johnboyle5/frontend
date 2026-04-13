@@ -34,7 +34,7 @@ class ServerSidebar extends StatelessWidget {
             onAddServer: onAddServer,
           ),
         ),
-        const Divider(height: 4),
+        const Divider(),
         _ActionButtons(
           onAddServer: onAddServer,
           onNetworkInspector: onNetworkInspector,
@@ -76,7 +76,7 @@ class _ServerList extends StatelessWidget {
             ],
           ),
         ),
-        const Divider(height: 4),
+        const Divider(),
         for (final entry in servers.entries)
           _ServerTile(
             entry: entry.value,
@@ -146,7 +146,7 @@ class _ActionButtons extends StatelessWidget {
           label: const Text('Home'),
           style: TextButton.styleFrom(alignment: Alignment.centerLeft),
         ),
-        const Divider(height: 4),
+        const Divider(),
         TextButton.icon(
           onPressed: onNetworkInspector,
           icon: const Icon(Icons.lan, size: 16),

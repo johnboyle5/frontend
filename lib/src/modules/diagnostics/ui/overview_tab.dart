@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../../../design/theme/theme_extensions.dart';
+import '../../../../soliplex_frontend.dart';
 import '../models/event_accumulator.dart';
 import '../models/http_event_group.dart';
 import '../models/json_tree_model.dart';
@@ -148,7 +148,8 @@ class _TruncationBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+          horizontal: SoliplexSpacing.s3, vertical: SoliplexSpacing.s2),
       decoration: BoxDecoration(
         color: colorScheme.tertiaryContainer,
       ),
@@ -294,7 +295,8 @@ class _RoleBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+          horizontal: SoliplexSpacing.s2, vertical: SoliplexSpacing.s1),
       decoration: BoxDecoration(
         color: color,
       ),
@@ -364,7 +366,8 @@ class _SseEventCardState extends State<_SseEventCard> {
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: SoliplexSpacing.s3, vertical: SoliplexSpacing.s2),
               child: Row(
                 children: [
                   _EventTypeBadge(type: widget.event.type),
@@ -410,7 +413,8 @@ class _EventTypeBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+          horizontal: SoliplexSpacing.s2, vertical: SoliplexSpacing.s1),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest,
       ),

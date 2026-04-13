@@ -333,7 +333,8 @@ class _ChunkVisualizationPageState extends State<ChunkVisualizationPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(pages.length, (index) {
                     return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: SoliplexSpacing.s1),
                       child: CircleAvatar(
                         radius: 4,
                         backgroundColor: index == _currentPage

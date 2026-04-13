@@ -40,6 +40,11 @@ class ThreadSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isMobile =
+        MediaQuery.sizeOf(context).width < SoliplexBreakpoints.tablet;
+    final double verticalPadding =
+        isMobile ? SoliplexSpacing.s5 : SoliplexSpacing.s8;
+
     return SafeArea(
       bottom: false,
       child: Column(
@@ -54,12 +59,15 @@ class ThreadSidebar extends StatelessWidget {
                 style: TextButton.styleFrom(
                   alignment: Alignment.centerLeft,
                   foregroundColor: Theme.of(context).colorScheme.onSurface,
-                  padding: const EdgeInsets.fromLTRB(
+                  padding: EdgeInsets.fromLTRB(
                     SoliplexSpacing.s2,
-                    SoliplexSpacing.s8,
+                    verticalPadding,
                     SoliplexSpacing.s4,
-                    SoliplexSpacing.s8,
+                    verticalPadding,
                   ),
+                  textStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        height: isMobile ? 1.7 : 1.4,
+                      ),
                 ),
               ),
               const Spacer(),
@@ -71,23 +79,23 @@ class ThreadSidebar extends StatelessWidget {
               ),
             ],
           ),
-          const Divider(height: 4),
+          const Divider(),
           if (quizzes.isNotEmpty) ...[
             _QuizRow(
               quizzes: quizzes,
               onQuizTapped: onQuizTapped,
             ),
-            const Divider(height: 1),
+            const Divider(),
           ],
           Expanded(child: _buildContent(context)),
-          const Divider(height: 4),
+          const Divider(),
           TextButton.icon(
             onPressed: onRoomInfo,
             icon: const Icon(Icons.info_outline, size: 16),
             label: Text(roomName),
             style: TextButton.styleFrom(alignment: Alignment.centerLeft),
           ),
-          const Divider(height: 4),
+          const Divider(),
           TextButton.icon(
             onPressed: onNetworkInspector,
             icon: const Icon(Icons.lan, size: 16),

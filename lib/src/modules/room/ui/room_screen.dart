@@ -459,75 +459,99 @@ class _RoomScreenState extends State<RoomScreen> {
     final hasFiles = allEntries.isNotEmpty;
     final anyUploading = allEntries.any((e) => e.status is UploadUploading);
     final anyFailed = allEntries.any((e) => e.status is UploadError);
+    final bool isMobile =
+        MediaQuery.sizeOf(context).width < SoliplexBreakpoints.tablet;
+    final double horizontalPadding =
+        isMobile ? SoliplexSpacing.s5 : SoliplexSpacing.s9;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              roomName,
-              style: theme.textTheme.titleMedium,
-              overflow: TextOverflow.ellipsis,
+    return SizedBox(
+      width: double.infinity,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: SoliplexSpacing.s3,
+        ),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+              width: 2,
             ),
           ),
-          if (hasFiles)
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _filesExpanded = !_filesExpanded),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (anyUploading)
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                roomName,
+                style: isMobile
+                    ? Theme.of(context).textTheme.headlineSmall
+                    : Theme.of(context).textTheme.headlineLarge,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (hasFiles)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _filesExpanded = !_filesExpanded),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (anyUploading)
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: theme.colorScheme.primary,
+                        ),
+                      )
+                    else if (anyFailed)
+                      Icon(
+                        Icons.error_outline,
+                        size: 20,
+                        color: theme.colorScheme.error,
+                      )
+                    else
+                      Icon(
+                        Icons.attach_file,
+                        size: 20,
                         color: theme.colorScheme.primary,
                       ),
-                    )
-                  else if (anyFailed)
-                    Icon(
-                      Icons.error_outline,
-                      size: 16,
-                      color: theme.colorScheme.error,
-                    )
-                  else
-                    Icon(
-                      Icons.attach_file,
-                      size: 16,
-                      color: theme.colorScheme.primary,
+                    const SizedBox(width: 4),
+                    Text(
+                      _chipLabel(
+                        roomEntries.length,
+                        threadEntries.length,
+                      ),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: anyFailed
+                            ? theme.colorScheme.error
+                            : theme.colorScheme.primary,
+                      ),
                     ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _chipLabel(
-                      roomEntries.length,
-                      threadEntries.length,
-                    ),
-                    style: theme.textTheme.bodySmall?.copyWith(
+                    Icon(
+                      _filesExpanded ? Icons.expand_less : Icons.expand_more,
+                      size: 20,
                       color: anyFailed
                           ? theme.colorScheme.error
                           : theme.colorScheme.primary,
                     ),
-                  ),
-                  Icon(
-                    _filesExpanded ? Icons.expand_less : Icons.expand_more,
-                    size: 16,
-                    color: anyFailed
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.primary,
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          if (attachEnabled && room != null)
-            IconButton(
-              icon: const Icon(Icons.upload_file, size: 20),
-              tooltip: 'Upload file to room',
-              onPressed: () => _pickAndUploadToRoom(room),
-            ),
-        ],
+            if (attachEnabled && room != null)
+              IconButton(
+                icon: const Icon(Icons.upload_file, size: 24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: SoliplexSpacing.s3,
+                  vertical: SoliplexSpacing.s2,
+                ),
+                tooltip: 'Upload file to room',
+                onPressed: () => _pickAndUploadToRoom(room),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -541,14 +565,10 @@ class _RoomScreenState extends State<RoomScreen> {
   ) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s2),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(8),
-        ),
+        padding: const EdgeInsets.all(SoliplexSpacing.s2),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -556,20 +576,16 @@ class _RoomScreenState extends State<RoomScreen> {
             if (roomEntries.isNotEmpty) ...[
               Text(
                 'Room',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.outline,
-                ),
+                style: theme.textTheme.labelMedium,
               ),
               for (final e in roomEntries) _buildFileRow(e),
             ],
             if (roomEntries.isNotEmpty && threadEntries.isNotEmpty)
-              const Divider(height: 12),
+              const SizedBox(height: SoliplexSpacing.s3),
             if (threadEntries.isNotEmpty) ...[
               Text(
                 'Thread',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.outline,
-                ),
+                style: theme.textTheme.labelMedium,
               ),
               for (final e in threadEntries) _buildFileRow(e),
             ],
@@ -590,55 +606,63 @@ class _RoomScreenState extends State<RoomScreen> {
       UploadError() => (Icons.error_outline, theme.colorScheme.error),
     };
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          if (icon != null)
-            Icon(icon, size: 16, color: color)
-          else
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: color,
-              ),
-            ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  entry.filename,
-                  style: theme.textTheme.bodySmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (entry.status is UploadError)
-                  Text(
-                    (entry.status as UploadError).message,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.error,
-                      fontSize: 11,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
+    return Container(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
             ),
           ),
-          if (entry.status is! UploadUploading)
-            IconButton(
-              icon: const Icon(Icons.close, size: 14),
-              onPressed: () => _state.uploadTracker.dismiss(entry.id),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              visualDensity: VisualDensity.compact,
-            ),
-        ],
-      ),
-    );
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: SoliplexSpacing.s1),
+          child: Row(
+            children: [
+              if (icon != null)
+                Icon(icon, size: 16, color: color)
+              else
+                SizedBox(
+                  width: SoliplexSpacing.s4,
+                  height: SoliplexSpacing.s4,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: color,
+                  ),
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.filename,
+                      style: theme.textTheme.bodySmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (entry.status is UploadError)
+                      Text(
+                        (entry.status as UploadError).message,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
+              if (entry.status is! UploadUploading)
+                IconButton(
+                  icon: const Icon(Icons.close, size: 14),
+                  onPressed: () => _state.uploadTracker.dismiss(entry.id),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+        ));
   }
 
   Widget _buildNoThreadBody(Room? room) {

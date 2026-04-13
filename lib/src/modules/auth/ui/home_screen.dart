@@ -383,7 +383,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           const Expanded(child: Divider()),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s3),
             child: Text(
               'Your servers',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(

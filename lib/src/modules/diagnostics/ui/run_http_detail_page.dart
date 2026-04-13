@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../design/theme/theme_extensions.dart';
+import '../../../../soliplex_frontend.dart';
 import '../models/http_event_group.dart';
 import 'http_event_tile.dart';
 import 'request_detail_view.dart';
@@ -75,9 +75,9 @@ class _MultiGroupView extends StatelessWidget {
         titleTextStyle: SoliplexTheme.appBarTitleStyle(context),
       ),
       body: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: SoliplexSpacing.s2),
         itemCount: groups.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
+        separatorBuilder: (_, __) => const Divider(),
         itemBuilder: (context, index) {
           final group = groups[index];
           return HttpEventTile(

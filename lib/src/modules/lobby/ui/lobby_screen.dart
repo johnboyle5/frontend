@@ -259,6 +259,10 @@ class _ServerSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final heading = serverUrl != null ? formatServerUrl(serverUrl!) : serverId;
+    final bool isMobile =
+        MediaQuery.sizeOf(context).width < SoliplexBreakpoints.tablet;
+    final double horizontalPadding =
+        isMobile ? SoliplexSpacing.s5 : SoliplexSpacing.s9;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -266,23 +270,25 @@ class _ServerSection extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: SoliplexSpacing.s9,
-              vertical: SoliplexSpacing.s4,
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              SoliplexSpacing.s4,
+              horizontalPadding,
+              SoliplexSpacing.s3,
             ),
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
                   color: Theme.of(context).colorScheme.outlineVariant,
+                  width: 2,
                 ),
               ),
             ),
             child: Text(
               heading,
-              style:
-                  MediaQuery.sizeOf(context).width < SoliplexBreakpoints.tablet
-                      ? Theme.of(context).textTheme.headlineSmall
-                      : Theme.of(context).textTheme.headlineLarge,
+              style: isMobile
+                  ? Theme.of(context).textTheme.headlineSmall
+                  : Theme.of(context).textTheme.headlineLarge,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -299,8 +305,7 @@ class _ServerSection extends StatelessWidget {
               child: Text('Failed to load rooms: $error'),
             ),
           RoomsLoaded(:final rooms) => Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s9),
+              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
               child: Column(
                 children: [
                   for (final room in rooms)

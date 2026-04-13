@@ -27,7 +27,7 @@ class _ToolCallCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 2),
+      margin: const EdgeInsets.symmetric(vertical: SoliplexSpacing.s1),
       child: ExpansionTile(
         leading: Icon(Icons.bolt, color: theme.colorScheme.primary, size: 18),
         title: Row(

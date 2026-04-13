@@ -121,7 +121,7 @@ void main() {
     test('configures component themes', () {
       final theme = soliplexLightTheme();
 
-      expect(theme.dividerTheme.thickness, 1);
+      expect(theme.dividerTheme.thickness, 2);
     });
   });
 }

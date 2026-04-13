@@ -417,7 +417,7 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
           const SizedBox(height: 8),
           for (final upload in _uploads)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
+              padding: const EdgeInsets.symmetric(vertical: SoliplexSpacing.s1),
               child: Row(
                 children: [
                   if (upload.status == _UploadStatus.uploading)

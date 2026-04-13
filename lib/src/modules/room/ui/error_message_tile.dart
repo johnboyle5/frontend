@@ -15,7 +15,8 @@ class ErrorMessageTile extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+              horizontal: SoliplexSpacing.s3, vertical: SoliplexSpacing.s3),
           decoration: BoxDecoration(
             color: theme.colorScheme.errorContainer,
             borderRadius: BorderRadius.circular(12),

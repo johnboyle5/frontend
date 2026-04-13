@@ -28,7 +28,7 @@ class _ExecutionThinkingBlockState extends State<ExecutionThinkingBlock> {
         onTap: () => setState(() => _expanded = !_expanded),
         child: Container(
           padding: const EdgeInsets.symmetric(
-              horizontal: SoliplexSpacing.s3, vertical: 6),
+              horizontal: SoliplexSpacing.s3, vertical: SoliplexSpacing.s2),
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(

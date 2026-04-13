@@ -28,7 +28,7 @@ class _StepLogState extends State<StepLog> {
         onTap: () => setState(() => _expanded = !_expanded),
         child: Container(
           padding: const EdgeInsets.symmetric(
-              horizontal: SoliplexSpacing.s3, vertical: 6),
+              horizontal: SoliplexSpacing.s3, vertical: SoliplexSpacing.s2),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(6),
@@ -56,7 +56,8 @@ class _StepLogState extends State<StepLog> {
                 const SizedBox(height: SoliplexSpacing.s1),
                 for (final step in steps)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: SoliplexSpacing.s1),
                     child: Row(
                       children: [
                         _stepIcon(step, theme),

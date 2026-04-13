@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../soliplex_frontend.dart';
 import '../models/format_utils.dart';
 import '../models/http_event_group.dart';
 import 'http_status_display.dart';
@@ -26,8 +27,8 @@ class HttpEventTile extends StatelessWidget {
       label: group.semanticLabel,
       child: Padding(
         padding: EdgeInsets.symmetric(
-          horizontal: dense ? 8 : 12,
-          vertical: dense ? 6 : 8,
+          horizontal: dense ? SoliplexSpacing.s2 : SoliplexSpacing.s3,
+          vertical: dense ? SoliplexSpacing.s1 : SoliplexSpacing.s2,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

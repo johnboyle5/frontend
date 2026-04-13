@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
-import '../../../design/theme/theme_extensions.dart';
+import '../../../../soliplex_frontend.dart';
 import '../../../shared/copy_button.dart';
 import '../models/format_utils.dart';
 import '../models/http_event_group.dart';
@@ -158,7 +158,8 @@ class _RequestDetailViewState extends State<RequestDetailView>
   Widget _buildSearchBar(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+          horizontal: SoliplexSpacing.s3, vertical: SoliplexSpacing.s2),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         border: Border(
@@ -181,7 +182,8 @@ class _RequestDetailViewState extends State<RequestDetailView>
                       )
                     : null,
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: SoliplexSpacing.s2),
                 border: OutlineInputBorder(),
               ),
             ),
@@ -316,7 +318,8 @@ class _MatchBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      padding: const EdgeInsets.symmetric(
+          horizontal: SoliplexSpacing.s2, vertical: SoliplexSpacing.s1),
       decoration: BoxDecoration(
         color: colorScheme.primaryContainer,
       ),
@@ -349,7 +352,8 @@ class _MethodBadge extends StatelessWidget {
         : colorScheme.onPrimaryContainer;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+          horizontal: SoliplexSpacing.s2, vertical: SoliplexSpacing.s1),
       decoration: BoxDecoration(
         color: backgroundColor,
       ),
@@ -625,8 +629,8 @@ class _HeadersTable extends StatelessWidget {
           for (final (index, entry) in headers.entries.indexed)
             Container(
               padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
+                horizontal: SoliplexSpacing.s3,
+                vertical: SoliplexSpacing.s2,
               ),
               decoration: BoxDecoration(
                 color: index.isEven
@@ -704,7 +708,7 @@ class _MetadataRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: SoliplexSpacing.s1),
       child: Row(
         children: [
           SizedBox(
