@@ -1,6 +1,24 @@
 # Soliplex Frontend
 
-Flutter frontend for Soliplex.
+Flutter frontend for Soliplex -- a modular, multi-platform AI chat application.
+Serves as both a runnable app and an importable library.
+
+## Features
+
+- **Authentication** -- Multi-server OIDC login with token refresh and secure
+  storage
+- **Room Chat** -- Threaded conversations with AI agents, streaming responses,
+  execution step visibility, and message feedback
+- **Citations** -- Source reference display with PDF chunk visualization for
+  RAG-backed responses
+- **File Upload** -- Cross-platform file attachment to rooms and threads
+- **Document Filtering** -- Narrow RAG retrieval to selected documents
+- **Quizzes** -- Interactive question sessions with scoring and feedback
+- **Network Inspector** -- HTTP request/response debugging with run-level
+  filtering
+- **Responsive Layout** -- Adaptive wide/narrow views across mobile, tablet,
+  and desktop
+- **Multi-platform** -- Android, iOS, macOS, Web, Linux, Windows
 
 ## Development
 
@@ -12,7 +30,11 @@ flutter run -d chrome --web-port 59001
 ## Testing
 
 ```bash
-flutter test
+# Run all tests
+flutter test --reporter failures-only
+
+# Coverage report (app + all packages)
+bash scripts/coverage.sh
 ```
 
 ## Pre-commit Hooks
@@ -21,9 +43,12 @@ Pre-commit hooks enforce code quality on every commit:
 
 - **dart format** - Ensures consistent code formatting
 - **flutter analyze** - Catches errors, warnings, and lint issues
-- **pymarkdown** - Lints markdown files
+- **markdownlint-cli2** - Lints markdown files
 - **gitleaks** - Prevents committing secrets
 - **no-commit-to-branch** - Blocks direct commits to main/master
+- **check-merge-conflict** - Detects unresolved merge conflict markers
+- **check-toml** - Validates TOML file syntax
+- **check-yaml** - Validates YAML file syntax
 
 Install uv (if not already installed):
 
