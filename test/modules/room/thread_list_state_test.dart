@@ -366,6 +366,129 @@ void main() {
     expect(api.deleteThreadCallCount, 0);
   });
 
+  test('deleteThread disposed during await does not mutate list', () async {
+    final thread = ThreadInfo(
+      id: 'thread-1',
+      roomId: 'room-1',
+      name: 'Test',
+      createdAt: DateTime(2026, 1, 1),
+    );
+    api.nextThreads = [thread];
+
+    final state = ThreadListState(
+      connection: connection,
+      roomId: 'room-1',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    // Start delete, synchronously dispose before the API future resolves.
+    final pending = state.deleteThread('thread-1');
+    state.dispose();
+    await pending;
+
+    // API was called, but local list must not have been updated.
+    expect(api.deleteThreadCallCount, 1);
+    final loaded = state.threads.value as ThreadsLoaded;
+    expect(loaded.threads.single.id, 'thread-1');
+  });
+
+  test('renameThread disposed during await does not mutate list', () async {
+    final thread = ThreadInfo(
+      id: 'thread-1',
+      roomId: 'room-1',
+      name: 'Old Name',
+      createdAt: DateTime(2026, 1, 1),
+    );
+    api.nextThreads = [thread];
+
+    final state = ThreadListState(
+      connection: connection,
+      roomId: 'room-1',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    final pending = state.renameThread('thread-1', 'New Name');
+    state.dispose();
+    await pending;
+
+    expect(api.updateMetadataCallCount, 1);
+    final loaded = state.threads.value as ThreadsLoaded;
+    expect(loaded.threads.single.name, 'Old Name');
+  });
+
+  group('createThread', () {
+    test('returns server result and inserts thread into loaded list', () async {
+      api.nextThreads = [];
+      final state = ThreadListState(
+        connection: connection,
+        roomId: 'room-1',
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final created = ThreadInfo(
+        id: 'thread-new',
+        roomId: 'room-1',
+        name: 'Fresh',
+        createdAt: DateTime(2026, 3, 1),
+      );
+      final initialAguiState = {'messages': <dynamic>[]};
+      api.nextCreateThread = (created, initialAguiState);
+
+      final result = await state.createThread();
+
+      expect(result, isNotNull);
+      expect(result!.$1.id, 'thread-new');
+      expect(result.$2, same(initialAguiState));
+      final loaded = state.threads.value as ThreadsLoaded;
+      expect(loaded.threads.single.id, 'thread-new');
+
+      state.dispose();
+    });
+
+    test('disposed before call returns null without hitting API', () async {
+      api.nextThreads = [];
+      final state = ThreadListState(
+        connection: connection,
+        roomId: 'room-1',
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      state.dispose();
+      final result = await state.createThread();
+
+      expect(result, isNull);
+      // nextCreateThread was never set; if the API had been called it would
+      // have thrown StateError.
+    });
+
+    test('disposed during await returns null without mutating list', () async {
+      api.nextThreads = [];
+      final state = ThreadListState(
+        connection: connection,
+        roomId: 'room-1',
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      api.nextCreateThread = (
+        ThreadInfo(
+          id: 'thread-new',
+          roomId: 'room-1',
+          name: 'Fresh',
+          createdAt: DateTime(2026, 3, 1),
+        ),
+        <String, dynamic>{},
+      );
+
+      final pending = state.createThread();
+      state.dispose();
+      final result = await pending;
+
+      expect(result, isNull);
+      final loaded = state.threads.value as ThreadsLoaded;
+      expect(loaded.threads, isEmpty);
+    });
+  });
+
   test(
       'deleteThread from non-loaded state calls the API and schedules a '
       'fresh fetch to reconcile', () async {

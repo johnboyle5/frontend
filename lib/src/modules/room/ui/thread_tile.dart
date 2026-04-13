@@ -76,9 +76,10 @@ class _ThreadTileState extends State<ThreadTile> {
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
       // Keep the menu button "shown" while the popup overlay is open, so
-      // the button isn't unmounted when the pointer leaves the tile. Without
-      // this, PopupMenuButton.showButtonMenu's `if (!mounted) return null`
-      // silently drops onSelected for non-selected threads on desktop.
+      // the button isn't unmounted when the pointer leaves the tile. If the
+      // button unmounts while the popup is open, the showMenu future's
+      // completion callback short-circuits on `!mounted` and silently drops
+      // onSelected for non-selected threads on desktop.
       onOpened: () => setState(() => _isMenuOpen = true),
       onCanceled: () => setState(() => _isMenuOpen = false),
       onSelected: (action) {

@@ -79,16 +79,13 @@ class ThreadListState {
       return;
     }
     // No loaded baseline to merge into. The thread already exists
-    // server-side, so a fresh fetch will include it. Don't clobber an
-    // in-flight fetch with a single-element list — that would lose any
-    // threads the fetch is about to return.
+    // server-side; let a fresh fetch populate the full list rather than
+    // synthesizing a single-element ThreadsLoaded here.
     unawaited(_fetch());
   }
 
   Future<void> deleteThread(String threadId) async {
     if (_isDisposed) return;
-    // Unlike [renameThread], delete has no Loaded-state precondition:
-    // removing by id doesn't need access to existing metadata.
     await _connection.api.deleteThread(_roomId, threadId);
     if (_isDisposed) return;
     final latest = _threads.value;
@@ -135,17 +132,20 @@ class ThreadListState {
     );
     if (_isDisposed) return;
 
-    // Invariant: state was Loaded when we started, and Loaded → non-Loaded
-    // transitions don't happen during awaits — _fetch preserves Loaded on
-    // both success and failure. The cast throws if a future change breaks
-    // that invariant, surfacing the bug instead of masking it.
-    final latest = _threads.value as ThreadsLoaded;
-    _cancelInFlightFetch();
-    final updated = latest.threads.map((t) {
-      if (t.id == threadId) return t.copyWith(name: name);
-      return t;
-    }).toList();
-    _threads.value = ThreadsLoaded(updated);
+    final latest = _threads.value;
+    if (latest is ThreadsLoaded) {
+      _cancelInFlightFetch();
+      final updated = latest.threads.map((t) {
+        if (t.id == threadId) return t.copyWith(name: name);
+        return t;
+      }).toList();
+      _threads.value = ThreadsLoaded(updated);
+      return;
+    }
+    // State transitioned to non-Loaded during the await (no current code
+    // path does this, but it's cheap to handle). Server already has the
+    // new name; a fresh fetch reconciles.
+    unawaited(_fetch());
   }
 
   Future<void> _fetch() async {
