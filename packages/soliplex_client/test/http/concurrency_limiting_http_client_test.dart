@@ -669,37 +669,44 @@ void main() {
     });
 
     test(
-        'permit accounting does not drift after many sequential bursts — '
-        'the semaphore returns to idle state each cycle so the cap stays '
-        'honest over a long session', () async {
-      // Drift regression: an off-by-one in _onSlotReleased would leak
-      // permits, erode the cap, and eventually cause silent
-      // over-commitment. Many bursts amplify a small per-cycle drift
-      // into an observable cap violation.
+        'permit accounting does not drift after many sequential bursts that '
+        'exceed the cap — both immediate and queued-acquire paths are '
+        'exercised so the waiter hand-off branch of _onSlotReleased is '
+        'covered', () async {
+      // Drift regression: an off-by-one in _onSlotReleased's
+      // increment/hand-off would leak permits, erode the cap, and
+      // eventually cause silent over-commitment. Each cycle queues
+      // requests beyond the cap to exercise the hand-off branch.
       final inner = _GatedInner();
       final observer = _RecordingObserver();
+      const cap = 2;
+      const perCycle = 4;
       final client = ConcurrencyLimitingHttpClient(
         inner: inner,
-        maxConcurrent: 3,
+        maxConcurrent: cap,
         observers: [observer],
       );
 
       for (var cycle = 0; cycle < 50; cycle++) {
-        final pendings = List.generate(3, (_) => inner.queueNextRequest());
+        final pendings =
+            List.generate(perCycle, (_) => inner.queueNextRequest());
         final futures = List.generate(
-          3,
+          perCycle,
           (i) => client.request('GET', Uri.parse('https://x/$cycle/$i')),
         );
         await Future<void>.delayed(Duration.zero);
+        // Complete in order — each completion hands the permit to the
+        // next queued waiter via _onSlotReleased's waiter branch.
         for (final p in pendings) {
           p.complete();
+          await Future<void>.delayed(Duration.zero);
         }
         await Future.wait(futures);
       }
 
-      // After 50 full bursts (150 acquisitions), a fresh request must
-      // acquire immediately with zero queue depth and a single slot in
-      // use — proving no accumulated drift.
+      // After 200 acquisitions (100 of them via the queued branch), a
+      // fresh request must acquire immediately with zero queue depth
+      // and a single slot in use — proving no accumulated drift.
       final probePending = inner.queueNextRequest();
       final probeFuture = client.request('GET', Uri.parse('https://x/probe'));
       probePending.complete();
@@ -927,14 +934,21 @@ void main() {
     });
 
     test(
-        'a single cancel token reused across many queued requests does not '
-        'cause late cancellation to disrupt already-dispatched requests',
-        () async {
-      // Regression: each queued request subscribes to whenCancelled. The
-      // subscription must detach once the slot is acquired, so cancelling
-      // the token after dispatch is a no-op. Before the fix, every queued
-      // request pinned a zombie closure for the token's lifetime.
-      final inner = _StreamBodyInner(const Stream<List<int>>.empty());
+        'cancel token shared across queued requests — cancelling after each '
+        'has dispatched does not disrupt the dispatched requests, and the '
+        'token still fails fast for a fresh acquire', () async {
+      // Regression: queued requests subscribe to whenCancelled. Each
+      // subscription must detach when its slot is acquired so a later
+      // token.cancel() does not fire handlers for completed waiters
+      // (and so closures do not accumulate for the token's lifetime).
+      // The test queues two requests behind a held slot so the
+      // subscription-attached branch in _Semaphore.acquire is exercised.
+      final bodyControllers = <StreamController<List<int>>>[];
+      final inner = _FreshStreamBodyInner(() {
+        final c = StreamController<List<int>>();
+        bodyControllers.add(c);
+        return c.stream;
+      });
       final client = ConcurrencyLimitingHttpClient(
         inner: inner,
         maxConcurrent: 1,
@@ -942,24 +956,56 @@ void main() {
 
       final token = CancelToken();
 
-      // Three streaming requests serialized through a cap of 1, each
-      // drained so its slot releases before the next dispatches.
-      for (var i = 0; i < 3; i++) {
-        final response = await client.requestStream(
-          'GET',
-          Uri.parse('https://x/$i'),
-          cancelToken: token,
-        );
-        await response.body.drain<void>();
-      }
+      // Fire all three concurrently. First takes the slot immediately
+      // (no subscription created). The other two queue and register
+      // cancel subscriptions.
+      final responses = <StreamedHttpResponse?>[null, null, null];
+      final dispatched = List.generate(
+        3,
+        (i) => client
+            .requestStream(
+              'GET',
+              Uri.parse('https://x/$i'),
+              cancelToken: token,
+            )
+            .then((r) => responses[i] = r),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        responses[0],
+        isNotNull,
+        reason: 'First request must acquire immediately.',
+      );
+      expect(
+        responses[1],
+        isNull,
+        reason: 'Second request must be queued behind the held slot.',
+      );
+      expect(
+        responses[2],
+        isNull,
+        reason: 'Third request must also be queued.',
+      );
 
-      // All three have acquired and released. Cancelling now must not
-      // affect anything — no exceptions propagate to the caller zone.
+      // Release each slot in order — listen+close drains the body, so
+      // the wrapper's onDone fires and the next waiter acquires
+      // (detaching its cancel subscription via whenComplete).
+      for (var i = 0; i < 3; i++) {
+        while (responses[i] == null) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        responses[i]!.body.listen((_) {});
+        await bodyControllers[i].close();
+        await Future<void>.delayed(Duration.zero);
+      }
+      await Future.wait(dispatched);
+
+      // All three dispatched and released. Cancelling now must not
+      // fire any handler for the already-completed waiters.
       token.cancel('after all dispatched');
 
-      // A fourth fresh request with the same (now-cancelled) token must
-      // fail fast with CancelledException at the pre-acquire check,
-      // proving the token's cancel is still observable where expected.
+      // Fresh request with the same (now-cancelled) token must fail
+      // fast at the pre-acquire check.
       await expectLater(
         client.requestStream(
           'GET',
@@ -1491,7 +1537,8 @@ void main() {
     );
 
     test(
-      'late listener after 60s receives a StateError describing the timeout',
+      'late listener after 60s receives a StateError describing the timeout '
+      'and the semaphore survives the double-release path',
       () {
         fakeAsync((async) {
           final source = StreamController<List<int>>();
@@ -1537,6 +1584,25 @@ void main() {
             isTrue,
             reason: 'Stream must close after the error so the listener '
                 'does not hang waiting for more data.',
+          );
+
+          // The timer and the late-listener branch both call
+          // slot.release(); _SlotHandle.release is idempotent, but the
+          // permit-conservation assert would fire if _available drifted.
+          // Prove the semaphore is back to idle by acquiring a fresh
+          // slot without queueing.
+          var followUpAcquired = false;
+          unawaited(
+            client.request('GET', Uri.parse('https://x/follow-up')).then(
+                  (_) => followUpAcquired = true,
+                ),
+          );
+          async.flushMicrotasks();
+          expect(
+            followUpAcquired,
+            isTrue,
+            reason: 'Follow-up request must acquire immediately — a drift '
+                'from the double-release path would make it queue.',
           );
 
           source.close();

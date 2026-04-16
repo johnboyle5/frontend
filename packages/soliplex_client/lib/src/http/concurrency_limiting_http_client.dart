@@ -122,12 +122,12 @@ class ConcurrencyLimitingHttpClient implements SoliplexHttpClient {
   /// body completes, errors, or is cancelled.
   ///
   /// **Precondition:** callers MUST listen to the returned
-  /// [StreamedHttpResponse.body] within 60 seconds. An unlistened body
-  /// holds the semaphore slot, and with the default cap as few as ten
-  /// such leaks would brick the pool. After 60 seconds without a
-  /// listener, the upstream is drained, the slot is released, and a
-  /// late listener receives a [StateError]. The timeout logs via the
-  /// diagnostic handler so caller bugs are visible in production.
+  /// [StreamedHttpResponse.body] within 60 seconds. Unlistened bodies
+  /// hold semaphore slots, and accumulated leaks eventually brick the
+  /// pool. After 60 seconds without a listener, the upstream is
+  /// drained, the slot is released, and a late listener receives a
+  /// [StateError]. The timeout logs via the diagnostic handler so
+  /// caller bugs are visible in production.
   @override
   Future<StreamedHttpResponse> requestStream(
     String method,
@@ -178,16 +178,9 @@ class ConcurrencyLimitingHttpClient implements SoliplexHttpClient {
     }
   }
 
-  /// Wraps a body stream so [slot] is released when the stream
-  /// completes, errors, or is cancelled. [_SlotHandle.release] is
-  /// idempotent, so multiple callback paths (onDone + onCancel,
-  /// onListen-catch + onCancel) are safe.
-  ///
-  /// A 60-second timer drains the upstream and releases the slot if
-  /// the caller never attaches a listener. Callers that attach after
-  /// the timeout receive a [StateError]. This is defense in depth
-  /// against third-party consumers of `SoliplexHttpAdapter` that may
-  /// forget to drain on error paths.
+  /// Wraps a body stream so [slot] is released on completion, error,
+  /// or cancellation. [_SlotHandle.release] is idempotent because
+  /// several callback paths can fire for the same stream.
   Stream<List<int>> _wrapBodyWithRelease(
     Stream<List<int>> source,
     Uri uri,
@@ -203,7 +196,9 @@ class ConcurrencyLimitingHttpClient implements SoliplexHttpClient {
       onListen: () {
         leakDetector?.cancel();
         if (timedOut) {
-          slot.release();
+          // Timer already released the slot; upstream drain was
+          // best-effort. We only need to surface the error to the
+          // late listener and close the wrapper.
           controller
             ..addError(
               StateError(

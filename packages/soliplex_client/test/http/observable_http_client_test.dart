@@ -32,6 +32,14 @@ class RecordingObserver implements HttpObserver {
   List<T> eventsOfType<T extends HttpEvent>() => events.whereType<T>().toList();
 }
 
+/// Object whose toString throws. Used to exercise the redaction
+/// safety-net's outermost catch: _redactRequestBody falls through to
+/// body.toString() for unknown types.
+class _ThrowingToStringBody {
+  @override
+  String toString() => throw StateError('toString is broken');
+}
+
 /// Observer that throws on every callback.
 class ThrowingObserver implements HttpObserver {
   @override
@@ -787,6 +795,110 @@ void main() {
         // Both recording observers should still receive events
         expect(recorder1.events, hasLength(2));
         expect(recorder2.events, hasLength(2));
+
+        observableClient.close();
+      });
+
+      test(
+          'request body redaction failure yields <redaction failed> '
+          'placeholder, logs a diagnostic, and does not break the request',
+          () async {
+        // Regression for the outer try/catch around _redactRequestBody:
+        // if the redactor throws on pathological input (here: an object
+        // whose toString throws), observers must see a placeholder and
+        // the request must still complete.
+        final diagnostics = <String>[];
+        final observableClient = ObservableHttpClient(
+          client: mockClient,
+          observers: [recorder],
+          onDiagnostic: (_, __, {required message}) => diagnostics.add(message),
+        );
+
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => HttpResponse(statusCode: 200, bodyBytes: Uint8List(0)),
+        );
+
+        await observableClient.request(
+          'POST',
+          Uri.parse('https://example.com/api'),
+          body: _ThrowingToStringBody(),
+        );
+
+        final requests = recorder.eventsOfType<HttpRequestEvent>();
+        expect(requests, hasLength(1));
+        expect(
+          requests.single.body,
+          '<redaction failed>',
+          reason: 'Observer must receive the placeholder when redaction '
+              'throws — never the raw body, never a missing event.',
+        );
+        expect(
+          diagnostics,
+          contains('Request body redaction failed unexpectedly'),
+          reason: 'Redaction failure must be visible in diagnostics so '
+              'the bug can be found in production logs.',
+        );
+
+        observableClient.close();
+      });
+
+      test(
+          'response body redaction failure yields <redaction failed> '
+          'placeholder when the body getter throws on invalid UTF-8', () async {
+        // HttpResponse.body calls utf8.decode(bodyBytes); invalid UTF-8
+        // throws FormatException. With content-type application/json,
+        // the inner method catches FormatException from jsonDecode but
+        // then calls redactString which re-invokes the body getter —
+        // the second throw escapes the inner method and is caught by
+        // the outer safety net.
+        final diagnostics = <String>[];
+        final observableClient = ObservableHttpClient(
+          client: mockClient,
+          observers: [recorder],
+          onDiagnostic: (_, __, {required message}) => diagnostics.add(message),
+        );
+
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => HttpResponse(
+            statusCode: 200,
+            bodyBytes: Uint8List.fromList(const [0xFF, 0xFE, 0xFD]),
+            headers: const {'content-type': 'application/json'},
+          ),
+        );
+
+        await observableClient.request(
+          'GET',
+          Uri.parse('https://example.com/api'),
+        );
+
+        final responses = recorder.eventsOfType<HttpResponseEvent>();
+        expect(responses, hasLength(1));
+        expect(
+          responses.single.body,
+          '<redaction failed>',
+          reason: 'Observer must receive the placeholder when body '
+              'decoding fails during redaction.',
+        );
+        expect(
+          diagnostics,
+          contains('Response body redaction failed unexpectedly'),
+        );
 
         observableClient.close();
       });

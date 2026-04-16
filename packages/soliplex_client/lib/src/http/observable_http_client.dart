@@ -284,12 +284,10 @@ class ObservableHttpClient implements SoliplexHttpClient {
     _client.close();
   }
 
-  /// Redacts the request body based on content type and URI.
-  ///
-  /// Wrapped in an outer safety net: redaction is a best-effort path
-  /// feeding observability. Any unexpected throw is logged and replaced
-  /// with a placeholder so the observer sees *something* and the
-  /// request itself never fails because of redaction.
+  /// Redacts the request body based on content type and URI. Never
+  /// throws; redaction failures are logged and yield
+  /// `'<redaction failed>'` so observer dispatch and the request itself
+  /// both proceed.
   dynamic _redactRequestBody(
     Object? body,
     Map<String, String>? headers,
@@ -342,11 +340,9 @@ class ObservableHttpClient implements SoliplexHttpClient {
     return body.toString();
   }
 
-  /// Redacts the response body based on content type and URI.
-  ///
-  /// Wrapped in an outer safety net for the same reason as
-  /// [_redactRequestBody]: binary bodies with invalid encoding or a
-  /// redactor bug must not break the observer dispatch.
+  /// Redacts the response body based on content type and URI. See
+  /// [_redactRequestBody]: same contract (never throws; failures
+  /// become `'<redaction failed>'`).
   dynamic _redactResponseBody(HttpResponse response, Uri uri) {
     try {
       return _redactResponseBodyInner(response, uri);

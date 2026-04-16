@@ -28,19 +28,10 @@ void defaultHttpDiagnosticHandler(
   );
 }
 
-/// Wraps [handler] so any throw (synchronous or from a fire-and-forget
-/// async operation initiated by the handler) falls back to
-/// `dart:developer.log`. Diagnostic handlers are the last line of
-/// defense inside the HTTP stack; if one throws into the caller, the
-/// contract "internal errors are contained without crashing the
-/// request" is broken.
-///
-/// Use this wrapper when storing a user-provided handler as a field:
-/// ```dart
-/// _onDiagnostic = safeDiagnosticHandler(
-///   onDiagnostic ?? defaultHttpDiagnosticHandler,
-/// );
-/// ```
+/// Wraps [handler] so any throw — sync or from an unawaited async path
+/// it started — falls back to `dart:developer.log`. The HTTP stack
+/// relies on diagnostic handlers to contain internal errors; a handler
+/// that escapes into the caller breaks that contract.
 HttpDiagnosticHandler safeDiagnosticHandler(HttpDiagnosticHandler handler) {
   return (Object error, StackTrace stackTrace, {required String message}) {
     runZonedGuarded(
