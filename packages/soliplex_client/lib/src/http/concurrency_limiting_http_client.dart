@@ -321,14 +321,14 @@ class _Semaphore {
   }
 
   void release() {
-    // Skip waiters that were already completed by CancelToken — handing
-    // them the permit would waste it (the caller already threw).
-    while (_waiters.isNotEmpty) {
-      final next = _waiters.removeFirst();
-      if (!next.isCompleted) {
-        next.complete();
-        return;
-      }
+    // Invariant: every completer in [_waiters] is uncompleted. The
+    // cancel handler in [acquire] atomically removes a completer from
+    // the queue and completes it with an error, so completed completers
+    // never linger. That lets release() hand the permit to the head
+    // without a skip-loop.
+    if (_waiters.isNotEmpty) {
+      _waiters.removeFirst().complete();
+      return;
     }
     _available++;
   }

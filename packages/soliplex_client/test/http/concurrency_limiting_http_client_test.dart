@@ -701,8 +701,9 @@ void main() {
       expect(response.statusCode, 200);
     });
 
-    test('cancelled waiter in queue is skipped; next live waiter dispatches',
-        () async {
+    test(
+        'cancelled middle waiter drops out of the queue; next live waiter '
+        'dispatches when slot frees', () async {
       final inner = _GatedInner();
       final client = ConcurrencyLimitingHttpClient(
         inner: inner,
@@ -736,14 +737,14 @@ void main() {
       );
       await Future<void>.delayed(Duration.zero);
 
-      // Cancel the MIDDLE waiter. Its completer is marked cancelled but
-      // stays nominally in the queue ordering — release() must skip it.
-      cancelB.cancel('skip me');
+      // Cancel the MIDDLE waiter. The cancel handler atomically removes
+      // its completer from the queue, so when release() fires later it
+      // must find A at the head (not B, not C).
+      cancelB.cancel('removed');
       await expectLater(streamB, throwsA(isA<CancelledException>()));
 
-      // Release the held slot. Our regression-sensitive path:
-      // release() iterates waiters, sees cancelled B, skips it, hands
-      // the permit to A (not C).
+      // Release the held slot. A is expected to dispatch; C remains
+      // queued behind it.
       heldPending.complete();
       await heldFuture;
       await Future<void>.delayed(Duration.zero);
@@ -751,15 +752,14 @@ void main() {
       expect(
         inner.streamCallCount,
         1,
-        reason: 'Exactly one of the live waiters should have dispatched',
+        reason: 'A, not the cancelled B or the behind C, must dispatch',
       );
 
       // Clean up remaining waiters.
       cancelA.cancel('cleanup');
       cancelC.cancel('cleanup');
-      // A already dispatched (inner.streamCallCount == 1), so we expect
-      // its stream to resolve normally; C was still queued and should
-      // throw.
+      // A already dispatched, its stream resolves normally; C was still
+      // queued and throws.
       await expectLater(streamC, throwsA(isA<CancelledException>()));
       await streamA;
     });
