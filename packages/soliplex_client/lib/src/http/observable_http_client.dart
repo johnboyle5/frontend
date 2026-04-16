@@ -227,6 +227,7 @@ class ObservableHttpClient implements SoliplexHttpClient {
     StreamSubscription<List<int>>? subscription;
 
     controller = StreamController<List<int>>(
+      sync: true,
       onListen: () {
         subscription = response.body.listen(
           (data) {
