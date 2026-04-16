@@ -94,3 +94,21 @@ HttpStreamEndEvent createStreamEndEvent({
     body: body,
   );
 }
+
+HttpConcurrencyWaitEvent createConcurrencyWaitEvent({
+  String requestId = 'cc-1',
+  DateTime? timestamp,
+  Uri? uri,
+  Duration waitDuration = const Duration(milliseconds: 50),
+  int queueDepthAtEnqueue = 0,
+  int slotsInUseAfterAcquire = 1,
+}) {
+  return HttpConcurrencyWaitEvent(
+    requestId: requestId,
+    timestamp: timestamp ?? DateTime.utc(2026, 4, 16, 12),
+    uri: uri ?? Uri.parse('https://api.example.com/x'),
+    waitDuration: waitDuration,
+    queueDepthAtEnqueue: queueDepthAtEnqueue,
+    slotsInUseAfterAcquire: slotsInUseAfterAcquire,
+  );
+}

@@ -19,6 +19,10 @@ void main() {
       expect(inspector.events, isEmpty);
     });
 
+    test('starts with empty concurrencyEvents list', () {
+      expect(inspector.concurrencyEvents, isEmpty);
+    });
+
     test('collects request events via onRequest', () {
       inspector.onRequest(createRequestEvent());
       expect(inspector.events, hasLength(1));
@@ -42,6 +46,24 @@ void main() {
     test('collects stream end events via onStreamEnd', () {
       inspector.onStreamEnd(createStreamEndEvent());
       expect(inspector.events, hasLength(1));
+    });
+
+    test('collects concurrency wait events via onConcurrencyWait', () {
+      inspector.onConcurrencyWait(createConcurrencyWaitEvent());
+      expect(inspector.concurrencyEvents, hasLength(1));
+    });
+
+    test('concurrency events do not pollute the http events list', () {
+      inspector.onConcurrencyWait(createConcurrencyWaitEvent());
+      expect(inspector.events, isEmpty);
+    });
+
+    test('concurrencyEvents getter returns unmodifiable list', () {
+      inspector.onConcurrencyWait(createConcurrencyWaitEvent());
+      expect(
+        () => inspector.concurrencyEvents.add(createConcurrencyWaitEvent()),
+        throwsUnsupportedError,
+      );
     });
 
     test('accumulates multiple events in order', () {
@@ -69,6 +91,14 @@ void main() {
       expect(inspector.events, isEmpty);
     });
 
+    test('clear() empties both events and concurrencyEvents', () {
+      inspector.onRequest(createRequestEvent());
+      inspector.onConcurrencyWait(createConcurrencyWaitEvent());
+      inspector.clear();
+      expect(inspector.events, isEmpty);
+      expect(inspector.concurrencyEvents, isEmpty);
+    });
+
     test('notifyListeners fires when event is added', () {
       var notifyCount = 0;
       inspector.addListener(() => notifyCount++);
@@ -78,6 +108,14 @@ void main() {
 
       inspector.onResponse(createResponseEvent());
       expect(notifyCount, 2);
+    });
+
+    test('notifyListeners fires when concurrency event is added', () {
+      var notifyCount = 0;
+      inspector.addListener(() => notifyCount++);
+
+      inspector.onConcurrencyWait(createConcurrencyWaitEvent());
+      expect(notifyCount, 1);
     });
 
     test('notifyListeners fires on clear()', () {
