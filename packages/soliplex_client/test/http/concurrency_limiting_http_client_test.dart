@@ -110,6 +110,37 @@ class _StreamBodyInner implements SoliplexHttpClient {
   void close() {}
 }
 
+/// Inner that returns a fresh body per `requestStream` call. Real HTTP
+/// clients return a new single-subscription stream per request; tests
+/// that exercise multiple sequential requests need this shape.
+class _FreshStreamBodyInner implements SoliplexHttpClient {
+  _FreshStreamBodyInner(this._makeBody);
+  final Stream<List<int>> Function() _makeBody;
+
+  @override
+  Future<HttpResponse> request(
+    String method,
+    Uri uri, {
+    Map<String, String>? headers,
+    Object? body,
+    Duration? timeout,
+  }) async =>
+      HttpResponse(statusCode: 200, bodyBytes: Uint8List(0));
+
+  @override
+  Future<StreamedHttpResponse> requestStream(
+    String method,
+    Uri uri, {
+    Map<String, String>? headers,
+    Object? body,
+    CancelToken? cancelToken,
+  }) async =>
+      StreamedHttpResponse(statusCode: 200, body: _makeBody());
+
+  @override
+  void close() {}
+}
+
 class _CloseCounter implements SoliplexHttpClient {
   _CloseCounter(this._onClose);
   final void Function() _onClose;
@@ -637,6 +668,108 @@ void main() {
       expect(capturedMessages.single, contains('Clock went backward'));
     });
 
+    test(
+        'permit accounting does not drift after many sequential bursts — '
+        'the semaphore returns to idle state each cycle so the cap stays '
+        'honest over a long session', () async {
+      // Drift regression: an off-by-one in _onSlotReleased would leak
+      // permits, erode the cap, and eventually cause silent
+      // over-commitment. Many bursts amplify a small per-cycle drift
+      // into an observable cap violation.
+      final inner = _GatedInner();
+      final observer = _RecordingObserver();
+      final client = ConcurrencyLimitingHttpClient(
+        inner: inner,
+        maxConcurrent: 3,
+        observers: [observer],
+      );
+
+      for (var cycle = 0; cycle < 50; cycle++) {
+        final pendings = List.generate(3, (_) => inner.queueNextRequest());
+        final futures = List.generate(
+          3,
+          (i) => client.request('GET', Uri.parse('https://x/$cycle/$i')),
+        );
+        await Future<void>.delayed(Duration.zero);
+        for (final p in pendings) {
+          p.complete();
+        }
+        await Future.wait(futures);
+      }
+
+      // After 50 full bursts (150 acquisitions), a fresh request must
+      // acquire immediately with zero queue depth and a single slot in
+      // use — proving no accumulated drift.
+      final probePending = inner.queueNextRequest();
+      final probeFuture = client.request('GET', Uri.parse('https://x/probe'));
+      probePending.complete();
+      await probeFuture;
+
+      final last = observer.events.last;
+      expect(
+        last.queueDepthAtEnqueue,
+        0,
+        reason: 'Idle semaphore must report zero depth on probe acquire.',
+      );
+      expect(
+        last.slotsInUseAfterAcquire,
+        1,
+        reason: 'Only the probe should be in flight — drift would push '
+            'this above 1.',
+      );
+      expect(
+        last.waitDuration,
+        Duration.zero,
+        reason: 'Probe must not queue against leaked permits.',
+      );
+    });
+
+    test(
+        'generates pairwise-distinct acquisitionIds even when many requests '
+        'share the same clock timestamp — the counter suffix is the last '
+        'line of defense against collisions', () async {
+      // Frozen clock: every acquisitionId would share the same
+      // millisecondsSinceEpoch component. Uniqueness must come from the
+      // monotonic counter suffix. A future refactor that scopes the
+      // counter to a per-millisecond epoch would silently collide here.
+      final inner = _GatedInner();
+      final observer = _RecordingObserver();
+      final frozenClock = _MockClock();
+      final client = ConcurrencyLimitingHttpClient(
+        inner: inner,
+        maxConcurrent: 10,
+        observers: [observer],
+        clock: frozenClock.call,
+      );
+
+      const concurrent = 10;
+      final pendings = List.generate(
+        concurrent,
+        (_) => inner.queueNextRequest(),
+      );
+      final futures = List.generate(
+        concurrent,
+        (i) => client.request('GET', Uri.parse('https://x/$i')),
+      );
+
+      // Clock does NOT advance. All acquisitions share the same
+      // timestamp — counter alone must disambiguate.
+      for (final p in pendings) {
+        p.complete();
+      }
+      await Future.wait(futures);
+
+      expect(observer.events, hasLength(concurrent));
+      final ids = observer.events.map((e) => e.acquisitionId).toSet();
+      expect(
+        ids,
+        hasLength(concurrent),
+        reason: 'All $concurrent acquisitionIds must be distinct even under '
+            'a frozen clock — the counter component carries the '
+            'uniqueness guarantee.',
+      );
+    });
+
     test('continues notifying remaining observers after one throws', () async {
       final inner = _GatedInner();
       final throwingObserver = _ThrowingObserver();
@@ -654,6 +787,30 @@ void main() {
         recordingObserver.events.length,
         1,
         reason: 'Second observer must receive the event',
+      );
+    });
+
+    test(
+        'request completes normally even when the diagnostic handler itself '
+        'throws — failure must not propagate past the safety wrapper',
+        () async {
+      // A throwing observer forces the decorator to invoke _onDiagnostic.
+      // The handler then throws, simulating a Sentry-style sink failing
+      // transiently. safeDiagnosticHandler must swallow the failure.
+      final inner = _GatedInner();
+      final client = ConcurrencyLimitingHttpClient(
+        inner: inner,
+        maxConcurrent: 1,
+        observers: [_ThrowingObserver()],
+        onDiagnostic: (_, __, {required message}) {
+          throw StateError('diagnostic sink down');
+        },
+      );
+
+      await expectLater(
+        client.request('GET', Uri.parse('https://x/y')),
+        completes,
+        reason: 'A broken diagnostic sink must not break request flow.',
       );
     });
   });
@@ -767,6 +924,50 @@ void main() {
       firstPending.complete();
       await firstFuture;
       expect(inner.streamCallCount, 0);
+    });
+
+    test(
+        'a single cancel token reused across many queued requests does not '
+        'cause late cancellation to disrupt already-dispatched requests',
+        () async {
+      // Regression: each queued request subscribes to whenCancelled. The
+      // subscription must detach once the slot is acquired, so cancelling
+      // the token after dispatch is a no-op. Before the fix, every queued
+      // request pinned a zombie closure for the token's lifetime.
+      final inner = _StreamBodyInner(const Stream<List<int>>.empty());
+      final client = ConcurrencyLimitingHttpClient(
+        inner: inner,
+        maxConcurrent: 1,
+      );
+
+      final token = CancelToken();
+
+      // Three streaming requests serialized through a cap of 1, each
+      // drained so its slot releases before the next dispatches.
+      for (var i = 0; i < 3; i++) {
+        final response = await client.requestStream(
+          'GET',
+          Uri.parse('https://x/$i'),
+          cancelToken: token,
+        );
+        await response.body.drain<void>();
+      }
+
+      // All three have acquired and released. Cancelling now must not
+      // affect anything — no exceptions propagate to the caller zone.
+      token.cancel('after all dispatched');
+
+      // A fourth fresh request with the same (now-cancelled) token must
+      // fail fast with CancelledException at the pre-acquire check,
+      // proving the token's cancel is still observable where expected.
+      await expectLater(
+        client.requestStream(
+          'GET',
+          Uri.parse('https://x/4'),
+          cancelToken: token,
+        ),
+        throwsA(isA<CancelledException>()),
+      );
     });
   });
 
@@ -1130,6 +1331,57 @@ void main() {
         throwsA(isA<CancelledException>()),
       );
     });
+
+    test(
+        'close during an active stream body leaves the in-flight slot alone; '
+        'the body drains normally and only post-close acquires fail', () async {
+      // Documents the _Semaphore.closeAndDrain contract: "In-flight
+      // slots are left alone — they release normally when their
+      // requests complete." A regression here would either leak the
+      // slot (no release on body completion) or abort the active
+      // stream prematurely.
+      final bodyController = StreamController<List<int>>();
+      final inner = _StreamBodyInner(bodyController.stream);
+      final client = ConcurrencyLimitingHttpClient(
+        inner: inner,
+        maxConcurrent: 1,
+      );
+
+      final response = await client.requestStream(
+        'GET',
+        Uri.parse('https://x/stream'),
+      );
+      final chunks = <List<int>>[];
+      final doneCompleter = Completer<void>();
+      response.body.listen(
+        chunks.add,
+        onDone: doneCompleter.complete,
+      );
+
+      // Close while the body is actively streaming.
+      bodyController.add([1, 2, 3]);
+      await Future<void>.delayed(Duration.zero);
+      client.close();
+
+      // Body must continue delivering until it completes naturally.
+      bodyController.add([4, 5]);
+      await bodyController.close();
+      await doneCompleter.future;
+      expect(
+        chunks,
+        equals([
+          [1, 2, 3],
+          [4, 5],
+        ]),
+      );
+
+      // Any new acquire after close fails with CancelledException —
+      // confirms the slot transition through close is consistent.
+      await expectLater(
+        client.request('GET', Uri.parse('https://x/after')),
+        throwsA(isA<CancelledException>()),
+      );
+    });
   });
 
   group('post-acquire cancel (stream path)', () {
@@ -1175,12 +1427,21 @@ void main() {
     });
   });
 
-  group('debug-only leak detector', () {
+  group('unlistened-body leak handler (60s production)', () {
     test(
-      'fires onDiagnostic after 10s when the response body is never listened',
+      'releases the slot after 60s so the cap recovers for later requests',
       () {
         fakeAsync((async) {
-          final inner = _StreamBodyInner(const Stream<List<int>>.empty());
+          // Fresh stream per call so the queued second request gets its
+          // own subscription-capable body — real HTTP clients do the
+          // same. Without the leak handler, the slot would be held
+          // indefinitely and the second request would queue forever.
+          final sources = <StreamController<List<int>>>[];
+          final inner = _FreshStreamBodyInner(() {
+            final c = StreamController<List<int>>();
+            sources.add(c);
+            return c.stream;
+          });
           final captured = <String>[];
           final client = ConcurrencyLimitingHttpClient(
             inner: inner,
@@ -1188,31 +1449,108 @@ void main() {
             onDiagnostic: (_, __, {required message}) => captured.add(message),
           );
 
+          // First request — caller never listens.
           unawaited(client.requestStream('GET', Uri.parse('https://x/y')));
-          async
-            ..flushMicrotasks()
-            // Just before the 10s threshold — detector must not fire yet.
-            ..elapse(const Duration(seconds: 9, milliseconds: 999));
-          expect(captured, isEmpty);
+          async.flushMicrotasks();
 
-          async.elapse(const Duration(milliseconds: 2));
+          // Second request — must queue because cap is 1.
+          var secondAcquired = false;
+          unawaited(
+            client.requestStream('GET', Uri.parse('https://x/z')).then((resp) {
+              secondAcquired = true;
+              resp.body.listen((_) {});
+            }),
+          );
+          async.flushMicrotasks();
+          expect(
+            secondAcquired,
+            isFalse,
+            reason: 'Second request must queue while first holds the slot.',
+          );
+
+          async.elapse(const Duration(seconds: 61));
           expect(
             captured,
             hasLength(1),
-            reason: 'Detector must fire once after 10s when the body was '
-                'never listened to, so caller bugs are visible in dev.',
+            reason: 'Force-drain must log exactly one diagnostic.',
           );
           expect(captured.single, contains('Unlistened body stream leak'));
+          expect(
+            secondAcquired,
+            isTrue,
+            reason: 'Cap must recover after force-drain so the queued '
+                'request can dispatch.',
+          );
+
+          for (final c in sources) {
+            c.close();
+          }
+          async.flushMicrotasks();
         });
       },
     );
 
     test(
-      'does not fire when the body is listened to within the threshold',
+      'late listener after 60s receives a StateError describing the timeout',
       () {
         fakeAsync((async) {
-          final controller = StreamController<List<int>>();
-          final inner = _StreamBodyInner(controller.stream);
+          final source = StreamController<List<int>>();
+          final inner = _StreamBodyInner(source.stream);
+          final client = ConcurrencyLimitingHttpClient(
+            inner: inner,
+            maxConcurrent: 1,
+            onDiagnostic: (_, __, {required message}) {},
+          );
+
+          StreamedHttpResponse? response;
+          unawaited(
+            client
+                .requestStream('GET', Uri.parse('https://x/y'))
+                .then((r) => response = r),
+          );
+          async
+            ..flushMicrotasks()
+            ..elapse(const Duration(seconds: 61));
+
+          final errors = <Object>[];
+          var doneFired = false;
+          response!.body.listen(
+            (_) {},
+            onError: errors.add,
+            onDone: () => doneFired = true,
+          );
+          async.flushMicrotasks();
+
+          expect(
+            errors,
+            hasLength(1),
+            reason: 'Late listener must receive exactly one StateError '
+                'so the failure is loud and self-describing.',
+          );
+          expect(errors.single, isA<StateError>());
+          expect(
+            (errors.single as StateError).message,
+            contains('60s unlistened-body timeout'),
+          );
+          expect(
+            doneFired,
+            isTrue,
+            reason: 'Stream must close after the error so the listener '
+                'does not hang waiting for more data.',
+          );
+
+          source.close();
+          async.flushMicrotasks();
+        });
+      },
+    );
+
+    test(
+      'does not fire when the body is listened within 60s',
+      () {
+        fakeAsync((async) {
+          final source = StreamController<List<int>>();
+          final inner = _StreamBodyInner(source.stream);
           final captured = <String>[];
           final client = ConcurrencyLimitingHttpClient(
             inner: inner,
@@ -1221,24 +1559,52 @@ void main() {
           );
 
           unawaited(
-            client.requestStream('GET', Uri.parse('https://x/y')).then((
-              response,
-            ) {
-              // Listen immediately — the leak timer must be cancelled.
-              response.body.listen((_) {});
-            }),
+            client
+                .requestStream('GET', Uri.parse('https://x/y'))
+                .then((resp) => resp.body.listen((_) {})),
           );
           async
             ..flushMicrotasks()
-            ..elapse(const Duration(seconds: 30));
-          expect(
-            captured,
-            isEmpty,
-            reason: 'Detector must be cancelled on listen — a caller who '
-                'listens promptly must not trigger a false positive.',
+            // Elapse well past 60s — early listener must have cancelled
+            // the timer. A regression here would spam the diagnostic
+            // channel for every normal streaming request.
+            ..elapse(const Duration(seconds: 120));
+          expect(captured, isEmpty);
+
+          source.close();
+          async.flushMicrotasks();
+        });
+      },
+    );
+
+    test(
+      'drains the upstream source on timeout so the socket can close',
+      () {
+        fakeAsync((async) {
+          var sourceWasListenedTo = false;
+          final source = StreamController<List<int>>(
+            onListen: () => sourceWasListenedTo = true,
+          );
+          final inner = _StreamBodyInner(source.stream);
+          final client = ConcurrencyLimitingHttpClient(
+            inner: inner,
+            maxConcurrent: 1,
+            onDiagnostic: (_, __, {required message}) {},
           );
 
-          controller.close();
+          unawaited(client.requestStream('GET', Uri.parse('https://x/y')));
+          async
+            ..flushMicrotasks()
+            ..elapse(const Duration(seconds: 61));
+
+          expect(
+            sourceWasListenedTo,
+            isTrue,
+            reason: 'Force-drain must listen-then-cancel on the upstream '
+                'source so the platform client tears down the socket.',
+          );
+
+          source.close();
           async.flushMicrotasks();
         });
       },

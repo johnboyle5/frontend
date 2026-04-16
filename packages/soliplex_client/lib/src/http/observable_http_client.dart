@@ -50,7 +50,9 @@ class ObservableHttpClient implements SoliplexHttpClient {
   })  : _client = client,
         _observers = List.unmodifiable(observers),
         _generateRequestId = generateRequestId ?? _defaultRequestIdGenerator,
-        _onDiagnostic = onDiagnostic ?? defaultHttpDiagnosticHandler;
+        _onDiagnostic = safeDiagnosticHandler(
+          onDiagnostic ?? defaultHttpDiagnosticHandler,
+        );
 
   final SoliplexHttpClient _client;
   final List<HttpObserver> _observers;
@@ -283,7 +285,29 @@ class ObservableHttpClient implements SoliplexHttpClient {
   }
 
   /// Redacts the request body based on content type and URI.
+  ///
+  /// Wrapped in an outer safety net: redaction is a best-effort path
+  /// feeding observability. Any unexpected throw is logged and replaced
+  /// with a placeholder so the observer sees *something* and the
+  /// request itself never fails because of redaction.
   dynamic _redactRequestBody(
+    Object? body,
+    Map<String, String>? headers,
+    Uri uri,
+  ) {
+    try {
+      return _redactRequestBodyInner(body, headers, uri);
+    } on Object catch (error, stackTrace) {
+      _onDiagnostic(
+        error,
+        stackTrace,
+        message: 'Request body redaction failed unexpectedly',
+      );
+      return '<redaction failed>';
+    }
+  }
+
+  dynamic _redactRequestBodyInner(
     Object? body,
     Map<String, String>? headers,
     Uri uri,
@@ -297,7 +321,7 @@ class ObservableHttpClient implements SoliplexHttpClient {
         return '<binary upload: ${body.length} bytes>';
       }
       final decoded = utf8.decode(body, allowMalformed: true);
-      return _redactRequestBody(decoded, headers, uri);
+      return _redactRequestBodyInner(decoded, headers, uri);
     }
 
     // List<int> is handled above, so this branch is only for decoded
@@ -312,16 +336,6 @@ class ObservableHttpClient implements SoliplexHttpClient {
         return HttpRedactor.redactJsonBody(parsed, uri);
       } on FormatException {
         return HttpRedactor.redactString(body, uri);
-      } on Object catch (error, stackTrace) {
-        // Pathological input or redactor bug — fall through so the
-        // request still completes, but surface the anomaly so we find
-        // out if this ever fires in practice.
-        _onDiagnostic(
-          error,
-          stackTrace,
-          message: 'Request body redaction failed unexpectedly',
-        );
-        return HttpRedactor.redactString(body, uri);
       }
     }
 
@@ -329,7 +343,24 @@ class ObservableHttpClient implements SoliplexHttpClient {
   }
 
   /// Redacts the response body based on content type and URI.
+  ///
+  /// Wrapped in an outer safety net for the same reason as
+  /// [_redactRequestBody]: binary bodies with invalid encoding or a
+  /// redactor bug must not break the observer dispatch.
   dynamic _redactResponseBody(HttpResponse response, Uri uri) {
+    try {
+      return _redactResponseBodyInner(response, uri);
+    } on Object catch (error, stackTrace) {
+      _onDiagnostic(
+        error,
+        stackTrace,
+        message: 'Response body redaction failed unexpectedly',
+      );
+      return '<redaction failed>';
+    }
+  }
+
+  dynamic _redactResponseBodyInner(HttpResponse response, Uri uri) {
     final contentType = response.headers['content-type'] ?? '';
 
     if (contentType.contains('application/json')) {
@@ -338,21 +369,7 @@ class ObservableHttpClient implements SoliplexHttpClient {
         return HttpRedactor.redactJsonBody(parsed, uri);
       } on FormatException {
         return HttpRedactor.redactString(response.body, uri);
-      } on Object catch (error, stackTrace) {
-        // Pathological input or redactor bug — fall through so the
-        // request still completes, but surface the anomaly so we find
-        // out if this ever fires in practice.
-        _onDiagnostic(
-          error,
-          stackTrace,
-          message: 'Response body redaction failed unexpectedly',
-        );
-        return HttpRedactor.redactString(response.body, uri);
       }
-    }
-
-    if (contentType.contains('text/')) {
-      return HttpRedactor.redactString(response.body, uri);
     }
 
     return HttpRedactor.redactString(response.body, uri);

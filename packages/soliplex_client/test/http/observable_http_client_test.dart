@@ -790,6 +790,40 @@ void main() {
 
         observableClient.close();
       });
+
+      test(
+          'request completes when the diagnostic handler itself throws — the '
+          'safety wrapper must contain a broken sink', () async {
+        // ThrowingObserver forces the decorator to call _onDiagnostic.
+        // The handler then throws, simulating a transient Sentry failure.
+        final observableClient = ObservableHttpClient(
+          client: mockClient,
+          observers: [ThrowingObserver()],
+          onDiagnostic: (_, __, {required message}) {
+            throw StateError('diagnostic sink down');
+          },
+        );
+
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any(named: 'body'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => HttpResponse(statusCode: 200, bodyBytes: Uint8List(0)),
+        );
+
+        await expectLater(
+          observableClient.request('GET', Uri.parse('https://example.com')),
+          completes,
+          reason: 'A broken diagnostic sink must not break request flow.',
+        );
+
+        observableClient.close();
+      });
     });
 
     group('observer error isolation', () {

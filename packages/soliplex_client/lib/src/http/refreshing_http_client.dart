@@ -118,7 +118,7 @@ class RefreshingHttpClient implements SoliplexHttpClient {
       completer.complete(result);
       _refreshInProgress = null;
       return result;
-    } catch (e, stackTrace) {
+    } on Object catch (e, stackTrace) {
       completer.completeError(e, stackTrace);
       _refreshInProgress = null;
       rethrow;

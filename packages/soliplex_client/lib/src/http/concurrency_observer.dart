@@ -2,14 +2,8 @@ import 'package:meta/meta.dart';
 
 /// Observer interface for the concurrency limiter.
 ///
-/// Implementations receive [ConcurrencyWaitEvent] notifications when a
-/// request acquires a slot from the semaphore.
-///
-/// Separate from `HttpObserver` so concurrency events can be added
-/// without forcing existing `HttpObserver` implementers to update —
-/// Dart `implements` does not forward default method bodies. An
-/// observer that wants both HTTP and concurrency visibility can
-/// implement both interfaces side-by-side.
+/// Separate from `HttpObserver` so adding concurrency events does not
+/// break existing `HttpObserver` implementers.
 // ignore: one_member_abstracts
 abstract interface class ConcurrencyObserver {
   /// Called when a request acquires a slot from the concurrency limiter.
