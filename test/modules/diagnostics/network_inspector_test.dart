@@ -118,6 +118,24 @@ void main() {
       expect(notifyCount, 1);
     });
 
+    test('is safe to receive events after dispose', () {
+      inspector
+        ..onRequest(createRequestEvent())
+        ..dispose();
+
+      // Post-dispose events are silently dropped instead of throwing
+      // a "Cannot use disposed ChangeNotifier" error. The HTTP stack
+      // often outlives the UI — logout, route teardown, etc.
+      expect(
+        () => inspector.onConcurrencyWait(createConcurrencyWaitEvent()),
+        returnsNormally,
+      );
+      expect(
+        () => inspector.onRequest(createRequestEvent()),
+        returnsNormally,
+      );
+    });
+
     test('notifyListeners fires on clear()', () {
       inspector.onRequest(createRequestEvent());
 

@@ -29,6 +29,7 @@ class NetworkInspector
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     super.dispose();
   }
