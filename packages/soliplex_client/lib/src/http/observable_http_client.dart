@@ -128,9 +128,17 @@ class ObservableHttpClient implements SoliplexHttpClient {
       });
 
       return response;
-    } on SoliplexException catch (e) {
+    } on Object catch (error, stackTrace) {
       final endTime = DateTime.now();
       final duration = endTime.difference(startTime);
+
+      final exception = error is SoliplexException
+          ? error
+          : NetworkException(
+              message: 'Unexpected error: $error',
+              originalError: error,
+              stackTrace: stackTrace,
+            );
 
       _notifyObservers((observer) {
         observer.onError(
@@ -139,7 +147,7 @@ class ObservableHttpClient implements SoliplexHttpClient {
             timestamp: endTime,
             method: method,
             uri: redactedUri,
-            exception: e,
+            exception: exception,
             duration: duration,
           ),
         );

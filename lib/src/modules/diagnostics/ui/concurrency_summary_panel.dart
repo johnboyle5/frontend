@@ -49,7 +49,7 @@ class ConcurrencySummaryPanel extends StatelessWidget {
                   '${stats.maxDepthAtEnqueue}',
                   style: labelStyle,
                 ),
-                if (stats.avgWaitMs != null)
+                if (stats.queuedCount > 0)
                   Text('avg ${stats.avgWaitMs}ms', style: labelStyle),
                 if (stats.maxWaitMs > 0)
                   Text('max ${stats.maxWaitMs}ms', style: labelStyle),
@@ -95,7 +95,7 @@ class _ConcurrencyStats {
       queuedCount: queuedCount,
       maxDepthAtEnqueue: maxDepth,
       peakSlotsInUse: peakSlots,
-      avgWaitMs: queuedCount == 0 ? null : queuedWaitSumMs ~/ queuedCount,
+      avgWaitMs: queuedCount == 0 ? 0 : queuedWaitSumMs ~/ queuedCount,
       maxWaitMs: maxWaitMs,
     );
   }
@@ -104,6 +104,6 @@ class _ConcurrencyStats {
   final int queuedCount;
   final int maxDepthAtEnqueue;
   final int peakSlotsInUse;
-  final int? avgWaitMs;
+  final int avgWaitMs;
   final int maxWaitMs;
 }

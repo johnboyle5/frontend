@@ -259,9 +259,15 @@ class ConcurrencyLimitingHttpClient implements SoliplexHttpClient {
       // client, tearing down the socket.
       try {
         source.listen(null).cancel();
-      } on Object {
-        // source may already be errored or in a weird state; the slot
-        // release below is what matters for the pool.
+      } on Object catch (error, stackTrace) {
+        // Best-effort drain; slot release below is what matters for the
+        // pool. A consistently-failing drain may indicate a platform
+        // client bug, so surface it to diagnostics.
+        _onDiagnostic(
+          error,
+          stackTrace,
+          message: 'Unlistened body drain failed (slot released anyway)',
+        );
       }
       slot.release();
     });
@@ -377,6 +383,8 @@ class _Semaphore {
   int get waitingCount => _waiters.length;
 
   Future<_SlotHandle> acquire({CancelToken? cancelToken}) {
+    cancelToken?.throwIfCancelled();
+
     if (_closed) {
       return Future<_SlotHandle>.error(
         const CancelledException(reason: 'HTTP client closed'),
@@ -394,7 +402,6 @@ class _Semaphore {
         _SlotHandle._(this, _AcquireOutcome.immediate),
       );
     }
-    cancelToken?.throwIfCancelled();
 
     final completer = Completer<void>();
     _waiters.add(completer);

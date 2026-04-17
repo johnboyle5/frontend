@@ -260,7 +260,7 @@ void main() {
       await Future.wait<void>(futures);
     });
 
-    test('default maxConcurrent caps in-flight at 10', () async {
+    test('default maxConcurrent caps in-flight at 6', () async {
       final inner = _ConcurrencyTrackingInner();
       final client = createAgentHttpClient(innerClient: inner);
 
@@ -273,9 +273,10 @@ void main() {
 
       expect(
         inner.maxInFlight,
-        equals(10),
-        reason: 'default cap must match the upstream connection limit; '
-            'lowering this would overshoot the origin and trigger 429s',
+        equals(6),
+        reason: 'default cap matches the HTTP/1.1 per-host cap shared by '
+            'browsers, URLSession, and Dart HttpClient; keeps this layer '
+            'authoritative and sits under the backend per-client 10-cap',
       );
 
       inner.releaseAll();

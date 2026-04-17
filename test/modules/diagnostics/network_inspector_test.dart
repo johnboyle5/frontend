@@ -185,11 +185,11 @@ void main() {
     test('rejects non-positive maxEvents', () {
       expect(
         () => NetworkInspector(maxEvents: 0),
-        throwsA(isA<AssertionError>()),
+        throwsA(isA<ArgumentError>()),
       );
       expect(
         () => NetworkInspector(maxEvents: -1),
-        throwsA(isA<AssertionError>()),
+        throwsA(isA<ArgumentError>()),
       );
     });
   });

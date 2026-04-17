@@ -152,6 +152,7 @@ Future<ShellConfig> standard({
       plainClient.close();
       runtimeManager.dispose();
       registry.dispose();
+      inspector.dispose();
     },
     modules: [
       diagnosticsModule(inspector: inspector),
