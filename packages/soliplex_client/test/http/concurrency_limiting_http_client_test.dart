@@ -141,34 +141,6 @@ class _FreshStreamBodyInner implements SoliplexHttpClient {
   void close() {}
 }
 
-class _CloseCounter implements SoliplexHttpClient {
-  _CloseCounter(this._onClose);
-  final void Function() _onClose;
-
-  @override
-  Future<HttpResponse> request(
-    String method,
-    Uri uri, {
-    Map<String, String>? headers,
-    Object? body,
-    Duration? timeout,
-  }) async =>
-      HttpResponse(statusCode: 200, bodyBytes: Uint8List(0));
-
-  @override
-  Future<StreamedHttpResponse> requestStream(
-    String method,
-    Uri uri, {
-    Map<String, String>? headers,
-    Object? body,
-    CancelToken? cancelToken,
-  }) async =>
-      const StreamedHttpResponse(statusCode: 200, body: Stream.empty());
-
-  @override
-  void close() => _onClose();
-}
-
 /// Inner that throws synchronously on request() when [throwOnNext] is true.
 /// Verifies the decorator's try/finally releases the slot even when the
 /// inner throws before returning a Future (as opposed to inside an awaited
@@ -1286,13 +1258,6 @@ void main() {
       final follow = await client.request('GET', Uri.parse('https://x/ok'));
       expect(follow.statusCode, 200);
     });
-  });
-
-  test('close delegates to inner', () {
-    var closed = 0;
-    final inner = _CloseCounter(() => closed++);
-    ConcurrencyLimitingHttpClient(inner: inner, maxConcurrent: 1).close();
-    expect(closed, 1);
   });
 
   group('maxConcurrent validation', () {

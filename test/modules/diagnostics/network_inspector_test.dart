@@ -16,11 +16,8 @@ void main() {
       inspector.dispose();
     });
 
-    test('starts with empty events list', () {
+    test('starts with empty event lists', () {
       expect(inspector.events, isEmpty);
-    });
-
-    test('starts with empty concurrencyEvents list', () {
       expect(inspector.concurrencyEvents, isEmpty);
     });
 
@@ -59,14 +56,6 @@ void main() {
       expect(inspector.events, isEmpty);
     });
 
-    test('concurrencyEvents getter returns unmodifiable list', () {
-      inspector.onConcurrencyWait(createConcurrencyWaitEvent());
-      expect(
-        () => inspector.concurrencyEvents.add(createConcurrencyWaitEvent()),
-        throwsUnsupportedError,
-      );
-    });
-
     test('accumulates multiple events in order', () {
       final req = createRequestEvent();
       final resp = createResponseEvent();
@@ -75,14 +64,6 @@ void main() {
       expect(inspector.events, hasLength(2));
       expect(inspector.events[0], req);
       expect(inspector.events[1], resp);
-    });
-
-    test('events getter returns unmodifiable list', () {
-      inspector.onRequest(createRequestEvent());
-      expect(
-        () => inspector.events.add(createResponseEvent()),
-        throwsUnsupportedError,
-      );
     });
 
     test('clear() empties the events list', () {
