@@ -316,6 +316,49 @@ void main() {
     expect(find.byIcon(Icons.expand_less), findsNothing);
   });
 
+  testWidgets(
+      'expanded file panel omits the Thread section when thread scope is empty',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    api.nextRoom = const Room(
+      id: 'room-1',
+      name: 'Attachable',
+      enableAttachments: true,
+    );
+    api.nextThreads = const [];
+    api.nextRoomUploads = [
+      FileUpload(
+        filename: 'shared.pdf',
+        url: Uri.parse('https://example.com/shared.pdf'),
+      ),
+    ];
+
+    await tester.pumpWidget(MaterialApp(
+      home: RoomScreen(
+        serverEntry: entry,
+        roomId: 'room-1',
+        threadId: null,
+        runtimeManager: runtimeManager,
+        registry: registry,
+        uploadRegistry: uploadRegistry,
+        documentSelections: DocumentSelections(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Tap the chip to expand the file panel.
+    await tester.tap(find.byIcon(Icons.expand_more));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Room'), findsOneWidget);
+    expect(find.text('Thread'), findsNothing,
+        reason: 'empty thread scope should not render a Thread label');
+    expect(find.text('shared.pdf'), findsOneWidget);
+  });
+
   testWidgets('shows file chip when room has uploads', (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;

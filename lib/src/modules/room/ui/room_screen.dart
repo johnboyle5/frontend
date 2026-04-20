@@ -550,6 +550,12 @@ class _RoomScreenState extends State<RoomScreen> {
   List<DisplayUpload>? _uploadsOrNull(UploadsStatus s) =>
       s is UploadsLoaded ? s.uploads : null;
 
+  bool _scopeRendersContent(UploadsStatus s) => switch (s) {
+        UploadsLoading() => true,
+        UploadsLoaded(uploads: final u) => u.isNotEmpty,
+        UploadsFailed() => true,
+      };
+
   Widget _buildFilePanel(
     UploadsStatus roomStatus,
     UploadsStatus threadStatus,
@@ -584,14 +590,11 @@ class _RoomScreenState extends State<RoomScreen> {
               )
             else ...[
               _buildScopeSection('Room', roomStatus, theme),
-              if (roomFiles != null &&
-                  roomFiles.isNotEmpty &&
-                  threadStatus is! UploadsLoaded)
-                const Divider(height: 12)
-              else if (roomFiles != null &&
-                  roomFiles.isNotEmpty &&
-                  threadFiles != null &&
-                  threadFiles.isNotEmpty)
+              // The divider sits between two visible sections. A scope
+              // is "visible" when it's Loading or Failed (those render
+              // a section row), or Loaded with at least one file.
+              if (_scopeRendersContent(roomStatus) &&
+                  _scopeRendersContent(threadStatus))
                 const Divider(height: 12),
               _buildScopeSection('Thread', threadStatus, theme),
             ],

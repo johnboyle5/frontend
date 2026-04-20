@@ -393,7 +393,6 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
     final status = _tracker.roomUploads(widget.roomId).watch(context);
     final uploads = status is UploadsLoaded ? status.uploads : null;
     final persistedCount = uploads?.whereType<PersistedUpload>().length ?? 0;
-    final hasPending = uploads?.any((u) => u is PendingUpload) ?? false;
     final title = persistedCount > 0
         ? 'UPLOADED FILES ($persistedCount)'
         : 'UPLOADED FILES';
@@ -406,7 +405,7 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
         Align(
           alignment: Alignment.centerLeft,
           child: FilledButton.icon(
-            onPressed: hasPending ? null : _pickAndUpload,
+            onPressed: _pickAndUpload,
             icon: const Icon(Icons.upload_file, size: 18),
             label: const Text('Upload file to room'),
           ),

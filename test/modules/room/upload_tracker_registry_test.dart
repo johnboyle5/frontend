@@ -78,17 +78,19 @@ void main() {
       final t1 = registry.trackerFor(entry: e1, roomId: 'r1');
       final t2 = registry.trackerFor(entry: e2, roomId: 'r1');
 
-      // Disposing a tracker again is a no-op; we verify eviction by
-      // re-requesting after removal and getting a *different* instance.
       servers.value = {'srv-2': e2};
 
+      expect(t1.isDisposed, isTrue,
+          reason: "evicted tracker must be disposed, not just removed");
+      expect(t2.isDisposed, isFalse);
+
+      // The registry gives out a fresh instance on re-request for the
+      // evicted server; the surviving server's tracker is reused.
       final t1b = registry.trackerFor(entry: e1, roomId: 'r1');
       final t2b = registry.trackerFor(entry: e2, roomId: 'r1');
 
-      expect(identical(t1, t1b), isFalse,
-          reason: 'removed server\'s tracker should have been evicted');
-      expect(identical(t2, t2b), isTrue,
-          reason: 'surviving server\'s tracker should be retained');
+      expect(identical(t1, t1b), isFalse);
+      expect(identical(t2, t2b), isTrue);
     });
 
     test('does not touch trackers when the server set is unchanged', () {

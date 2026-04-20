@@ -38,6 +38,13 @@ class UploadTrackerRegistry {
   /// present in the injected `servers` signal; a tracker created for
   /// a server that is never (or no longer) live will not be subject
   /// to the server-removal eviction path.
+  ///
+  /// Note: identity is keyed on `(serverId, roomId)` only. This
+  /// assumes `ServerManager` never hot-swaps an entry's `connection`
+  /// without first going through `removeServer` (which evicts the
+  /// tracker). If that ever changes, the registry must also be
+  /// invalidated or re-keyed to avoid returning a tracker holding a
+  /// stale [SoliplexApi].
   UploadTracker trackerFor({
     required ServerEntry entry,
     required String roomId,

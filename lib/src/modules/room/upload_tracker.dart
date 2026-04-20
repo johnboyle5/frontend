@@ -78,7 +78,19 @@ sealed class _PendingRecord {
 }
 
 class _Pending extends _PendingRecord {
-  const _Pending({required super.id, required super.filename});
+  _Pending({required super.id, required super.filename});
+
+  /// Flipped to `true` by `_runUpload` once the POST has completed
+  /// server-side. A successful `_fetch` drops the record only when
+  /// this is set AND the filename is in the refreshed persisted list.
+  /// Guards against: (a) concurrent uploads where one refresh
+  /// cancels another (the next refresh's success still cleans up),
+  /// (b) refresh failures after a successful POST (pending stays
+  /// visible as a spinner; the next refresh resolves it), and (c)
+  /// pre-existing same-name files on the server (the filename
+  /// already matches but the post is still in flight, so we don't
+  /// drop prematurely).
+  bool postCompleted = false;
 }
 
 class _Failed extends _PendingRecord {
@@ -117,6 +129,11 @@ class UploadTracker {
   final Map<String, _ScopeState> _scopes = {};
   bool _isDisposed = false;
   int _nextId = 0;
+
+  /// True after [dispose] has been called. Primarily for the
+  /// `UploadTrackerRegistry` eviction tests to verify that evicted
+  /// trackers are actually disposed, not just removed from the map.
+  bool get isDisposed => _isDisposed;
 
   static String _roomKey(String roomId) => 'room:$roomId';
   static String _threadKey(String roomId, String threadId) =>
@@ -210,6 +227,17 @@ class UploadTracker {
       if (token.isCancelled || _isDisposed) return;
       scope.fetchToken = null;
       scope.persisted = list;
+
+      // Clean up pending records whose upload has server-settled
+      // (postCompleted) and whose filename now appears in persisted.
+      // This is owned here — not by `_runUpload` — so a refresh that
+      // was cancelled by a concurrent one doesn't leave a completed
+      // upload stuck in the pending list.
+      final names = list.map((f) => f.filename).toSet();
+      scope.pending.removeWhere(
+        (r) => r is _Pending && r.postCompleted && names.contains(r.filename),
+      );
+
       _emit(scope);
     } on Exception catch (error) {
       if (token.isCancelled || _isDisposed) return;
@@ -304,13 +332,21 @@ class UploadTracker {
       await post();
       if (_isDisposed) return;
 
-      // Refresh BEFORE dropping the pending record so the UI never
-      // shows a gap between "Pending" and "Persisted".
-      await refresh();
-      if (_isDisposed) return;
+      // Mark the pending record as server-settled. The actual removal
+      // from `_pending` happens inside `_fetch` once the filename
+      // appears in persisted — which handles concurrent-upload races
+      // and refresh failures without silently dropping the file.
+      final idx = scope.pending.indexWhere((r) => r.id == id);
+      if (idx < 0) {
+        // Dismissed during POST; nothing to do.
+        return;
+      }
+      final record = scope.pending[idx];
+      if (record is _Pending) {
+        record.postCompleted = true;
+      }
 
-      scope.pending.removeWhere((r) => r.id == id);
-      _emit(scope);
+      unawaited(refresh());
     } on Exception catch (error) {
       if (_isDisposed) return;
       final idx = scope.pending.indexWhere((r) => r.id == id);

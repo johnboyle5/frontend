@@ -235,8 +235,9 @@ void main() {
       );
     });
 
-    test('concurrent same-name uploads drop only the matching Pending',
-        () async {
+    test(
+        'concurrent same-name uploads: first completion drops only the '
+        'first pending; second completion drops the second', () async {
       stubGetRoomUploads([]);
       tracker.fetchRoomUploads('room-1');
       await _pump();
@@ -271,19 +272,22 @@ void main() {
       expect(pending, hasLength(2));
       expect(pending.map((e) => e.id).toSet(), hasLength(2));
 
-      // First upload finishes; its refresh still sees no persisted file
-      // (the server list hasn't been regenerated in this stub).
+      // After the first POST completes, its refresh returns the now-
+      // persisted file. The first pending (postCompleted=true, name
+      // matches persisted) drops. The second pending remains because
+      // its POST hasn't completed yet (postCompleted=false).
+      stubGetRoomUploads([_fileUpload('dup.pdf')]);
       firstCompleter.complete();
       await _pump();
 
-      // One of the two Pending entries should be gone.
       pending = (tracker.roomUploads('room-1').value as UploadsLoaded)
           .uploads
           .whereType<PendingUpload>()
           .toList();
       expect(pending, hasLength(1));
 
-      // Finish second upload; no more Pending.
+      // After the second POST completes, its refresh confirms the
+      // (overwritten) file. The second pending drops.
       secondCompleter.complete();
       await _pump();
 
@@ -334,6 +338,79 @@ void main() {
   });
 
   group('re-fetch races', () {
+    test("cancelled upload-refresh doesn't strand a completed upload",
+        () async {
+      // Initial fetch: empty room.
+      stubGetRoomUploads([]);
+      tracker.fetchRoomUploads('room-1');
+      await _pump();
+
+      final postA = Completer<void>();
+      final postB = Completer<void>();
+      final posts = [postA, postB];
+      var postIdx = 0;
+
+      when(() => mockApi.uploadFileToRoom(
+            any(),
+            filename: any(named: 'filename'),
+            fileBytes: any(named: 'fileBytes'),
+            mimeType: any(named: 'mimeType'),
+          )).thenAnswer((_) => posts[postIdx++].future);
+
+      // Each upload-triggered refresh gets its own completer so we
+      // can resolve them out of order.
+      final fetchA = Completer<List<FileUpload>>();
+      final fetchB = Completer<List<FileUpload>>();
+      final fetches = [fetchA, fetchB];
+      var fetchIdx = 0;
+
+      when(() => mockApi.getRoomUploads(
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+          )).thenAnswer((_) => fetches[fetchIdx++].future);
+
+      tracker.uploadToRoom(
+        roomId: 'room-1',
+        filename: 'a.pdf',
+        fileBytes: const [1],
+      );
+      tracker.uploadToRoom(
+        roomId: 'room-1',
+        filename: 'b.pdf',
+        fileBytes: const [2],
+      );
+
+      postA.complete();
+      await _pump();
+      // A's refresh is now in flight (fetchA).
+
+      postB.complete();
+      await _pump();
+      // B's refresh cancels A's token and starts fetchB.
+
+      // fetchA completes late — cancelled token, value ignored.
+      fetchA.complete([_fileUpload('a.pdf')]);
+      await _pump();
+
+      // fetchB completes with both persisted files.
+      fetchB.complete([_fileUpload('a.pdf'), _fileUpload('b.pdf')]);
+      await _pump();
+
+      final uploads =
+          (tracker.roomUploads('room-1').value as UploadsLoaded).uploads;
+      expect(
+        uploads.whereType<PersistedUpload>().map((e) => e.filename),
+        containsAll(['a.pdf', 'b.pdf']),
+      );
+      expect(
+        uploads.whereType<PendingUpload>(),
+        isEmpty,
+        reason: 'both uploads completed and appear in persisted; '
+            "neither should be stranded as pending even though A's "
+            'refresh was cancelled by B',
+      );
+    });
+
     test('late response from a cancelled fetch does not overwrite state',
         () async {
       final first = Completer<List<FileUpload>>();

@@ -361,5 +361,39 @@ void main() {
         throwsA(isA<ArgumentError>()),
       );
     });
+
+    test('forwards cancelToken to transport', () async {
+      final cancelToken = CancelToken();
+
+      when(
+        () => mockTransport.request<Map<String, dynamic>>(
+          'GET',
+          any(),
+          cancelToken: cancelToken,
+          fromJson: any(named: 'fromJson'),
+          body: any(named: 'body'),
+          headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
+        ),
+      ).thenAnswer((_) async => <String, dynamic>{});
+
+      await api.getThreadUploads(
+        'room-1',
+        'thread-1',
+        cancelToken: cancelToken,
+      );
+
+      verify(
+        () => mockTransport.request<Map<String, dynamic>>(
+          'GET',
+          any(),
+          cancelToken: cancelToken,
+          fromJson: any(named: 'fromJson'),
+          body: any(named: 'body'),
+          headers: any(named: 'headers'),
+          timeout: any(named: 'timeout'),
+        ),
+      ).called(1);
+    });
   });
 }
