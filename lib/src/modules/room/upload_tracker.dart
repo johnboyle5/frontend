@@ -1,115 +1,259 @@
 import 'dart:async' show unawaited;
+import 'dart:developer' as dev;
 
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_client/soliplex_client.dart';
 
-/// Upload status for a single file.
-sealed class UploadStatus {
-  const UploadStatus();
-  static const uploading = UploadUploading();
-  static const success = UploadSuccess();
+/// Sealed status for a single upload scope (a room or a thread).
+///
+/// Mirrors `ThreadListStatus` in `thread_list_state.dart`: Loading
+/// initially, Loaded once the server list is known (even if empty),
+/// Failed only from a non-Loaded baseline. A refresh failure preserves
+/// the prior Loaded list and logs.
+sealed class UploadsStatus {
+  const UploadsStatus();
 }
 
-class UploadUploading extends UploadStatus {
-  const UploadUploading();
+class UploadsLoading extends UploadsStatus {
+  const UploadsLoading();
 }
 
-class UploadSuccess extends UploadStatus {
-  const UploadSuccess();
+class UploadsLoaded extends UploadsStatus {
+  const UploadsLoaded(this.uploads);
+  final List<DisplayUpload> uploads;
 }
 
-class UploadError extends UploadStatus {
-  const UploadError(this.message);
+class UploadsFailed extends UploadsStatus {
+  const UploadsFailed(this.error);
+  final Object error;
+}
+
+/// Sealed display variant for a single row in the merged uploads list.
+///
+/// Persisted rows come from the server LIST endpoint; Pending and
+/// Failed rows are local optimistic entries driven by in-flight or
+/// recently-failed POST uploads.
+sealed class DisplayUpload {
+  const DisplayUpload({required this.filename});
+  final String filename;
+}
+
+class PersistedUpload extends DisplayUpload {
+  const PersistedUpload({required super.filename, required this.url});
+  final Uri url;
+}
+
+class PendingUpload extends DisplayUpload {
+  const PendingUpload({required this.id, required super.filename});
+  final String id;
+}
+
+class FailedUpload extends DisplayUpload {
+  const FailedUpload({
+    required this.id,
+    required super.filename,
+    required this.message,
+  });
+  final String id;
   final String message;
 }
 
-/// A single tracked upload.
-class UploadEntry {
-  UploadEntry({
+enum _PendingStatus { pending, failed }
+
+/// Internal record for a local upload the client initiated. `fileBytes`
+/// is kept so a future retry feature can re-trigger the POST without
+/// re-picking the file; bytes are released when the record is removed
+/// (on upload success, dismiss, or scope disposal).
+class _PendingRecord {
+  _PendingRecord({
     required this.id,
     required this.filename,
-    required this.status,
-    required this.scope,
+    required this.fileBytes,
+    required this.mimeType,
   });
 
   final String id;
   final String filename;
-  final UploadStatus status;
-
-  /// The scope key this entry belongs to (room or room+thread).
-  final String scope;
-
-  UploadEntry _withStatus(UploadStatus newStatus) => UploadEntry(
-        id: id,
-        filename: filename,
-        status: newStatus,
-        scope: scope,
-      );
+  final List<int> fileBytes;
+  final String mimeType;
+  _PendingStatus status = _PendingStatus.pending;
+  String? errorMessage;
 }
 
-/// Tracks file upload state across rooms and threads.
-///
-/// Each upload is fire-and-forget: it starts immediately and transitions
-/// through uploading → success/error. The tracker exposes signals per
-/// scope so the UI can react.
-///
-/// This only tracks uploads initiated in this session. There is no
-/// backend endpoint to list previously uploaded files.
-// TODO(backend): Add GET /v1/uploads/{room_id} and
-// GET /v1/uploads/{room_id}/{thread_id} endpoints to list uploaded files,
-// then replace session-only tracking with server-fetched lists.
-class UploadTracker {
-  final Map<String, Signal<List<UploadEntry>>> _scopes = {};
-  int _nextId = 0;
-  bool _disposed = false;
+class _ScopeState {
+  _ScopeState() : signal = Signal<UploadsStatus>(const UploadsLoading());
 
-  Signal<List<UploadEntry>> _scopeSignal(String key) =>
-      _scopes.putIfAbsent(key, () => Signal<List<UploadEntry>>([]));
+  List<FileUpload>? persisted;
+  final List<_PendingRecord> pending = [];
+  CancelToken? fetchToken;
+  final Signal<UploadsStatus> signal;
+
+  void dispose() {
+    fetchToken?.cancel('disposed');
+    signal.dispose();
+  }
+}
+
+/// Tracks file uploads across rooms and threads, merging a
+/// server-fetched list with an in-flight optimistic view.
+///
+/// State per scope is modeled as sealed `UploadsStatus`:
+/// `UploadsLoading` until the first successful fetch, `UploadsLoaded`
+/// with a merged list thereafter, `UploadsFailed` only if the initial
+/// fetch fails. A later refresh failure is logged and the prior
+/// Loaded list is preserved.
+///
+/// Owned by `UploadTrackerRegistry`, not by any single widget; see the
+/// design in `docs/plans/upload-list-merge/plan.md`.
+class UploadTracker {
+  UploadTracker({required SoliplexApi api}) : _api = api;
+
+  final SoliplexApi _api;
+  final Map<String, _ScopeState> _scopes = {};
+  bool _isDisposed = false;
+  int _nextId = 0;
 
   static String _roomKey(String roomId) => 'room:$roomId';
-
   static String _threadKey(String roomId, String threadId) =>
       'thread:$roomId:$threadId';
 
-  /// Signal of uploads for a room scope.
-  ReadonlySignal<List<UploadEntry>> roomUploads(String roomId) =>
-      _scopeSignal(_roomKey(roomId));
+  _ScopeState _scope(String key) => _scopes.putIfAbsent(key, _ScopeState.new);
 
-  /// Signal of uploads for a thread scope.
-  ReadonlySignal<List<UploadEntry>> threadUploads(
+  // --------------------------------------------------------
+  // Public signals
+  // --------------------------------------------------------
+
+  ReadonlySignal<UploadsStatus> roomUploads(String roomId) =>
+      _scope(_roomKey(roomId)).signal;
+
+  ReadonlySignal<UploadsStatus> threadUploads(
     String roomId,
     String threadId,
   ) =>
-      _scopeSignal(_threadKey(roomId, threadId));
+      _scope(_threadKey(roomId, threadId)).signal;
 
-  /// Starts a room-level upload.
+  // --------------------------------------------------------
+  // Fetch triggers
+  // --------------------------------------------------------
+
+  /// Fetches the room's upload list on first call; subsequent calls
+  /// are no-ops while the scope is already Loaded (use [refreshRoom]
+  /// to force a reload).
+  void fetchRoomUploads(String roomId) {
+    _ensureFetched(
+      key: _roomKey(roomId),
+      fetch: (token) => _api.getRoomUploads(roomId, cancelToken: token),
+    );
+  }
+
+  /// Thread-scoped counterpart to [fetchRoomUploads].
+  void fetchThreadUploads(String roomId, String threadId) {
+    _ensureFetched(
+      key: _threadKey(roomId, threadId),
+      fetch: (token) =>
+          _api.getThreadUploads(roomId, threadId, cancelToken: token),
+    );
+  }
+
+  /// Forces a room list refetch regardless of current scope status.
+  Future<void> refreshRoom(String roomId) {
+    return _refresh(
+      key: _roomKey(roomId),
+      fetch: (token) => _api.getRoomUploads(roomId, cancelToken: token),
+    );
+  }
+
+  /// Forces a thread list refetch regardless of current scope status.
+  Future<void> refreshThread(String roomId, String threadId) {
+    return _refresh(
+      key: _threadKey(roomId, threadId),
+      fetch: (token) =>
+          _api.getThreadUploads(roomId, threadId, cancelToken: token),
+    );
+  }
+
+  void _ensureFetched({
+    required String key,
+    required Future<List<FileUpload>> Function(CancelToken) fetch,
+  }) {
+    if (_isDisposed) return;
+    final scope = _scope(key);
+    if (scope.signal.value is UploadsLoaded) return;
+    unawaited(_fetch(scope: scope, fetch: fetch));
+  }
+
+  Future<void> _refresh({
+    required String key,
+    required Future<List<FileUpload>> Function(CancelToken) fetch,
+  }) {
+    if (_isDisposed) return Future<void>.value();
+    return _fetch(scope: _scope(key), fetch: fetch);
+  }
+
+  Future<void> _fetch({
+    required _ScopeState scope,
+    required Future<List<FileUpload>> Function(CancelToken) fetch,
+  }) async {
+    if (_isDisposed) return;
+    scope.fetchToken?.cancel('re-fetch');
+    final token = CancelToken();
+    scope.fetchToken = token;
+
+    if (scope.signal.value is! UploadsLoaded) {
+      scope.signal.value = const UploadsLoading();
+    }
+
+    try {
+      final list = await fetch(token);
+      if (token.isCancelled || _isDisposed) return;
+      scope.fetchToken = null;
+      scope.persisted = list;
+      _emit(scope);
+    } on Object catch (error) {
+      if (token.isCancelled || _isDisposed) return;
+      scope.fetchToken = null;
+      if (scope.signal.value is UploadsLoaded) {
+        dev.log(
+          'Upload list refresh failed, keeping stale list',
+          error: error,
+          name: 'UploadTracker',
+        );
+      } else {
+        scope.signal.value = UploadsFailed(error);
+      }
+    }
+  }
+
+  // --------------------------------------------------------
+  // Upload actions
+  // --------------------------------------------------------
+
   void uploadToRoom({
-    required SoliplexApi api,
     required String roomId,
     required String filename,
     required List<int> fileBytes,
     String mimeType = 'application/octet-stream',
   }) {
     final key = _roomKey(roomId);
-    final entry = _addEntry(key, filename);
-    unawaited(
-      api
-          .uploadFileToRoom(
-            roomId,
-            filename: filename,
-            fileBytes: fileBytes,
-            mimeType: mimeType,
-          )
-          .then((_) => _updateStatus(key, entry.id, UploadStatus.success))
-          .catchError((Object error) {
-        _updateStatus(key, entry.id, UploadError(_errorMessage(error)));
-      }),
+    _startUpload(
+      key: key,
+      filename: filename,
+      fileBytes: fileBytes,
+      mimeType: mimeType,
+      post: () => _api.uploadFileToRoom(
+        roomId,
+        filename: filename,
+        fileBytes: fileBytes,
+        mimeType: mimeType,
+      ),
+      refresh: () => _refresh(
+        key: key,
+        fetch: (token) => _api.getRoomUploads(roomId, cancelToken: token),
+      ),
     );
   }
 
-  /// Starts a thread-level upload.
   void uploadToThread({
-    required SoliplexApi api,
     required String roomId,
     required String threadId,
     required String filename,
@@ -117,56 +261,123 @@ class UploadTracker {
     String mimeType = 'application/octet-stream',
   }) {
     final key = _threadKey(roomId, threadId);
-    final entry = _addEntry(key, filename);
-    unawaited(
-      api
-          .uploadFileToThread(
-            roomId,
-            threadId,
-            filename: filename,
-            fileBytes: fileBytes,
-            mimeType: mimeType,
-          )
-          .then((_) => _updateStatus(key, entry.id, UploadStatus.success))
-          .catchError((Object error) {
-        _updateStatus(key, entry.id, UploadError(_errorMessage(error)));
-      }),
+    _startUpload(
+      key: key,
+      filename: filename,
+      fileBytes: fileBytes,
+      mimeType: mimeType,
+      post: () => _api.uploadFileToThread(
+        roomId,
+        threadId,
+        filename: filename,
+        fileBytes: fileBytes,
+        mimeType: mimeType,
+      ),
+      refresh: () => _refresh(
+        key: key,
+        fetch: (token) =>
+            _api.getThreadUploads(roomId, threadId, cancelToken: token),
+      ),
     );
   }
 
-  /// Removes an entry (e.g., user dismisses an error or completed upload).
+  void _startUpload({
+    required String key,
+    required String filename,
+    required List<int> fileBytes,
+    required String mimeType,
+    required Future<void> Function() post,
+    required Future<void> Function() refresh,
+  }) {
+    if (_isDisposed) return;
+    final scope = _scope(key);
+    final id = 'upload-${_nextId++}';
+    scope.pending.add(_PendingRecord(
+      id: id,
+      filename: filename,
+      fileBytes: fileBytes,
+      mimeType: mimeType,
+    ));
+    _emit(scope);
+
+    unawaited(_runUpload(scope: scope, id: id, post: post, refresh: refresh));
+  }
+
+  Future<void> _runUpload({
+    required _ScopeState scope,
+    required String id,
+    required Future<void> Function() post,
+    required Future<void> Function() refresh,
+  }) async {
+    try {
+      await post();
+      if (_isDisposed) return;
+
+      // Refresh BEFORE dropping the pending record so the UI never
+      // shows a gap between "Pending" and "Persisted".
+      await refresh();
+      if (_isDisposed) return;
+
+      scope.pending.removeWhere((r) => r.id == id);
+      _emit(scope);
+    } on Object catch (error) {
+      if (_isDisposed) return;
+      final idx = scope.pending.indexWhere((r) => r.id == id);
+      // If the record was dismissed during the upload, nothing to mark
+      // as failed.
+      if (idx < 0) return;
+      scope.pending[idx]
+        ..status = _PendingStatus.failed
+        ..errorMessage = _errorMessage(error);
+      _emit(scope);
+    }
+  }
+
+  // --------------------------------------------------------
+  // Dismissal
+  // --------------------------------------------------------
+
+  /// Removes a Pending or Failed entry by its id. Persisted entries
+  /// come from the server and cannot be dismissed from the client.
   void dismiss(String entryId) {
-    for (final signal in _scopes.values) {
-      final list = signal.value;
-      final index = list.indexWhere((e) => e.id == entryId);
-      if (index >= 0) {
-        signal.value = [...list]..removeAt(index);
+    if (_isDisposed) return;
+    for (final scope in _scopes.values) {
+      final before = scope.pending.length;
+      scope.pending.removeWhere((r) => r.id == entryId);
+      if (scope.pending.length != before) {
+        _emit(scope);
         return;
       }
     }
   }
 
-  UploadEntry _addEntry(String scopeKey, String filename) {
-    final id = 'upload-${_nextId++}';
-    final entry = UploadEntry(
-      id: id,
-      filename: filename,
-      status: UploadStatus.uploading,
-      scope: scopeKey,
-    );
-    final signal = _scopeSignal(scopeKey);
-    signal.value = [...signal.value, entry];
-    return entry;
-  }
+  // --------------------------------------------------------
+  // Signal emission
+  // --------------------------------------------------------
 
-  void _updateStatus(String scopeKey, String entryId, UploadStatus status) {
-    if (_disposed) return;
-    final signal = _scopes[scopeKey];
-    if (signal == null) return;
-    signal.value = [
-      for (final e in signal.value)
-        if (e.id == entryId) e._withStatus(status) else e,
+  void _emit(_ScopeState scope) {
+    if (_isDisposed) return;
+    final persisted = scope.persisted;
+    final merged = <DisplayUpload>[
+      if (persisted != null)
+        for (final f in persisted)
+          PersistedUpload(filename: f.filename, url: f.url),
+      for (final p in scope.pending)
+        if (p.status == _PendingStatus.pending)
+          PendingUpload(id: p.id, filename: p.filename)
+        else
+          FailedUpload(
+            id: p.id,
+            filename: p.filename,
+            message: p.errorMessage ?? 'Upload failed',
+          ),
     ];
+
+    // No server list yet and nothing local: keep the current Loading
+    // or Failed status; don't prematurely emit Loaded([]).
+    if (persisted == null && merged.isEmpty) return;
+
+    scope.signal.value = UploadsLoaded(merged);
   }
 
   static String _errorMessage(Object error) {
@@ -174,10 +385,15 @@ class UploadTracker {
     return error.toString();
   }
 
+  // --------------------------------------------------------
+  // Lifecycle
+  // --------------------------------------------------------
+
   void dispose() {
-    _disposed = true;
-    for (final signal in _scopes.values) {
-      signal.dispose();
+    if (_isDisposed) return;
+    _isDisposed = true;
+    for (final scope in _scopes.values) {
+      scope.dispose();
     }
     _scopes.clear();
   }

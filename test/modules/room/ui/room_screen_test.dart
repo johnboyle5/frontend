@@ -9,6 +9,7 @@ import 'package:soliplex_frontend/src/modules/room/agent_runtime_manager.dart';
 import 'package:soliplex_frontend/src/modules/room/document_selections.dart';
 import 'package:soliplex_frontend/src/modules/room/run_registry.dart';
 import 'package:soliplex_frontend/src/modules/room/ui/room_screen.dart';
+import 'package:soliplex_frontend/src/modules/room/upload_tracker_registry.dart';
 import 'package:soliplex_frontend/src/modules/auth/server_entry.dart';
 
 import '../../../helpers/fakes.dart';
@@ -33,6 +34,7 @@ Widget _buildRouted({
   required ServerEntry entry,
   required AgentRuntimeManager runtimeManager,
   required RunRegistry registry,
+  required UploadTrackerRegistry uploadRegistry,
   String roomId = 'room-1',
   String? threadId,
 }) {
@@ -49,6 +51,7 @@ Widget _buildRouted({
           threadId: null,
           runtimeManager: runtimeManager,
           registry: registry,
+          uploadRegistry: uploadRegistry,
           documentSelections: DocumentSelections(),
         ),
         routes: [
@@ -60,6 +63,7 @@ Widget _buildRouted({
               threadId: state.pathParameters['threadId'],
               runtimeManager: runtimeManager,
               registry: registry,
+              uploadRegistry: uploadRegistry,
               documentSelections: DocumentSelections(),
             ),
           ),
@@ -75,6 +79,8 @@ void main() {
   late ServerEntry entry;
   late AgentRuntimeManager runtimeManager;
   late RunRegistry registry;
+  late Signal<Map<String, ServerEntry>> servers;
+  late UploadTrackerRegistry uploadRegistry;
 
   setUp(() {
     api = FakeSoliplexApi();
@@ -94,11 +100,15 @@ void main() {
       logger: testLogger(),
     );
     registry = RunRegistry();
+    servers = Signal({entry.serverId: entry});
+    uploadRegistry = UploadTrackerRegistry(servers: servers);
   });
 
   tearDown(() async {
     await runtimeManager.dispose();
     registry.dispose();
+    uploadRegistry.dispose();
+    servers.dispose();
   });
 
   testWidgets('wide layout shows thread sidebar', (tester) async {
@@ -113,6 +123,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -133,6 +144,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -156,6 +168,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -189,6 +202,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -212,6 +226,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -229,6 +244,7 @@ void main() {
       entry: entry,
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     ));
     await tester.pumpAndSettle();
 
@@ -255,6 +271,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -285,6 +302,7 @@ void main() {
         threadId: 'thread-1',
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));

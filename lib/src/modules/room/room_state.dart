@@ -3,11 +3,13 @@ import 'dart:async' show unawaited;
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:soliplex_agent/soliplex_agent.dart';
 
+import '../auth/server_entry.dart';
 import 'agent_runtime_manager.dart';
 import 'run_registry.dart';
 import 'thread_list_state.dart';
 import 'thread_view_state.dart';
 import 'upload_tracker.dart';
+import 'upload_tracker_registry.dart';
 
 export 'send_error.dart';
 
@@ -27,21 +29,24 @@ class RoomFailed extends RoomStatus {
 
 class RoomState {
   RoomState({
-    required ServerConnection connection,
+    required ServerEntry serverEntry,
     required String roomId,
     required AgentRuntimeManager runtimeManager,
     required RunRegistry registry,
+    required UploadTrackerRegistry uploadRegistry,
     this.onNavigateToThread,
-  })  : _connection = connection,
+  })  : _connection = serverEntry.connection,
         _roomId = roomId,
         _runtimeManager = runtimeManager,
         _registry = registry,
         threadList = ThreadListState(
-          connection: connection,
+          connection: serverEntry.connection,
           roomId: roomId,
         ),
-        uploadTracker = UploadTracker() {
+        uploadTracker =
+            uploadRegistry.trackerFor(entry: serverEntry, roomId: roomId) {
     _fetchRoom();
+    uploadTracker.fetchRoomUploads(_roomId);
   }
 
   final ServerConnection _connection;
@@ -51,6 +56,9 @@ class RoomState {
   final void Function(String? threadId)? onNavigateToThread;
 
   final ThreadListState threadList;
+
+  /// Shared tracker for this (server, room); lifecycle is owned by the
+  /// `UploadTrackerRegistry`, not by this state object.
   final UploadTracker uploadTracker;
   ThreadViewState? _activeThreadView;
   CancelToken? _roomFetchToken;
@@ -102,6 +110,7 @@ class RoomState {
         runtime.seedThreadHistory(id, history);
       },
     );
+    uploadTracker.fetchThreadUploads(_roomId, threadId);
   }
 
   /// Explicit thread creation (the "+" button path).
@@ -219,7 +228,9 @@ class RoomState {
   void dispose() {
     _isDisposed = true;
     _roomFetchToken?.cancel('disposed');
-    uploadTracker.dispose();
+    // uploadTracker is owned by UploadTrackerRegistry; do not dispose
+    // it here — it must survive widget remounts and cross-screen
+    // navigation.
     threadList.dispose();
     _activeThreadView?.dispose();
   }

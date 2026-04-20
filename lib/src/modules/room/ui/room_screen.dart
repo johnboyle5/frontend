@@ -29,6 +29,7 @@ import 'async_action_dialog.dart';
 import 'room_welcome.dart';
 import 'thread_sidebar.dart';
 import '../upload_tracker.dart';
+import '../upload_tracker_registry.dart';
 
 const double _sidebarWidth = 300;
 const double _wideBreakpoint = 600;
@@ -52,6 +53,7 @@ class RoomScreen extends StatefulWidget {
     required this.threadId,
     required this.runtimeManager,
     required this.registry,
+    required this.uploadRegistry,
     this.enableDocumentFilter = false,
     required this.documentSelections,
   });
@@ -61,6 +63,7 @@ class RoomScreen extends StatefulWidget {
   final String? threadId;
   final AgentRuntimeManager runtimeManager;
   final RunRegistry registry;
+  final UploadTrackerRegistry uploadRegistry;
   final bool enableDocumentFilter;
   final DocumentSelections documentSelections;
 
@@ -178,10 +181,11 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   RoomState _createRoomState() => RoomState(
-        connection: widget.serverEntry.connection,
+        serverEntry: widget.serverEntry,
         roomId: widget.roomId,
         runtimeManager: widget.runtimeManager,
         registry: widget.registry,
+        uploadRegistry: widget.uploadRegistry,
         onNavigateToThread: (id) => _navigateToThread(id),
       );
 
@@ -231,7 +235,6 @@ class _RoomScreenState extends State<RoomScreen> {
     final file = await pickFile();
     if (file == null || !mounted) return;
     _state.uploadTracker.uploadToRoom(
-      api: widget.serverEntry.connection.api,
       roomId: widget.roomId,
       filename: file.name,
       fileBytes: file.bytes,
@@ -243,7 +246,6 @@ class _RoomScreenState extends State<RoomScreen> {
     final file = await pickFile();
     if (file == null || !mounted) return;
     _state.uploadTracker.uploadToThread(
-      api: widget.serverEntry.connection.api,
       roomId: widget.roomId,
       threadId: threadId,
       filename: file.name,
@@ -260,7 +262,6 @@ class _RoomScreenState extends State<RoomScreen> {
     if (threadId == null || !mounted) return;
 
     _state.uploadTracker.uploadToThread(
-      api: widget.serverEntry.connection.api,
       roomId: widget.roomId,
       threadId: threadId,
       filename: file.name,
@@ -416,25 +417,20 @@ class _RoomScreenState extends State<RoomScreen> {
     final threadView = _state.activeThreadView;
     final attachEnabled = room?.enableAttachments ?? false;
 
-    final roomEntries = attachEnabled
+    final UploadsStatus roomStatus = attachEnabled
         ? _state.uploadTracker.roomUploads(widget.roomId).watch(context)
-        : <UploadEntry>[];
+        : const UploadsLoaded(<DisplayUpload>[]);
     final threadId = threadView?.threadId;
-    final threadEntries = attachEnabled && threadId != null
+    final UploadsStatus threadStatus = attachEnabled && threadId != null
         ? _state.uploadTracker
             .threadUploads(widget.roomId, threadId)
             .watch(context)
-        : <UploadEntry>[];
+        : const UploadsLoaded(<DisplayUpload>[]);
 
     return Column(
       children: [
-        _buildRoomHeader(
-          room,
-          attachEnabled,
-          roomEntries,
-          threadEntries,
-        ),
-        if (_filesExpanded) _buildFilePanel(roomEntries, threadEntries),
+        _buildRoomHeader(room, attachEnabled, roomStatus, threadStatus),
+        if (_filesExpanded) _buildFilePanel(roomStatus, threadStatus),
         Expanded(
           child: threadView == null
               ? _buildNoThreadBody(room)
@@ -447,15 +443,12 @@ class _RoomScreenState extends State<RoomScreen> {
   Widget _buildRoomHeader(
     Room? room,
     bool attachEnabled,
-    List<UploadEntry> roomEntries,
-    List<UploadEntry> threadEntries,
+    UploadsStatus roomStatus,
+    UploadsStatus threadStatus,
   ) {
     final theme = Theme.of(context);
     final roomName = room?.name ?? widget.roomId;
-    final allEntries = [...roomEntries, ...threadEntries];
-    final hasFiles = allEntries.isNotEmpty;
-    final anyUploading = allEntries.any((e) => e.status is UploadUploading);
-    final anyFailed = allEntries.any((e) => e.status is UploadError);
+    final chip = _buildChip(roomStatus, threadStatus, theme);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -468,56 +461,7 @@ class _RoomScreenState extends State<RoomScreen> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (hasFiles)
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _filesExpanded = !_filesExpanded),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (anyUploading)
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: theme.colorScheme.primary,
-                      ),
-                    )
-                  else if (anyFailed)
-                    Icon(
-                      Icons.error_outline,
-                      size: 16,
-                      color: theme.colorScheme.error,
-                    )
-                  else
-                    Icon(
-                      Icons.attach_file,
-                      size: 16,
-                      color: theme.colorScheme.primary,
-                    ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _chipLabel(
-                      roomEntries.length,
-                      threadEntries.length,
-                    ),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: anyFailed
-                          ? theme.colorScheme.error
-                          : theme.colorScheme.primary,
-                    ),
-                  ),
-                  Icon(
-                    _filesExpanded ? Icons.expand_less : Icons.expand_more,
-                    size: 16,
-                    color: anyFailed
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.primary,
-                  ),
-                ],
-              ),
-            ),
+          if (chip != null) chip,
           if (attachEnabled && room != null)
             IconButton(
               icon: const Icon(Icons.upload_file, size: 20),
@@ -529,14 +473,90 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
-  String _chipLabel(int roomCount, int threadCount) =>
-      uploadChipLabel(roomCount, threadCount);
+  /// Returns the chip widget for the current (room, thread) upload
+  /// status, or null to hide it (both scopes Loaded-empty, matching
+  /// the current space-constrained header behavior).
+  Widget? _buildChip(
+    UploadsStatus roomStatus,
+    UploadsStatus threadStatus,
+    ThemeData theme,
+  ) {
+    final roomFiles = _uploadsOrNull(roomStatus);
+    final threadFiles = _uploadsOrNull(threadStatus);
+
+    final anyLoading =
+        roomStatus is UploadsLoading || threadStatus is UploadsLoading;
+    final anyFailed =
+        roomStatus is UploadsFailed || threadStatus is UploadsFailed;
+
+    if (!anyLoading &&
+        !anyFailed &&
+        (roomFiles == null || roomFiles.isEmpty) &&
+        (threadFiles == null || threadFiles.isEmpty)) {
+      return null;
+    }
+
+    final all = [...?roomFiles, ...?threadFiles];
+    final anyPending = all.any((e) => e is PendingUpload);
+    final anyUploadFailed = all.any((e) => e is FailedUpload);
+    final color = (anyFailed || anyUploadFailed)
+        ? theme.colorScheme.error
+        : theme.colorScheme.primary;
+
+    final Widget leading;
+    if (anyLoading || anyPending) {
+      leading = SizedBox(
+        width: 14,
+        height: 14,
+        child: CircularProgressIndicator(strokeWidth: 2, color: color),
+      );
+    } else if (anyFailed || anyUploadFailed) {
+      leading = Icon(Icons.error_outline, size: 16, color: color);
+    } else {
+      leading = Icon(Icons.attach_file, size: 16, color: color);
+    }
+
+    final label = (roomFiles != null && threadFiles != null)
+        ? uploadChipLabel(roomFiles.length, threadFiles.length)
+        : 'Files';
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _filesExpanded = !_filesExpanded),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          leading,
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(color: color),
+          ),
+          Icon(
+            _filesExpanded ? Icons.expand_less : Icons.expand_more,
+            size: 16,
+            color: color,
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<DisplayUpload>? _uploadsOrNull(UploadsStatus s) =>
+      s is UploadsLoaded ? s.uploads : null;
 
   Widget _buildFilePanel(
-    List<UploadEntry> roomEntries,
-    List<UploadEntry> threadEntries,
+    UploadsStatus roomStatus,
+    UploadsStatus threadStatus,
   ) {
     final theme = Theme.of(context);
+    final roomFiles = _uploadsOrNull(roomStatus);
+    final threadFiles = _uploadsOrNull(threadStatus);
+    final bothEmpty = (roomFiles?.isEmpty ?? true) &&
+        (threadFiles?.isEmpty ?? true) &&
+        roomStatus is UploadsLoaded &&
+        threadStatus is UploadsLoaded;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Container(
@@ -550,25 +570,25 @@ class _RoomScreenState extends State<RoomScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (roomEntries.isNotEmpty) ...[
+            if (bothEmpty)
               Text(
-                'Room',
-                style: theme.textTheme.labelSmall?.copyWith(
+                'No files attached.',
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.outline,
                 ),
-              ),
-              for (final e in roomEntries) _buildFileRow(e),
-            ],
-            if (roomEntries.isNotEmpty && threadEntries.isNotEmpty)
-              const Divider(height: 12),
-            if (threadEntries.isNotEmpty) ...[
-              Text(
-                'Thread',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.outline,
-                ),
-              ),
-              for (final e in threadEntries) _buildFileRow(e),
+              )
+            else ...[
+              _buildScopeSection('Room', roomStatus, theme),
+              if (roomFiles != null &&
+                  roomFiles.isNotEmpty &&
+                  threadStatus is! UploadsLoaded)
+                const Divider(height: 12)
+              else if (roomFiles != null &&
+                  roomFiles.isNotEmpty &&
+                  threadFiles != null &&
+                  threadFiles.isNotEmpty)
+                const Divider(height: 12),
+              _buildScopeSection('Thread', threadStatus, theme),
             ],
           ],
         ),
@@ -576,16 +596,81 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
-  Widget _buildFileRow(UploadEntry entry) {
-    final theme = Theme.of(context);
-    final (icon, color) = switch (entry.status) {
-      UploadUploading() => (null, theme.colorScheme.primary),
-      UploadSuccess() => (
-          Icons.check_circle_outline,
-          theme.colorScheme.primary
+  Widget _buildScopeSection(
+    String label,
+    UploadsStatus status,
+    ThemeData theme,
+  ) {
+    return switch (status) {
+      UploadsLoading() => Row(
+          children: [
+            _sectionLabel(label, theme),
+            const SizedBox(width: 8),
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ],
         ),
-      UploadError() => (Icons.error_outline, theme.colorScheme.error),
+      UploadsLoaded(uploads: final list) when list.isEmpty => const SizedBox(),
+      UploadsLoaded(uploads: final list) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _sectionLabel(label, theme),
+            for (final entry in list) _buildFileRow(entry),
+          ],
+        ),
+      UploadsFailed(error: final error) => Row(
+          children: [
+            _sectionLabel(label, theme),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Failed to load: $error',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
     };
+  }
+
+  Widget _sectionLabel(String label, ThemeData theme) {
+    return Text(
+      label,
+      style: theme.textTheme.labelSmall?.copyWith(
+        color: theme.colorScheme.outline,
+      ),
+    );
+  }
+
+  Widget _buildFileRow(DisplayUpload entry) {
+    final theme = Theme.of(context);
+    final (icon, color, errorMessage, dismissible) = switch (entry) {
+      PersistedUpload() => (
+          Icons.check_circle_outline,
+          theme.colorScheme.primary,
+          null,
+          false,
+        ),
+      PendingUpload() => (null, theme.colorScheme.primary, null, false),
+      FailedUpload(message: final m) => (
+          Icons.error_outline,
+          theme.colorScheme.error,
+          m,
+          true,
+        ),
+    };
+
+    String? dismissId;
+    if (entry is PendingUpload) dismissId = entry.id;
+    if (entry is FailedUpload) dismissId = entry.id;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -597,10 +682,7 @@ class _RoomScreenState extends State<RoomScreen> {
             SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: color,
-              ),
+              child: CircularProgressIndicator(strokeWidth: 2, color: color),
             ),
           const SizedBox(width: 8),
           Expanded(
@@ -612,9 +694,9 @@ class _RoomScreenState extends State<RoomScreen> {
                   style: theme.textTheme.bodySmall,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (entry.status is UploadError)
+                if (errorMessage != null)
                   Text(
-                    (entry.status as UploadError).message,
+                    errorMessage,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.error,
                       fontSize: 11,
@@ -625,10 +707,10 @@ class _RoomScreenState extends State<RoomScreen> {
               ],
             ),
           ),
-          if (entry.status is! UploadUploading)
+          if (dismissible && dismissId != null)
             IconButton(
               icon: const Icon(Icons.close, size: 14),
-              onPressed: () => _state.uploadTracker.dismiss(entry.id),
+              onPressed: () => _state.uploadTracker.dismiss(dismissId!),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
               visualDensity: VisualDensity.compact,

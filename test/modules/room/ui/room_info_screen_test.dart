@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
+import 'package:soliplex_frontend/src/modules/auth/server_entry.dart';
 import 'package:soliplex_frontend/src/modules/room/ui/room_info_screen.dart';
+import 'package:soliplex_frontend/src/modules/room/upload_tracker_registry.dart';
 
 import '../../../helpers/fakes.dart';
 import '../../../helpers/test_server_entry.dart';
@@ -41,12 +43,17 @@ Widget _buildScreen({
 }) {
   final fakeApi = api ?? FakeSoliplexApi();
   fakeApi.nextRoom ??= room ?? _testRoom;
+  final entry = createTestServerEntry(api: fakeApi);
+  final uploadRegistry = UploadTrackerRegistry(
+    servers: Signal<Map<String, ServerEntry>>({entry.serverId: entry}),
+  );
   return MaterialApp(
     home: RoomInfoScreen(
-      serverEntry: createTestServerEntry(api: fakeApi),
+      serverEntry: entry,
       roomId: 'room-1',
       toolRegistryResolver:
           toolRegistryResolver ?? (_) async => const ToolRegistry(),
+      uploadRegistry: uploadRegistry,
     ),
   );
 }
