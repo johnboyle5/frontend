@@ -47,6 +47,29 @@ Riverpod is **DI/service locator only** — no AsyncNotifier or FutureProvider c
 
 Flavors are functions that compose module functions into a `ShellConfig`. Modules are included/excluded by presence in the flavor — no enum or toggle framework.
 
+## Modules
+
+Five feature modules composed in the standard flavor:
+
+- **auth** — Multi-server OIDC authentication, token refresh, secure storage
+- **lobby** — Server/room discovery with responsive layout
+- **room** — Chat interface, threads, agent execution, file upload, citations, document filtering, feedback
+- **quiz** — Interactive quizzes with multiple-choice and free-text input
+- **diagnostics** — Network inspector for HTTP request/response debugging
+
+## Workspace Packages
+
+Four internal packages under `packages/`:
+
+- `soliplex_agent` — Agent orchestration (runtime, sessions, tool registry, execution events)
+- `soliplex_client` — Backend HTTP/AG-UI API client, domain models, citation extraction
+- `soliplex_client_native` — Native HTTP client (iOS/macOS via cupertino_http)
+- `soliplex_logging` — Structured logging with memory, console, disk, and backend sinks
+
+## CI
+
+GitHub Actions runs lint, test, and web build. Tests require 80% coverage. See `.github/workflows/flutter.yaml`.
+
 ## Platform Identifiers
 
 All platforms use `ai.soliplex.client` — this replaces the existing production app. Do not change these identifiers without discussion.
