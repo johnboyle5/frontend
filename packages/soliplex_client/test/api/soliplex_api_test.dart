@@ -2495,7 +2495,7 @@ void main() {
             },
           );
 
-          // Run 1: user message + STATE_SNAPSHOT with qa_history[0]
+          // Run 1: user message + STATE_SNAPSHOT with one citation turn
           when(
             () => mockTransport.request<Map<String, dynamic>>(
               'GET',
@@ -2522,20 +2522,16 @@ void main() {
                   'type': 'STATE_SNAPSHOT',
                   'snapshot': {
                     'rag': {
-                      'citation_registry': <String, int>{},
-                      'qa_history': [
-                        {
-                          'question': 'Question 1',
-                          'answer': 'Answer 1',
-                          'citations': [
-                            {
-                              'document_id': 'doc-1',
-                              'chunk_id': 'chunk-1',
-                              'document_uri': 'file:///doc1.pdf',
-                              'content': 'Citation 1 content',
-                            },
-                          ],
+                      'citation_index': {
+                        'chunk-1': {
+                          'document_id': 'doc-1',
+                          'chunk_id': 'chunk-1',
+                          'document_uri': 'file:///doc1.pdf',
+                          'content': 'Citation 1 content',
                         },
+                      },
+                      'citations': [
+                        ['chunk-1'],
                       ],
                     },
                   },
@@ -2560,7 +2556,7 @@ void main() {
             },
           );
 
-          // Run 2: user message + STATE_SNAPSHOT with qa_history[0,1]
+          // Run 2: user message + STATE_SNAPSHOT with citations[0, 1]
           when(
             () => mockTransport.request<Map<String, dynamic>>(
               'GET',
@@ -2589,32 +2585,23 @@ void main() {
                   'type': 'STATE_SNAPSHOT',
                   'snapshot': {
                     'rag': {
-                      'citation_registry': <String, int>{},
-                      'qa_history': [
-                        {
-                          'question': 'Question 1',
-                          'answer': 'Answer 1',
-                          'citations': [
-                            {
-                              'document_id': 'doc-1',
-                              'chunk_id': 'chunk-1',
-                              'document_uri': 'file:///doc1.pdf',
-                              'content': 'Citation 1 content',
-                            },
-                          ],
+                      'citation_index': {
+                        'chunk-1': {
+                          'document_id': 'doc-1',
+                          'chunk_id': 'chunk-1',
+                          'document_uri': 'file:///doc1.pdf',
+                          'content': 'Citation 1 content',
                         },
-                        {
-                          'question': 'Question 2',
-                          'answer': 'Answer 2',
-                          'citations': [
-                            {
-                              'document_id': 'doc-2',
-                              'chunk_id': 'chunk-2',
-                              'document_uri': 'file:///doc2.pdf',
-                              'content': 'Citation 2 content',
-                            },
-                          ],
+                        'chunk-2': {
+                          'document_id': 'doc-2',
+                          'chunk_id': 'chunk-2',
+                          'document_uri': 'file:///doc2.pdf',
+                          'content': 'Citation 2 content',
                         },
+                      },
+                      'citations': [
+                        ['chunk-1'],
+                        ['chunk-2'],
                       ],
                     },
                   },

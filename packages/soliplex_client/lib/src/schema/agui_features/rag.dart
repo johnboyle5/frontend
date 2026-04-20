@@ -19,44 +19,34 @@ Rag ragFromJson(String str) => Rag.fromJson(json.decode(str));
 String ragToJson(Rag data) => json.encode(data.toJson());
 
 class Rag {
-  final List<Citation>? citations;
+  final Map<String, Citation>? citationIndex;
+  final List<List<String>>? citations;
   final String? documentFilter;
-  final List<DocumentInfo>? documents;
-  final List<QaHistoryEntry>? qaHistory;
-  final List<ResearchEntry>? reports;
   final Map<String, List<SearchResult>>? searches;
 
   Rag({
+    this.citationIndex,
     this.citations,
     this.documentFilter,
-    this.documents,
-    this.qaHistory,
-    this.reports,
     this.searches,
   });
 
   factory Rag.fromJson(Map<String, dynamic> json) => Rag(
+        citationIndex: json["citation_index"] == null
+            ? {}
+            : Map<String, Citation>.from(
+                Map.from(json["citation_index"]!).map(
+                  (k, v) => MapEntry<String, Citation>(k, Citation.fromJson(v)),
+                ),
+              ),
         citations: json["citations"] == null
             ? []
-            : List<Citation>.from(
-                json["citations"]!.map((x) => Citation.fromJson(x)),
+            : List<List<String>>.from(
+                json["citations"]!.map(
+                  (x) => List<String>.from(x.map((y) => y)),
+                ),
               ),
         documentFilter: json["document_filter"],
-        documents: json["documents"] == null
-            ? []
-            : List<DocumentInfo>.from(
-                json["documents"]!.map((x) => DocumentInfo.fromJson(x)),
-              ),
-        qaHistory: json["qa_history"] == null
-            ? []
-            : List<QaHistoryEntry>.from(
-                json["qa_history"]!.map((x) => QaHistoryEntry.fromJson(x)),
-              ),
-        reports: json["reports"] == null
-            ? []
-            : List<ResearchEntry>.from(
-                json["reports"]!.map((x) => ResearchEntry.fromJson(x)),
-              ),
         searches: json["searches"] == null
             ? null
             : Map.from(json["searches"]!).map(
@@ -70,19 +60,19 @@ class Rag {
       );
 
   Map<String, dynamic> toJson() => {
+        "citation_index": citationIndex == null
+            ? {}
+            : Map.from(citationIndex!).map(
+                (k, v) => MapEntry<String, dynamic>(k, v.toJson()),
+              ),
         "citations": citations == null
             ? []
-            : List<dynamic>.from(citations!.map((x) => x.toJson())),
+            : List<dynamic>.from(
+                citations!.map(
+                  (x) => List<dynamic>.from(x.map((y) => y)),
+                ),
+              ),
         "document_filter": documentFilter,
-        "documents": documents == null
-            ? []
-            : List<dynamic>.from(documents!.map((x) => x.toJson())),
-        "qa_history": qaHistory == null
-            ? []
-            : List<dynamic>.from(qaHistory!.map((x) => x.toJson())),
-        "reports": reports == null
-            ? []
-            : List<dynamic>.from(reports!.map((x) => x.toJson())),
         "searches": searches == null
             ? null
             : Map.from(searches!).map(
@@ -146,104 +136,6 @@ class Citation {
         "page_numbers": pageNumbers == null
             ? []
             : List<dynamic>.from(pageNumbers!.map((x) => x)),
-      };
-}
-
-///Document info for list_documents response.
-class DocumentInfo {
-  final String created;
-  final String? id;
-  final String title;
-  final String uri;
-
-  DocumentInfo({
-    required this.created,
-    this.id,
-    required this.title,
-    required this.uri,
-  });
-
-  factory DocumentInfo.fromJson(Map<String, dynamic> json) => DocumentInfo(
-        created: json["created"],
-        id: json["id"],
-        title: json["title"],
-        uri: json["uri"],
-      );
-
-  Map<String, dynamic> toJson() => {
-        "created": created,
-        "id": id,
-        "title": title,
-        "uri": uri,
-      };
-}
-
-///A Q&A pair with optional cached embedding for similarity matching.
-class QaHistoryEntry {
-  final String answer;
-  final List<Citation>? citations;
-  final double? confidence;
-  final String question;
-  final List<double>? questionEmbedding;
-
-  QaHistoryEntry({
-    required this.answer,
-    this.citations,
-    this.confidence,
-    required this.question,
-    this.questionEmbedding,
-  });
-
-  factory QaHistoryEntry.fromJson(Map<String, dynamic> json) => QaHistoryEntry(
-        answer: json["answer"],
-        citations: json["citations"] == null
-            ? []
-            : List<Citation>.from(
-                json["citations"]!.map((x) => Citation.fromJson(x)),
-              ),
-        confidence: json["confidence"]?.toDouble(),
-        question: json["question"],
-        questionEmbedding: json["question_embedding"] == null
-            ? []
-            : List<double>.from(
-                json["question_embedding"]!.map((x) => x?.toDouble()),
-              ),
-      );
-
-  Map<String, dynamic> toJson() => {
-        "answer": answer,
-        "citations": citations == null
-            ? []
-            : List<dynamic>.from(citations!.map((x) => x.toJson())),
-        "confidence": confidence,
-        "question": question,
-        "question_embedding": questionEmbedding == null
-            ? []
-            : List<dynamic>.from(questionEmbedding!.map((x) => x)),
-      };
-}
-
-class ResearchEntry {
-  final String executiveSummary;
-  final String question;
-  final String title;
-
-  ResearchEntry({
-    required this.executiveSummary,
-    required this.question,
-    required this.title,
-  });
-
-  factory ResearchEntry.fromJson(Map<String, dynamic> json) => ResearchEntry(
-        executiveSummary: json["executive_summary"],
-        question: json["question"],
-        title: json["title"],
-      );
-
-  Map<String, dynamic> toJson() => {
-        "executive_summary": executiveSummary,
-        "question": question,
-        "title": title,
       };
 }
 

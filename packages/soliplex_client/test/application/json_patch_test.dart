@@ -58,25 +58,25 @@ void main() {
       test('appends to nested array using "-" syntax', () {
         final state = <String, dynamic>{
           'rag': {
-            'qa_history': [
-              {'question': 'Q1', 'answer': 'A1'},
+            'citations': [
+              ['chunk-1'],
             ],
           },
         };
         final operations = [
           {
             'op': 'add',
-            'path': '/rag/qa_history/-',
-            'value': {'question': 'Q2', 'answer': 'A2'},
+            'path': '/rag/citations/-',
+            'value': ['chunk-2'],
           },
         ];
 
         final result = applyJsonPatch(state, operations);
 
-        final qaHistory =
-            (result['rag'] as Map<String, dynamic>)['qa_history'] as List;
-        expect(qaHistory, hasLength(2));
-        expect((qaHistory[1] as Map<String, dynamic>)['question'], 'Q2');
+        final citations =
+            (result['rag'] as Map<String, dynamic>)['citations'] as List;
+        expect(citations, hasLength(2));
+        expect(citations[1], equals(['chunk-2']));
       });
 
       test('inserts item in array at index per RFC 6902', () {
@@ -264,17 +264,17 @@ void main() {
         final operations = [
           {
             'op': 'add',
-            'path': '/rag/qa_history/0',
-            'value': {'question': 'Q1'},
+            'path': '/rag/citations/0',
+            'value': ['chunk-1'],
           },
         ];
 
         final result = applyJsonPatch(state, operations);
 
         final ragState = result['rag'] as Map<String, dynamic>;
-        final qaHistory = ragState['qa_history'] as List<dynamic>;
-        expect(qaHistory, hasLength(1));
-        expect((qaHistory[0] as Map<String, dynamic>)['question'], 'Q1');
+        final citations = ragState['citations'] as List<dynamic>;
+        expect(citations, hasLength(1));
+        expect(citations[0], equals(['chunk-1']));
       });
 
       test('creates List when intermediate path uses "-" append syntax', () {
@@ -369,33 +369,45 @@ void main() {
       test('handles complex nested structures', () {
         final state = <String, dynamic>{
           'rag': {
-            'qa_history': <dynamic>[
-              {'question': 'Q1', 'answer': 'A1', 'citations': <dynamic>[]},
+            'citation_index': <String, dynamic>{
+              'c1': {
+                'chunk_id': 'c1',
+                'content': 'first',
+                'document_id': 'd1',
+                'document_uri': 'uri',
+              },
+            },
+            'citations': <dynamic>[
+              ['c1'],
             ],
           },
         };
         final operations = [
           {
             'op': 'add',
-            'path': '/rag/qa_history/1',
+            'path': '/rag/citations/1',
+            'value': ['c2', 'c3'],
+          },
+          {
+            'op': 'add',
+            'path': '/rag/citation_index/c2',
             'value': {
-              'question': 'Q2',
-              'answer': 'A2',
-              'citations': [
-                {'chunk_id': 'c1', 'content': 'text'},
-              ],
+              'chunk_id': 'c2',
+              'content': 'second',
+              'document_id': 'd2',
+              'document_uri': 'uri',
             },
           },
         ];
 
         final result = applyJsonPatch(state, operations);
 
-        final haikuChat = result['rag'] as Map<String, dynamic>;
-        final qaHistory = haikuChat['qa_history'] as List<dynamic>;
-        expect(qaHistory, hasLength(2));
-        final q2 = qaHistory[1] as Map<String, dynamic>;
-        expect(q2['question'], 'Q2');
-        expect(q2['citations'], hasLength(1));
+        final rag = result['rag'] as Map<String, dynamic>;
+        final citations = rag['citations'] as List<dynamic>;
+        expect(citations, hasLength(2));
+        expect(citations[1], equals(['c2', 'c3']));
+        final citationIndex = rag['citation_index'] as Map<String, dynamic>;
+        expect(citationIndex.containsKey('c2'), isTrue);
       });
     });
   });

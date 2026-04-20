@@ -11,25 +11,6 @@ void main() {
     });
 
     group('extractNew', () {
-      Map<String, dynamic> createState({
-        List<Map<String, dynamic>> qaHistory = const [],
-      }) {
-        return {
-          'rag': {
-            'qa_history': qaHistory,
-            'citations': <Map<String, dynamic>>[],
-          },
-        };
-      }
-
-      Map<String, dynamic> createQaEntry({
-        required String question,
-        required String answer,
-        List<Map<String, dynamic>> citations = const [],
-      }) {
-        return {'question': question, 'answer': answer, 'citations': citations};
-      }
-
       Map<String, dynamic> createCitation({
         required String chunkId,
         String content = 'test content',
@@ -52,14 +33,25 @@ void main() {
         };
       }
 
+      /// Builds a RAG-namespaced state with the new shape: `citation_index`
+      /// (id → Citation) and `citations` (per-turn list of id lists).
+      Map<String, dynamic> createState({
+        Map<String, Map<String, dynamic>> citationIndex = const {},
+        List<List<String>> citations = const [],
+      }) {
+        return {
+          'rag': {
+            'citation_index': citationIndex,
+            'citations': citations,
+          },
+        };
+      }
+
       test('returns empty when no state change', () {
         final state = createState(
-          qaHistory: [
-            createQaEntry(
-              question: 'Q1',
-              answer: 'A1',
-              citations: [createCitation(chunkId: 'c1')],
-            ),
+          citationIndex: {'c1': createCitation(chunkId: 'c1')},
+          citations: [
+            ['c1'],
           ],
         );
 
@@ -77,24 +69,21 @@ void main() {
         expect(refs, isEmpty);
       });
 
-      test('extracts citations from new qa_history entry', () {
+      test('extracts citations from new turn', () {
         final previous = createState();
         final current = createState(
-          qaHistory: [
-            createQaEntry(
-              question: 'Q1',
-              answer: 'A1',
-              citations: [
-                createCitation(
-                  chunkId: 'chunk-1',
-                  content: 'Citation content',
-                  documentTitle: 'Test Doc',
-                  headings: ['Chapter 1'],
-                  pageNumbers: [1, 2],
-                  index: 1,
-                ),
-              ],
+          citationIndex: {
+            'chunk-1': createCitation(
+              chunkId: 'chunk-1',
+              content: 'Citation content',
+              documentTitle: 'Test Doc',
+              headings: ['Chapter 1'],
+              pageNumbers: [1, 2],
+              index: 1,
             ),
+          },
+          citations: [
+            ['chunk-1'],
           ],
         );
 
@@ -114,14 +103,9 @@ void main() {
       test('defaults headings and pageNumbers to empty lists when absent', () {
         final previous = createState();
         final current = createState(
-          qaHistory: [
-            createQaEntry(
-              question: 'Q1',
-              answer: 'A1',
-              citations: [
-                createCitation(chunkId: 'c1'),
-              ],
-            ),
+          citationIndex: {'c1': createCitation(chunkId: 'c1')},
+          citations: [
+            ['c1'],
           ],
         );
 
@@ -132,28 +116,21 @@ void main() {
         expect(refs[0].pageNumbers, isEmpty);
       });
 
-      test('extracts only new entries when qa_history grows', () {
+      test('extracts only new turns when citations grows', () {
         final previous = createState(
-          qaHistory: [
-            createQaEntry(
-              question: 'Q1',
-              answer: 'A1',
-              citations: [createCitation(chunkId: 'old-chunk')],
-            ),
+          citationIndex: {'old-chunk': createCitation(chunkId: 'old-chunk')},
+          citations: [
+            ['old-chunk'],
           ],
         );
         final current = createState(
-          qaHistory: [
-            createQaEntry(
-              question: 'Q1',
-              answer: 'A1',
-              citations: [createCitation(chunkId: 'old-chunk')],
-            ),
-            createQaEntry(
-              question: 'Q2',
-              answer: 'A2',
-              citations: [createCitation(chunkId: 'new-chunk')],
-            ),
+          citationIndex: {
+            'old-chunk': createCitation(chunkId: 'old-chunk'),
+            'new-chunk': createCitation(chunkId: 'new-chunk'),
+          },
+          citations: [
+            ['old-chunk'],
+            ['new-chunk'],
           ],
         );
 
@@ -163,19 +140,16 @@ void main() {
         expect(refs[0].chunkId, 'new-chunk');
       });
 
-      test('extracts multiple citations from single new entry', () {
+      test('extracts multiple citations from a single new turn', () {
         final previous = createState();
         final current = createState(
-          qaHistory: [
-            createQaEntry(
-              question: 'Q1',
-              answer: 'A1',
-              citations: [
-                createCitation(chunkId: 'chunk-1'),
-                createCitation(chunkId: 'chunk-2'),
-                createCitation(chunkId: 'chunk-3'),
-              ],
-            ),
+          citationIndex: {
+            'chunk-1': createCitation(chunkId: 'chunk-1'),
+            'chunk-2': createCitation(chunkId: 'chunk-2'),
+            'chunk-3': createCitation(chunkId: 'chunk-3'),
+          },
+          citations: [
+            ['chunk-1', 'chunk-2', 'chunk-3'],
           ],
         );
 
@@ -185,10 +159,12 @@ void main() {
         expect(refs.map((r) => r.chunkId), ['chunk-1', 'chunk-2', 'chunk-3']);
       });
 
-      test('handles entry with no citations', () {
+      test('handles turn with no citations', () {
         final previous = createState();
         final current = createState(
-          qaHistory: [createQaEntry(question: 'Q1', answer: 'A1')],
+          citations: [
+            <String>[],
+          ],
         );
 
         final refs = extractor.extractNew(previous, current);
@@ -200,15 +176,27 @@ void main() {
         final previous = createState();
         final current = <String, dynamic>{
           'rag': {
-            'qa_history': [
-              createQaEntry(
-                question: 'Q1',
-                answer: 'A1',
-                citations: [createCitation(chunkId: 'c1')],
-              ),
+            'citation_index': {'c1': createCitation(chunkId: 'c1')},
+            'citations': [
+              ['c1'],
             ],
           },
         };
+
+        final refs = extractor.extractNew(previous, current);
+
+        expect(refs, hasLength(1));
+        expect(refs[0].chunkId, 'c1');
+      });
+
+      test('skips citation ids missing from the registry', () {
+        final previous = createState();
+        final current = createState(
+          citationIndex: {'c1': createCitation(chunkId: 'c1')},
+          citations: [
+            ['c1', 'missing'],
+          ],
+        );
 
         final refs = extractor.extractNew(previous, current);
 
@@ -227,32 +215,22 @@ void main() {
         expect(refs, isEmpty);
       });
 
-      test('returns empty when current has fewer entries than previous', () {
+      test('returns empty when current has fewer turns than previous', () {
         // This can happen with FIFO rotation
         final previous = <String, dynamic>{
           'rag': {
-            'qa_history': [
-              {
-                'question': 'Q1',
-                'answer': 'A1',
-                'citations': <Map<String, dynamic>>[],
-              },
-              {
-                'question': 'Q2',
-                'answer': 'A2',
-                'citations': <Map<String, dynamic>>[],
-              },
+            'citation_index': <String, dynamic>{},
+            'citations': [
+              <String>[],
+              <String>[],
             ],
           },
         };
         final current = <String, dynamic>{
           'rag': {
-            'qa_history': [
-              {
-                'question': 'Q2',
-                'answer': 'A2',
-                'citations': <Map<String, dynamic>>[],
-              },
+            'citation_index': <String, dynamic>{},
+            'citations': [
+              <String>[],
             ],
           },
         };
@@ -262,16 +240,13 @@ void main() {
         expect(refs, isEmpty);
       });
 
-      test('returns empty when new entry has no citations', () {
+      test('returns empty when new turn has no citations', () {
         final previous = <String, dynamic>{};
         final current = <String, dynamic>{
           'rag': {
-            'qa_history': [
-              {
-                'question': 'Q1',
-                'answer': 'A1',
-                'citations': <Map<String, dynamic>>[],
-              },
+            'citation_index': <String, dynamic>{},
+            'citations': [
+              <String>[],
             ],
           },
         };
@@ -292,38 +267,36 @@ void main() {
         final previous = <String, dynamic>{'rag': 42};
         final current = <String, dynamic>{
           'rag': {
-            'qa_history': [
-              {
-                'question': 'Q1',
-                'answer': 'A1',
-                'citations': <Map<String, dynamic>>[],
-              },
+            'citation_index': <String, dynamic>{},
+            'citations': [
+              <String>[],
             ],
           },
         };
 
-        // Treats previous as empty (length 0), extracts from current
+        // Treats previous as empty (length 0); new turn has no citation ids.
         final refs = extractor.extractNew(previous, current);
         expect(refs, isEmpty);
       });
 
-      test('returns empty when qa_history is not a List', () {
+      test('returns empty when citations is not a List', () {
         final previous = <String, dynamic>{};
         final current = <String, dynamic>{
-          'rag': {'qa_history': 'not a list'},
+          'rag': {'citations': 'not a list'},
         };
 
-        // qa_history length treated as 0 for both, no growth detected
+        // citations length treated as 0 for both, no growth detected
         final refs = extractor.extractNew(previous, current);
         expect(refs, isEmpty);
       });
 
-      test('returns empty on malformed qa_history entry', () {
+      test('returns empty on malformed turn entry', () {
         final previous = <String, dynamic>{};
         final current = <String, dynamic>{
           'rag': {
-            'qa_history': [
-              {'question': 'Q1'},
+            'citation_index': <String, dynamic>{},
+            'citations': [
+              'not-a-list',
             ],
           },
         };
@@ -335,12 +308,10 @@ void main() {
 
     test('knownRagKeys matches Rag schema keys', () {
       final schemaKeys = Rag().toJson().keys.toSet();
-      // _knownRagKeys is private; verify via ragStateKey-adjacent constant.
-      // Rag.toJson() uses snake_case keys matching the backend schema.
       expect(
         schemaKeys,
         equals(knownRagKeys),
-        reason: '_knownRagKeys must stay in sync with Rag schema fields',
+        reason: 'knownRagKeys must stay in sync with Rag schema fields',
       );
     });
   });

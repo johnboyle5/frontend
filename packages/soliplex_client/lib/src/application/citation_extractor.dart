@@ -27,11 +27,9 @@ void _logFromJsonDiagnostic(
 
 /// Known keys in the backend RAGState schema.
 const knownRagKeys = {
+  'citation_index',
   'citations',
   'document_filter',
-  'documents',
-  'qa_history',
-  'reports',
   'searches',
 };
 
@@ -57,15 +55,17 @@ const ragStateKey = 'rag';
 /// This is the **schema firewall**: the only file that imports schema types.
 /// When generated schema classes change, only this file needs updating.
 ///
-/// Uses length-based detection: compares `len(previous)` vs `len(current)`
-/// to find new entries at indices `[previousLength, currentLength)`.
+/// Uses turn-count detection: `citations` is a list-of-lists where each inner
+/// list holds the citation ids registered during one turn. New turns appear at
+/// indices `[previousLength, currentLength)`; ids are resolved against
+/// `citation_index`.
 class CitationExtractor {
-  /// Extracts source references from entries added since [previousState].
+  /// Extracts source references from turns added since [previousState].
   ///
   /// Returns an empty list if:
   /// - No recognized state format is found
-  /// - Current has same or fewer entries than previous (FIFO rotation)
-  /// - New entries have no citations
+  /// - Current has same or fewer turns than previous
+  /// - New turns reference no citations
   List<SourceReference> extractNew(
     Map<String, dynamic> previousState,
     Map<String, dynamic> currentState,
@@ -111,28 +111,27 @@ class CitationExtractor {
         level: 700,
       );
     }
-    // Treat non-Map previous as empty; citations may be re-extracted.
     final previousData =
         rawPrevious is Map<String, dynamic> ? rawPrevious : null;
 
-    final previousLength = _getQaHistoryLength(previousData);
-    final currentLength = _getQaHistoryLength(currentData);
+    final previousLength = _getCitationsLength(previousData);
+    final currentLength = _getCitationsLength(currentData);
 
     _warnUnknownKeys(currentData);
 
     if (currentLength <= previousLength) return [];
 
     try {
-      // Parses the full Rag state to validate the complete schema contract.
-      // If this throws, a malformed unrelated field (e.g. reports) will lose
-      // valid citations too. If that becomes a problem, fall back to parsing
-      // qa_history entries individually in the catch block.
       final rag = Rag.fromJson(currentData);
-      final qaHistory = rag.qaHistory ?? [];
+      final citations = rag.citations ?? [];
+      final citationIndex = rag.citationIndex ?? {};
 
-      return qaHistory
+      return citations
           .sublist(previousLength)
-          .expand(_extractFromQaHistoryEntry)
+          .expand((ids) => ids)
+          .map((id) => citationIndex[id])
+          .whereType<Citation>()
+          .map(_citationToSourceReference)
           .toList();
     } catch (e, stackTrace) {
       _logFromJsonDiagnostic('Rag', currentData, e, stackTrace);
@@ -140,29 +139,24 @@ class CitationExtractor {
     }
   }
 
-  int _getQaHistoryLength(Map<String, dynamic>? data) {
+  int _getCitationsLength(Map<String, dynamic>? data) {
     if (data == null) return 0;
-    final qaHistory = data['qa_history'];
-    if (qaHistory == null) return 0;
-    if (qaHistory is! List) {
+    final citations = data['citations'];
+    if (citations == null) return 0;
+    if (citations is! List) {
       developer.log(
-        'Expected qa_history to be List, got ${qaHistory.runtimeType}.',
+        'Expected citations to be List, got ${citations.runtimeType}.',
         name: 'soliplex_client.citation_extractor',
         level: 900,
       );
       developer.log(
-        'qa_history value: $qaHistory',
+        'citations value: $citations',
         name: 'soliplex_client.citation_extractor',
         level: 700,
       );
       return 0;
     }
-    return qaHistory.length;
-  }
-
-  List<SourceReference> _extractFromQaHistoryEntry(QaHistoryEntry entry) {
-    final citations = entry.citations ?? [];
-    return citations.map(_citationToSourceReference).toList();
+    return citations.length;
   }
 
   SourceReference _citationToSourceReference(Citation c) {
