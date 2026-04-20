@@ -33,6 +33,11 @@ class UploadTrackerRegistry {
   /// Returns (or lazily creates) the tracker for the given
   /// `(serverId, roomId)`. Throws [StateError] if the registry has
   /// been disposed.
+  ///
+  /// Callers should pass a [ServerEntry] whose `serverId` is still
+  /// present in the injected `servers` signal; a tracker created for
+  /// a server that is never (or no longer) live will not be subject
+  /// to the server-removal eviction path.
   UploadTracker trackerFor({
     required ServerEntry entry,
     required String roomId,

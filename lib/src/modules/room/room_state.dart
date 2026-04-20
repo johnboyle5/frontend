@@ -57,8 +57,7 @@ class RoomState {
 
   final ThreadListState threadList;
 
-  /// Shared tracker for this (server, room); lifecycle is owned by the
-  /// `UploadTrackerRegistry`, not by this state object.
+  /// Shared tracker; lifecycle owned by [UploadTrackerRegistry].
   final UploadTracker uploadTracker;
   ThreadViewState? _activeThreadView;
   CancelToken? _roomFetchToken;

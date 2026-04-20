@@ -282,6 +282,75 @@ void main() {
     blockingApi.completeThreads(const []);
   });
 
+  testWidgets('hides file chip when both room and thread scopes are empty',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    api.nextRoom = const Room(
+      id: 'room-1',
+      name: 'Attachable',
+      enableAttachments: true,
+    );
+    api.nextThreads = const [];
+    // nextRoomUploads / nextThreadUploads default to empty → the chip
+    // must not render when both scopes are Loaded([]).
+
+    await tester.pumpWidget(MaterialApp(
+      home: RoomScreen(
+        serverEntry: entry,
+        roomId: 'room-1',
+        threadId: null,
+        runtimeManager: runtimeManager,
+        registry: registry,
+        uploadRegistry: uploadRegistry,
+        documentSelections: DocumentSelections(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // The chip always renders an expand_more/less icon; its absence
+    // confirms the chip itself isn't present.
+    expect(find.byIcon(Icons.expand_more), findsNothing);
+    expect(find.byIcon(Icons.expand_less), findsNothing);
+  });
+
+  testWidgets('shows file chip when room has uploads', (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    api.nextRoom = const Room(
+      id: 'room-1',
+      name: 'Attachable',
+      enableAttachments: true,
+    );
+    api.nextThreads = const [];
+    api.nextRoomUploads = [
+      FileUpload(
+        filename: 'shared.pdf',
+        url: Uri.parse('https://example.com/shared.pdf'),
+      ),
+    ];
+
+    await tester.pumpWidget(MaterialApp(
+      home: RoomScreen(
+        serverEntry: entry,
+        roomId: 'room-1',
+        threadId: null,
+        runtimeManager: runtimeManager,
+        registry: registry,
+        uploadRegistry: uploadRegistry,
+        documentSelections: DocumentSelections(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.expand_more), findsOneWidget);
+    expect(find.text('1 room'), findsOneWidget);
+  });
+
   testWidgets('ChatInput is disabled during MessagesLoading', (tester) async {
     // Use a blocking API to keep thread history in loading state
     final blockingApi = _BlockingThreadsApi();

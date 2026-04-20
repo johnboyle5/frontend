@@ -439,7 +439,7 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
       UploadsFailed(error: final error) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
-            'Failed to load uploaded files: $error',
+            'Failed to load uploaded files: ${uploadErrorMessage(error)}',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.error,
             ),

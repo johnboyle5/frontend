@@ -1125,9 +1125,18 @@ class SoliplexApi {
     if (uploads == null || uploads.isEmpty) return const [];
     final result = <FileUpload>[];
     for (final entry in uploads) {
+      if (entry is! Map<String, dynamic>) {
+        developer.log(
+          'Malformed file upload ignored: expected a JSON object, '
+          'got ${entry.runtimeType}',
+          name: 'soliplex_client.api',
+          level: 900,
+        );
+        continue;
+      }
       try {
-        result.add(fileUploadFromJson(entry as Map<String, dynamic>));
-      } on Object catch (e) {
+        result.add(fileUploadFromJson(entry));
+      } on FormatException catch (e) {
         developer.log(
           'Malformed file upload ignored: $e',
           name: 'soliplex_client.api',

@@ -36,8 +36,14 @@ const double _wideBreakpoint = 600;
 
 /// Builds the label for the file indicator chip in the room header.
 ///
-/// Shows separate counts for room and thread uploads.
+/// Shows separate counts for room and thread uploads. At least one of
+/// [roomCount] / [threadCount] must be positive — the caller is
+/// responsible for hiding the chip when both are zero.
 String uploadChipLabel(int roomCount, int threadCount) {
+  assert(
+    roomCount > 0 || threadCount > 0,
+    'uploadChipLabel called with both counts zero; the chip should be hidden',
+  );
   if (roomCount > 0 && threadCount > 0) {
     return '$roomCount room \u00b7 $threadCount thread';
   }
@@ -473,9 +479,8 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
-  /// Returns the chip widget for the current (room, thread) upload
-  /// status, or null to hide it (both scopes Loaded-empty, matching
-  /// the current space-constrained header behavior).
+  /// Returns the chip widget, or null to hide it when both scopes are
+  /// Loaded-empty.
   Widget? _buildChip(
     UploadsStatus roomStatus,
     UploadsStatus threadStatus,
@@ -628,7 +633,7 @@ class _RoomScreenState extends State<RoomScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Failed to load: $error',
+                'Failed to load: ${uploadErrorMessage(error)}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.error,
                 ),

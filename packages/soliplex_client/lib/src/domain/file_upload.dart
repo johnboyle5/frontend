@@ -19,17 +19,6 @@ class FileUpload {
   /// URL for downloading the file.
   final Uri url;
 
-  /// Creates a copy of this entry with the given fields replaced.
-  FileUpload copyWith({
-    String? filename,
-    Uri? url,
-  }) {
-    return FileUpload(
-      filename: filename ?? this.filename,
-      url: url ?? this.url,
-    );
-  }
-
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;

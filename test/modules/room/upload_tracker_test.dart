@@ -323,6 +323,57 @@ void main() {
       final failed = entries.single as FailedUpload;
       expect(failed.filename, 'fail.pdf');
       expect(failed.message, contains('nope'));
+
+      // No extra list fetch was triggered by the failure — the catch
+      // path must not call refresh. (Initial fetch is the one call.)
+      verify(() => mockApi.getRoomUploads(
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+          )).called(1);
+    });
+  });
+
+  group('re-fetch races', () {
+    test('late response from a cancelled fetch does not overwrite state',
+        () async {
+      final first = Completer<List<FileUpload>>();
+      final second = Completer<List<FileUpload>>();
+      final completers = [first, second];
+      var callIndex = 0;
+
+      when(() => mockApi.getRoomUploads(
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+          )).thenAnswer((_) => completers[callIndex++].future);
+
+      tracker.fetchRoomUploads('room-1');
+      // Kick a second fetch; internally this cancels the first token.
+      unawaited(tracker.refreshRoom('room-1'));
+
+      // Complete the NEW fetch first, so the scope becomes Loaded
+      // with its result.
+      second.complete([_fileUpload('winner.pdf')]);
+      await _pump();
+      expect(
+        (tracker.roomUploads('room-1').value as UploadsLoaded)
+            .uploads
+            .single
+            .filename,
+        'winner.pdf',
+      );
+
+      // Now complete the cancelled fetch. Its guard must swallow the
+      // result; the scope must still show the newer list.
+      first.complete([_fileUpload('loser.pdf')]);
+      await _pump();
+
+      expect(
+        (tracker.roomUploads('room-1').value as UploadsLoaded)
+            .uploads
+            .single
+            .filename,
+        'winner.pdf',
+      );
     });
   });
 
