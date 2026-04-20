@@ -46,7 +46,10 @@ class RoomState {
         uploadTracker =
             uploadRegistry.trackerFor(entry: serverEntry, roomId: roomId) {
     _fetchRoom();
-    uploadTracker.fetchRoomUploads(_roomId);
+    // Every room entry forces a refresh so the list reflects server
+    // state from other devices and self-heals any pending record that
+    // got stuck behind a transient refresh failure.
+    unawaited(uploadTracker.refreshRoom(_roomId));
   }
 
   final ServerConnection _connection;
@@ -109,7 +112,10 @@ class RoomState {
         runtime.seedThreadHistory(id, history);
       },
     );
-    uploadTracker.fetchThreadUploads(_roomId, threadId);
+    // Thread switch → force a refresh for the same reasons as room
+    // entry. Reselecting the same thread is a no-op earlier in the
+    // method, so this doesn't fire spuriously.
+    unawaited(uploadTracker.refreshThread(_roomId, threadId));
   }
 
   /// Explicit thread creation (the "+" button path).
