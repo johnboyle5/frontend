@@ -9,6 +9,7 @@ import 'package:soliplex_frontend/src/modules/room/agent_runtime_manager.dart';
 import 'package:soliplex_frontend/src/modules/room/document_selections.dart';
 import 'package:soliplex_frontend/src/modules/room/run_registry.dart';
 import 'package:soliplex_frontend/src/modules/room/ui/room_screen.dart';
+import 'package:soliplex_frontend/src/modules/room/upload_tracker_registry.dart';
 import 'package:soliplex_frontend/src/modules/auth/server_entry.dart';
 
 import '../../../helpers/fakes.dart';
@@ -33,6 +34,7 @@ Widget _buildRouted({
   required ServerEntry entry,
   required AgentRuntimeManager runtimeManager,
   required RunRegistry registry,
+  required UploadTrackerRegistry uploadRegistry,
   String roomId = 'room-1',
   String? threadId,
 }) {
@@ -49,6 +51,7 @@ Widget _buildRouted({
           threadId: null,
           runtimeManager: runtimeManager,
           registry: registry,
+          uploadRegistry: uploadRegistry,
           documentSelections: DocumentSelections(),
         ),
         routes: [
@@ -60,6 +63,7 @@ Widget _buildRouted({
               threadId: state.pathParameters['threadId'],
               runtimeManager: runtimeManager,
               registry: registry,
+              uploadRegistry: uploadRegistry,
               documentSelections: DocumentSelections(),
             ),
           ),
@@ -75,6 +79,8 @@ void main() {
   late ServerEntry entry;
   late AgentRuntimeManager runtimeManager;
   late RunRegistry registry;
+  late Signal<Map<String, ServerEntry>> servers;
+  late UploadTrackerRegistry uploadRegistry;
 
   setUp(() {
     api = FakeSoliplexApi();
@@ -94,11 +100,15 @@ void main() {
       logger: testLogger(),
     );
     registry = RunRegistry();
+    servers = Signal({entry.serverId: entry});
+    uploadRegistry = UploadTrackerRegistry(servers: servers);
   });
 
   tearDown(() async {
     await runtimeManager.dispose();
     registry.dispose();
+    uploadRegistry.dispose();
+    servers.dispose();
   });
 
   testWidgets('wide layout shows thread sidebar', (tester) async {
@@ -113,6 +123,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -133,6 +144,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -156,6 +168,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -189,6 +202,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -212,6 +226,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -229,6 +244,7 @@ void main() {
       entry: entry,
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     ));
     await tester.pumpAndSettle();
 
@@ -255,6 +271,7 @@ void main() {
         threadId: null,
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));
@@ -263,6 +280,151 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
     blockingApi.completeThreads(const []);
+  });
+
+  testWidgets('hides file chip when both room and thread scopes are empty',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    api.nextRoom = const Room(
+      id: 'room-1',
+      name: 'Attachable',
+      enableAttachments: true,
+    );
+    api.nextThreads = const [];
+    // nextRoomUploads / nextThreadUploads default to empty → the chip
+    // must not render when both scopes are Loaded([]).
+
+    await tester.pumpWidget(MaterialApp(
+      home: RoomScreen(
+        serverEntry: entry,
+        roomId: 'room-1',
+        threadId: null,
+        runtimeManager: runtimeManager,
+        registry: registry,
+        uploadRegistry: uploadRegistry,
+        documentSelections: DocumentSelections(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // The chip always renders an expand_more/less icon; its absence
+    // confirms the chip itself isn't present.
+    expect(find.byIcon(Icons.expand_more), findsNothing);
+    expect(find.byIcon(Icons.expand_less), findsNothing);
+  });
+
+  testWidgets(
+      'expanded file panel omits the Thread section when thread scope is empty',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    api.nextRoom = const Room(
+      id: 'room-1',
+      name: 'Attachable',
+      enableAttachments: true,
+    );
+    api.nextThreads = const [];
+    api.nextRoomUploads = [
+      FileUpload(
+        filename: 'shared.pdf',
+        url: Uri.parse('https://example.com/shared.pdf'),
+      ),
+    ];
+
+    await tester.pumpWidget(MaterialApp(
+      home: RoomScreen(
+        serverEntry: entry,
+        roomId: 'room-1',
+        threadId: null,
+        runtimeManager: runtimeManager,
+        registry: registry,
+        uploadRegistry: uploadRegistry,
+        documentSelections: DocumentSelections(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Tap the chip to expand the file panel.
+    await tester.tap(find.byIcon(Icons.expand_more));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ROOM'), findsOneWidget);
+    expect(find.text('THREAD'), findsNothing,
+        reason: 'empty thread scope should not render a Thread label');
+    expect(find.text('shared.pdf'), findsOneWidget);
+  });
+
+  testWidgets('shows file chip when room has uploads', (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    api.nextRoom = const Room(
+      id: 'room-1',
+      name: 'Attachable',
+      enableAttachments: true,
+    );
+    api.nextThreads = const [];
+    api.nextRoomUploads = [
+      FileUpload(
+        filename: 'shared.pdf',
+        url: Uri.parse('https://example.com/shared.pdf'),
+      ),
+    ];
+
+    await tester.pumpWidget(MaterialApp(
+      home: RoomScreen(
+        serverEntry: entry,
+        roomId: 'room-1',
+        threadId: null,
+        runtimeManager: runtimeManager,
+        registry: registry,
+        uploadRegistry: uploadRegistry,
+        documentSelections: DocumentSelections(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.expand_more), findsOneWidget);
+    expect(find.text('1 room'), findsOneWidget);
+  });
+
+  testWidgets('chip shows error_outline when room uploads refresh fails',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    api.nextRoom = const Room(
+      id: 'room-1',
+      name: 'Attachable',
+      enableAttachments: true,
+    );
+    api.nextThreads = const [];
+    api.nextRoomUploadsError =
+        const ApiException(statusCode: 500, message: 'boom');
+
+    await tester.pumpWidget(MaterialApp(
+      home: RoomScreen(
+        serverEntry: entry,
+        roomId: 'room-1',
+        threadId: null,
+        runtimeManager: runtimeManager,
+        registry: registry,
+        uploadRegistry: uploadRegistry,
+        documentSelections: DocumentSelections(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // The chip leading icon should be error_outline (not the attach
+    // icon) when the scope is UploadsFailed.
+    expect(find.byIcon(Icons.error_outline), findsWidgets);
   });
 
   testWidgets('ChatInput is disabled during MessagesLoading', (tester) async {
@@ -285,6 +447,7 @@ void main() {
         threadId: 'thread-1',
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
     ));

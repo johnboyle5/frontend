@@ -1,13 +1,15 @@
 import 'dart:async' show unawaited;
+import 'dart:developer' as dev;
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:soliplex_agent/soliplex_agent.dart';
 
+import '../auth/server_entry.dart';
 import 'agent_runtime_manager.dart';
 import 'run_registry.dart';
 import 'thread_list_state.dart';
 import 'thread_view_state.dart';
 import 'upload_tracker.dart';
+import 'upload_tracker_registry.dart';
 
 export 'send_error.dart';
 
@@ -27,21 +29,27 @@ class RoomFailed extends RoomStatus {
 
 class RoomState {
   RoomState({
-    required ServerConnection connection,
+    required ServerEntry serverEntry,
     required String roomId,
     required AgentRuntimeManager runtimeManager,
     required RunRegistry registry,
+    required UploadTrackerRegistry uploadRegistry,
     this.onNavigateToThread,
-  })  : _connection = connection,
+  })  : _connection = serverEntry.connection,
         _roomId = roomId,
         _runtimeManager = runtimeManager,
         _registry = registry,
         threadList = ThreadListState(
-          connection: connection,
+          connection: serverEntry.connection,
           roomId: roomId,
         ),
-        uploadTracker = UploadTracker() {
+        uploadTracker =
+            uploadRegistry.trackerFor(entry: serverEntry, roomId: roomId) {
     _fetchRoom();
+    // Every room entry forces a refresh so the list reflects server
+    // state from other devices and self-heals any pending record that
+    // got stuck behind a transient refresh failure.
+    unawaited(uploadTracker.refreshRoom(_roomId));
   }
 
   final ServerConnection _connection;
@@ -51,6 +59,8 @@ class RoomState {
   final void Function(String? threadId)? onNavigateToThread;
 
   final ThreadListState threadList;
+
+  /// Shared tracker; lifecycle owned by [UploadTrackerRegistry].
   final UploadTracker uploadTracker;
   ThreadViewState? _activeThreadView;
   CancelToken? _roomFetchToken;
@@ -102,6 +112,10 @@ class RoomState {
         runtime.seedThreadHistory(id, history);
       },
     );
+    // Thread switch → force a refresh for the same reasons as room
+    // entry. Reselecting the same thread is a no-op earlier in the
+    // method, so this doesn't fire spuriously.
+    unawaited(uploadTracker.refreshThread(_roomId, threadId));
   }
 
   /// Explicit thread creation (the "+" button path).
@@ -165,8 +179,14 @@ class RoomState {
     unawaited(pending.then((s) {
       s.cancel();
       s.dispose();
-    }).catchError((Object e) {
-      debugPrint('Cancelled spawn cleanup failed: $e');
+    }).catchError((Object e, StackTrace st) {
+      dev.log(
+        'Cancelled spawn cleanup failed',
+        error: e,
+        stackTrace: st,
+        name: 'RoomState',
+        level: 1000,
+      );
     }));
   }
 
@@ -219,7 +239,6 @@ class RoomState {
   void dispose() {
     _isDisposed = true;
     _roomFetchToken?.cancel('disposed');
-    uploadTracker.dispose();
     threadList.dispose();
     _activeThreadView?.dispose();
   }

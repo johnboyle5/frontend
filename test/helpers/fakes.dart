@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:soliplex_agent/soliplex_agent.dart' hide AuthException;
 import 'package:soliplex_client/soliplex_client.dart'
     show
+        FileUpload,
         HttpTransport,
         Quiz,
         QuizAnswerResult,
@@ -266,6 +267,34 @@ class FakeSoliplexApi extends SoliplexApi {
   }) async {
     if (nextDocumentsError != null) throw nextDocumentsError!;
     return nextDocuments ?? const [];
+  }
+
+  List<FileUpload>? nextRoomUploads;
+  Exception? nextRoomUploadsError;
+  List<FileUpload>? nextThreadUploads;
+  Exception? nextThreadUploadsError;
+  int getRoomUploadsCount = 0;
+  int getThreadUploadsCount = 0;
+
+  @override
+  Future<List<FileUpload>> getRoomUploads(
+    String roomId, {
+    CancelToken? cancelToken,
+  }) async {
+    getRoomUploadsCount++;
+    if (nextRoomUploadsError != null) throw nextRoomUploadsError!;
+    return nextRoomUploads ?? const [];
+  }
+
+  @override
+  Future<List<FileUpload>> getThreadUploads(
+    String roomId,
+    String threadId, {
+    CancelToken? cancelToken,
+  }) async {
+    getThreadUploadsCount++;
+    if (nextThreadUploadsError != null) throw nextThreadUploadsError!;
+    return nextThreadUploads ?? const [];
   }
 
   @override

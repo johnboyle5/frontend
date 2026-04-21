@@ -8,6 +8,7 @@ import 'document_selections.dart';
 import 'run_registry.dart';
 import 'ui/room_info_screen.dart';
 import 'ui/room_screen.dart';
+import 'upload_tracker_registry.dart';
 
 ModuleContribution roomModule({
   required ServerManager serverManager,
@@ -16,6 +17,7 @@ ModuleContribution roomModule({
   bool enableDocumentFilter = false,
 }) {
   final documentSelections = DocumentSelections();
+  final uploadRegistry = UploadTrackerRegistry(servers: serverManager.servers);
   return ModuleContribution(
     routes: [
       GoRoute(
@@ -32,6 +34,7 @@ ModuleContribution roomModule({
               serverEntry: entry,
               roomId: state.pathParameters['roomId']!,
               toolRegistryResolver: runtimeManager.toolRegistryResolver,
+              uploadRegistry: uploadRegistry,
             ),
           );
         },
@@ -41,6 +44,7 @@ ModuleContribution roomModule({
         serverManager,
         runtimeManager,
         registry,
+        uploadRegistry,
         enableDocumentFilter,
         documentSelections,
       ),
@@ -49,6 +53,7 @@ ModuleContribution roomModule({
         serverManager,
         runtimeManager,
         registry,
+        uploadRegistry,
         enableDocumentFilter,
         documentSelections,
       ),
@@ -61,6 +66,7 @@ GoRoute _buildRoute(
   ServerManager serverManager,
   AgentRuntimeManager runtimeManager,
   RunRegistry registry,
+  UploadTrackerRegistry uploadRegistry,
   bool enableDocumentFilter,
   DocumentSelections documentSelections,
 ) {
@@ -80,6 +86,7 @@ GoRoute _buildRoute(
           threadId: state.pathParameters['threadId'],
           runtimeManager: runtimeManager,
           registry: registry,
+          uploadRegistry: uploadRegistry,
           enableDocumentFilter: enableDocumentFilter,
           documentSelections: documentSelections,
         ),

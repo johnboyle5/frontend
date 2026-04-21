@@ -1,11 +1,17 @@
+import 'dart:async' show unawaited;
+import 'dart:developer' as dev;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 import 'package:soliplex_client/soliplex_client.dart' hide Room, State;
 
 import '../pick_file.dart';
 
 import '../../auth/server_entry.dart';
+import '../upload_tracker.dart';
+import '../upload_tracker_registry.dart';
 import 'room_info/client_tools_card.dart';
 import 'room_info/documents_card.dart';
 import 'room_info/expandable_list_card.dart';
@@ -21,11 +27,13 @@ class RoomInfoScreen extends StatefulWidget {
     required this.serverEntry,
     required this.roomId,
     required this.toolRegistryResolver,
+    required this.uploadRegistry,
   });
 
   final ServerEntry serverEntry;
   final String roomId;
   final Future<ToolRegistry> Function(String roomId) toolRegistryResolver;
+  final UploadTrackerRegistry uploadRegistry;
 
   @override
   State<RoomInfoScreen> createState() => _RoomInfoScreenState();
@@ -100,12 +108,14 @@ class _RoomInfoScreenState extends State<RoomInfoScreen> {
           return _RoomInfoBody(
             room: snapshot.data!,
             serverUrl: widget.serverEntry.serverUrl,
+            serverEntry: widget.serverEntry,
             api: widget.serverEntry.connection.api,
             serverAlias: widget.serverEntry.alias,
             roomId: widget.roomId,
             documentsFuture: _documentsFuture,
             clientToolsFuture: _clientToolsFuture,
             onRetryDocuments: _retryDocuments,
+            uploadRegistry: widget.uploadRegistry,
           );
         },
       ),
@@ -117,22 +127,26 @@ class _RoomInfoBody extends StatelessWidget {
   const _RoomInfoBody({
     required this.room,
     required this.serverUrl,
+    required this.serverEntry,
     required this.api,
     required this.serverAlias,
     required this.roomId,
     required this.documentsFuture,
     required this.clientToolsFuture,
     required this.onRetryDocuments,
+    required this.uploadRegistry,
   });
 
   final Room room;
   final Uri serverUrl;
+  final ServerEntry serverEntry;
   final SoliplexApi api;
   final String serverAlias;
   final String roomId;
   final Future<List<RagDocument>> documentsFuture;
   final Future<List<Tool>> clientToolsFuture;
   final VoidCallback onRetryDocuments;
+  final UploadTrackerRegistry uploadRegistry;
 
   @override
   Widget build(BuildContext context) {
@@ -224,9 +238,11 @@ class _RoomInfoBody extends StatelessWidget {
           ),
           ClientToolsCard(clientToolsFuture: clientToolsFuture),
           if (room.enableAttachments)
-            // TODO(backend): Replace with fetched file list once
-            // GET /v1/uploads/{room_id} endpoint exists.
-            _UploadedFilesCard(api: api, roomId: roomId),
+            _UploadedFilesCard(
+              uploadRegistry: uploadRegistry,
+              serverEntry: serverEntry,
+              roomId: roomId,
+            ),
           DocumentsCard(
             documentsFuture: documentsFuture,
             onRetry: onRetryDocuments,
@@ -335,11 +351,13 @@ class _AgentCard extends StatelessWidget {
 
 class _UploadedFilesCard extends StatefulWidget {
   const _UploadedFilesCard({
-    required this.api,
+    required this.uploadRegistry,
+    required this.serverEntry,
     required this.roomId,
   });
 
-  final SoliplexApi api;
+  final UploadTrackerRegistry uploadRegistry;
+  final ServerEntry serverEntry;
   final String roomId;
 
   @override
@@ -347,121 +365,83 @@ class _UploadedFilesCard extends StatefulWidget {
 }
 
 class _UploadedFilesCardState extends State<_UploadedFilesCard> {
-  final _uploads = <_UploadInfo>[];
-  bool _uploading = false;
-  int _nextId = 0;
+  late final UploadTracker _tracker;
 
-  Future<void> _pickAndUpload() async {
-    final file = await pickFile();
-    if (file == null || !mounted) return;
-
-    final id = _nextId++;
-    setState(() {
-      _uploading = true;
-      _uploads.add(_UploadInfo(id, file.name, _UploadStatus.uploading));
-    });
-
-    try {
-      await widget.api.uploadFileToRoom(
-        widget.roomId,
-        filename: file.name,
-        fileBytes: file.bytes,
-        mimeType: file.mimeType,
-      );
-      if (!mounted) return;
-      setState(() {
-        _updateStatus(id, file.name, _UploadStatus.success);
-        _uploading = false;
-      });
-    } on Object catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _updateStatus(id, file.name, _UploadStatus.error, '$e');
-        _uploading = false;
-      });
+  @override
+  void initState() {
+    super.initState();
+    _tracker = widget.uploadRegistry.trackerFor(
+      entry: widget.serverEntry,
+      roomId: widget.roomId,
+    );
+    // Refresh only if no other screen has populated the shared tracker
+    // yet. When `RoomState` is already mounted it has refreshed on room
+    // entry, so navigating Room → Info skips a redundant GET.
+    if (_tracker.roomUploads(widget.roomId).value is UploadsLoading) {
+      unawaited(_tracker.refreshRoom(widget.roomId));
     }
   }
 
-  void _updateStatus(
-    int id,
-    String filename,
-    _UploadStatus status, [
-    String? error,
-  ]) {
-    final i = _uploads.indexWhere((u) => u.id == id);
-    if (i >= 0) {
-      _uploads[i] = _UploadInfo(id, filename, status, error);
+  // Not disposed here — the registry owns the tracker's lifecycle.
+
+  Future<void> _pickAndUpload() async {
+    final PickedFile? file;
+    try {
+      file = await pickFile();
+    } on PickFileException catch (e, st) {
+      if (!mounted) return;
+      dev.log(
+        'File pick failed',
+        error: e.cause,
+        stackTrace: st,
+        name: 'RoomInfoScreen',
+        level: 1000,
+      );
+      final (filename, message) = switch (e) {
+        PickFileReadException(:final filename) => (
+            filename,
+            'Failed to read file',
+          ),
+        PickFilePickerException(:final filename) => (
+            filename ?? '(unknown)',
+            'Could not open file picker',
+          ),
+      };
+      _tracker.recordClientError(
+        roomId: widget.roomId,
+        filename: filename,
+        message: message,
+      );
+      return;
     }
+    if (file == null || !mounted) return;
+    _tracker.uploadToRoom(
+      roomId: widget.roomId,
+      filename: file.name,
+      fileBytes: file.bytes,
+      mimeType: file.mimeType,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final successCount =
-        _uploads.where((u) => u.status == _UploadStatus.success).length;
-    final title =
-        successCount > 0 ? 'UPLOADED FILES ($successCount)' : 'UPLOADED FILES';
+    final status = _tracker.roomUploads(widget.roomId).watch(context);
+    final uploads = status is UploadsLoaded ? status.uploads : null;
+    final persistedCount = uploads?.whereType<PersistedUpload>().length ?? 0;
+    final title = persistedCount > 0
+        ? 'UPLOADED FILES ($persistedCount)'
+        : 'UPLOADED FILES';
+
     return SectionCard(
       title: title,
       children: [
-        if (_uploads.isEmpty)
-          const EmptyMessage(label: 'uploaded files (pending backend)'),
-        if (_uploads.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          for (final upload in _uploads)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                children: [
-                  if (upload.status == _UploadStatus.uploading)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                      ),
-                    )
-                  else if (upload.status == _UploadStatus.success)
-                    Icon(
-                      Icons.check_circle_outline,
-                      size: 16,
-                      color: theme.colorScheme.primary,
-                    )
-                  else
-                    Icon(
-                      Icons.error_outline,
-                      size: 16,
-                      color: theme.colorScheme.error,
-                    ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      upload.filename,
-                      style: theme.textTheme.bodySmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (upload.error != null)
-                    Expanded(
-                      child: Text(
-                        upload.error!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                          fontSize: 11,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ],
+        _buildBody(status, theme),
         const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerLeft,
           child: FilledButton.icon(
-            onPressed: _uploading ? null : _pickAndUpload,
+            onPressed: _pickAndUpload,
             icon: const Icon(Icons.upload_file, size: 18),
             label: const Text('Upload file to room'),
           ),
@@ -469,14 +449,124 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
       ],
     );
   }
+
+  Widget _buildBody(UploadsStatus status, ThemeData theme) {
+    return switch (status) {
+      UploadsLoading() => const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      UploadsLoaded(uploads: final list) when list.isEmpty =>
+        const EmptyMessage(label: 'uploaded files'),
+      UploadsLoaded(uploads: final list) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            for (final entry in list)
+              _UploadEntryRow(entry: entry, onDismiss: _tracker.dismissFailed),
+          ],
+        ),
+      UploadsFailed(error: final error) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            'Failed to load uploaded files: ${uploadErrorMessage(error)}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ),
+    };
+  }
 }
 
-enum _UploadStatus { uploading, success, error }
+class _UploadEntryRow extends StatelessWidget {
+  const _UploadEntryRow({
+    required this.entry,
+    required this.onDismiss,
+  });
 
-class _UploadInfo {
-  _UploadInfo(this.id, this.filename, this.status, [this.error]);
-  final int id;
-  final String filename;
-  final _UploadStatus status;
-  final String? error;
+  final DisplayUpload entry;
+  final void Function(String entryId) onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isFailed = entry is FailedUpload;
+    final (icon, color, errorMessage, dismissId) = switch (entry) {
+      PersistedUpload() => (
+          Icons.check_circle_outline,
+          theme.colorScheme.primary,
+          null,
+          null,
+        ),
+      PendingUpload() => (null, theme.colorScheme.primary, null, null),
+      FailedUpload(id: final id, message: final m) => (
+          Icons.error_outline,
+          theme.colorScheme.onErrorContainer,
+          m,
+          id,
+        ),
+    };
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      padding: isFailed
+          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
+          : null,
+      decoration: isFailed
+          ? BoxDecoration(
+              color: theme.colorScheme.errorContainer,
+              borderRadius: BorderRadius.circular(6),
+            )
+          : null,
+      child: Row(
+        children: [
+          if (icon != null)
+            Icon(icon, size: 16, color: color)
+          else
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              entry.filename,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: isFailed ? theme.colorScheme.onErrorContainer : null,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (errorMessage != null)
+            Expanded(
+              child: Text(
+                errorMessage,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onErrorContainer,
+                  fontSize: 11,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          if (dismissId != null)
+            IconButton(
+              icon: const Icon(Icons.close, size: 14),
+              color: theme.colorScheme.onErrorContainer,
+              onPressed: () => onDismiss(dismissId),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              visualDensity: VisualDensity.compact,
+            ),
+        ],
+      ),
+    );
+  }
 }

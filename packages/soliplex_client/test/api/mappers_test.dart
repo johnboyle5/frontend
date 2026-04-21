@@ -1,4 +1,5 @@
 import 'package:soliplex_client/src/api/mappers.dart';
+import 'package:soliplex_client/src/domain/file_upload.dart';
 import 'package:soliplex_client/src/domain/quiz.dart';
 import 'package:soliplex_client/src/domain/rag_document.dart';
 import 'package:soliplex_client/src/domain/room.dart';
@@ -1877,6 +1878,68 @@ void main() {
         threadMetadataToJson(name: 'My Thread', description: 'A description'),
         equals({'name': 'My Thread', 'description': 'A description'}),
       );
+    });
+  });
+
+  group('FileUpload mappers', () {
+    group('fileUploadFromJson', () {
+      test('parses correctly with all fields', () {
+        final result = fileUploadFromJson({
+          'filename': 'report.pdf',
+          'url': 'https://example.com/uploads/room-1/report.pdf',
+        });
+
+        expect(result.filename, 'report.pdf');
+        expect(
+          result.url.toString(),
+          'https://example.com/uploads/room-1/report.pdf',
+        );
+        expect(result, isA<FileUpload>());
+      });
+
+      test('throws FormatException when filename is missing', () {
+        expect(
+          () => fileUploadFromJson({'url': 'https://example.com/a'}),
+          throwsFormatException,
+        );
+      });
+
+      test('throws FormatException when url is missing', () {
+        expect(
+          () => fileUploadFromJson({'filename': 'a.pdf'}),
+          throwsFormatException,
+        );
+      });
+
+      test('throws FormatException when filename is non-string', () {
+        expect(
+          () => fileUploadFromJson({
+            'filename': 42,
+            'url': 'https://example.com/a',
+          }),
+          throwsFormatException,
+        );
+      });
+
+      test('throws FormatException when url is non-string', () {
+        expect(
+          () => fileUploadFromJson({
+            'filename': 'a.pdf',
+            'url': ['not', 'a', 'string'],
+          }),
+          throwsFormatException,
+        );
+      });
+
+      test('throws FormatException when url is not a valid URI', () {
+        expect(
+          () => fileUploadFromJson({
+            'filename': 'a.pdf',
+            'url': 'http://[::1',
+          }),
+          throwsFormatException,
+        );
+      });
     });
   });
 }

@@ -1,12 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
+import 'package:soliplex_frontend/src/modules/auth/auth_session.dart';
+import 'package:soliplex_frontend/src/modules/auth/server_entry.dart';
 import 'package:soliplex_frontend/src/modules/room/agent_runtime_manager.dart';
 import 'package:soliplex_frontend/src/modules/room/room_state.dart';
 import 'package:soliplex_frontend/src/modules/room/run_registry.dart';
 import 'package:soliplex_frontend/src/modules/room/thread_list_state.dart';
+import 'package:soliplex_frontend/src/modules/room/upload_tracker_registry.dart';
 
 import '../../helpers/fakes.dart';
+
+class _FakeAuthSession extends Fake implements AuthSession {}
 
 ServerConnection _fakeConnection(FakeSoliplexApi api) => ServerConnection(
       serverId: 'test-server',
@@ -14,26 +19,43 @@ ServerConnection _fakeConnection(FakeSoliplexApi api) => ServerConnection(
       agUiStreamClient: FakeAgUiStreamClient(),
     );
 
+ServerEntry _fakeServerEntry(ServerConnection connection) => ServerEntry(
+      serverId: connection.serverId,
+      alias: connection.serverId,
+      serverUrl: Uri.parse('https://${connection.serverId}.example.com'),
+      auth: _FakeAuthSession(),
+      httpClient: FakeHttpClient(),
+      connection: connection,
+    );
+
 void main() {
   late FakeSoliplexApi api;
   late ServerConnection connection;
+  late ServerEntry serverEntry;
   late AgentRuntimeManager runtimeManager;
   late RunRegistry registry;
+  late Signal<Map<String, ServerEntry>> servers;
+  late UploadTrackerRegistry uploadRegistry;
 
   setUp(() {
     api = FakeSoliplexApi();
     connection = _fakeConnection(api);
+    serverEntry = _fakeServerEntry(connection);
     runtimeManager = AgentRuntimeManager(
       platform: TestPlatformConstraints(),
       toolRegistryResolver: (_) async => const ToolRegistry(),
       logger: testLogger(),
     );
     registry = RunRegistry();
+    servers = Signal({serverEntry.serverId: serverEntry});
+    uploadRegistry = UploadTrackerRegistry(servers: servers);
   });
 
   tearDown(() async {
     await runtimeManager.dispose();
     registry.dispose();
+    uploadRegistry.dispose();
+    servers.dispose();
   });
 
   test('selectThread creates ThreadViewState', () async {
@@ -42,10 +64,11 @@ void main() {
     api.nextThreadHistory = ThreadHistory(messages: const []);
 
     final state = RoomState(
-      connection: connection,
+      serverEntry: serverEntry,
       roomId: 'room-1',
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     );
     expect(state.activeThreadView, isNull);
 
@@ -62,10 +85,11 @@ void main() {
     api.nextThreadHistory = ThreadHistory(messages: const []);
 
     final state = RoomState(
-      connection: connection,
+      serverEntry: serverEntry,
       roomId: 'room-1',
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     );
 
     state.selectThread('thread-1');
@@ -84,10 +108,11 @@ void main() {
     api.nextCreateThreadError = Exception('server error');
 
     final state = RoomState(
-      connection: connection,
+      serverEntry: serverEntry,
       roomId: 'room-1',
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     );
 
     await Future<void>.delayed(Duration.zero);
@@ -105,10 +130,11 @@ void main() {
     api.nextThreads = [];
 
     final state = RoomState(
-      connection: connection,
+      serverEntry: serverEntry,
       roomId: 'room-1',
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     );
 
     await Future<void>.delayed(Duration.zero);
@@ -136,10 +162,11 @@ void main() {
     api.nextThreadHistory = ThreadHistory(messages: const []);
 
     final state = RoomState(
-      connection: connection,
+      serverEntry: serverEntry,
       roomId: 'room-1',
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     );
 
     await Future<void>.delayed(Duration.zero);
@@ -161,10 +188,11 @@ void main() {
     api.nextThreadHistory = ThreadHistory(messages: const []);
 
     final state = RoomState(
-      connection: connection,
+      serverEntry: serverEntry,
       roomId: 'room-1',
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     );
 
     await Future<void>.delayed(Duration.zero);
@@ -186,10 +214,11 @@ void main() {
     api.nextThreadHistory = ThreadHistory(messages: const []);
 
     final state = RoomState(
-      connection: connection,
+      serverEntry: serverEntry,
       roomId: 'room-1',
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     );
 
     await Future<void>.delayed(Duration.zero);
@@ -222,10 +251,11 @@ void main() {
 
     String? navigatedThreadId;
     final state = RoomState(
-      connection: connection,
+      serverEntry: serverEntry,
       roomId: 'room-1',
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
       onNavigateToThread: (id) => navigatedThreadId = id,
     );
 
@@ -251,10 +281,11 @@ void main() {
     api.nextThreads = [];
 
     final state = RoomState(
-      connection: connection,
+      serverEntry: serverEntry,
       roomId: 'room-1',
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     );
 
     expect(state.room.value, isA<RoomLoading>());
@@ -273,10 +304,11 @@ void main() {
     api.nextThreads = [];
 
     final state = RoomState(
-      connection: connection,
+      serverEntry: serverEntry,
       roomId: 'room-1',
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     );
 
     await Future<void>.delayed(Duration.zero);
@@ -291,10 +323,11 @@ void main() {
     api.nextThreads = [];
 
     final state = RoomState(
-      connection: connection,
+      serverEntry: serverEntry,
       roomId: 'room-1',
       runtimeManager: runtimeManager,
       registry: registry,
+      uploadRegistry: uploadRegistry,
     );
 
     await Future<void>.delayed(Duration.zero);
@@ -326,10 +359,11 @@ void main() {
 
       String? navigatedId;
       final state = RoomState(
-        connection: connection,
+        serverEntry: serverEntry,
         roomId: 'room-1',
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         onNavigateToThread: (id) => navigatedId = id,
       );
       await Future<void>.delayed(Duration.zero);
@@ -360,10 +394,11 @@ void main() {
 
       String? navigatedId = 'not-called';
       final state = RoomState(
-        connection: connection,
+        serverEntry: serverEntry,
         roomId: 'room-1',
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         onNavigateToThread: (id) => navigatedId = id,
       );
       await Future<void>.delayed(Duration.zero);
@@ -387,10 +422,11 @@ void main() {
 
       String? navigatedId = 'not-called';
       final state = RoomState(
-        connection: connection,
+        serverEntry: serverEntry,
         roomId: 'room-1',
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         onNavigateToThread: (id) => navigatedId = id,
       );
       await Future<void>.delayed(Duration.zero);
@@ -420,10 +456,11 @@ void main() {
       api.nextThreadHistory = ThreadHistory(messages: const []);
 
       final state = RoomState(
-        connection: connection,
+        serverEntry: serverEntry,
         roomId: 'room-1',
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
       );
       await Future<void>.delayed(Duration.zero);
 
@@ -463,10 +500,11 @@ void main() {
 
       String? navigatedId = 'sentinel';
       final state = RoomState(
-        connection: connection,
+        serverEntry: serverEntry,
         roomId: 'room-1',
         runtimeManager: runtimeManager,
         registry: registry,
+        uploadRegistry: uploadRegistry,
         onNavigateToThread: (id) => navigatedId = id,
       );
       await Future<void>.delayed(Duration.zero);

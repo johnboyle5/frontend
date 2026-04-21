@@ -4,6 +4,7 @@ export 'chat_message.dart';
 export 'chunk_visualization.dart';
 export 'conversation.dart';
 export 'feedback_type.dart';
+export 'file_upload.dart';
 export 'llm_event.dart';
 export 'llm_tool.dart';
 export 'mcp_client_toolset.dart';
