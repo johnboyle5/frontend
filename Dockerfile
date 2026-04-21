@@ -59,6 +59,26 @@ RUN cd /app && \
     $FLUTTER build web --release --no-tree-shake-icons
 
 ###############################################################################
+# Dev stage — flutter web dev server with hot reload
+###############################################################################
+FROM builder AS dev
+
+WORKDIR /app
+
+ENV FLUTTER=/opt/flutter/bin/flutter
+ENV PATH="/opt/flutter/bin:${PATH}"
+
+EXPOSE 9000
+
+# Source is bind-mounted at /app; pub get runs at startup to pick up changes.
+# --web-port matches the exposed port; --web-hostname 0.0.0.0 makes it
+# reachable from outside the container.
+CMD git config --global --add safe.directory /opt/flutter && \
+    git config --global --add safe.directory /app && \
+    flutter pub get && \
+    flutter run -d web-server --web-port=9000 --web-hostname=0.0.0.0
+
+###############################################################################
 # Production stage with nginx
 ###############################################################################
 FROM nginx:alpine
