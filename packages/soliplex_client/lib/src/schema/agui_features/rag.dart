@@ -141,6 +141,7 @@ class SearchResult {
   final String? documentUri;
   final List<String>? headings;
   final List<String>? labels;
+  final int order;
   final List<int>? pageNumbers;
   final double score;
 
@@ -153,6 +154,7 @@ class SearchResult {
     this.documentUri,
     this.headings,
     this.labels,
+    this.order = 0,
     this.pageNumbers,
     required this.score,
   });
@@ -172,6 +174,7 @@ class SearchResult {
         labels: json["labels"] == null
             ? []
             : List<String>.from(json["labels"]!.map((x) => x)),
+        order: json["order"] ?? 0,
         pageNumbers: json["page_numbers"] == null
             ? []
             : List<int>.from(json["page_numbers"]!.map((x) => x)),
@@ -191,6 +194,7 @@ class SearchResult {
             headings == null ? [] : List<dynamic>.from(headings!.map((x) => x)),
         "labels":
             labels == null ? [] : List<dynamic>.from(labels!.map((x) => x)),
+        "order": order,
         "page_numbers": pageNumbers == null
             ? []
             : List<dynamic>.from(pageNumbers!.map((x) => x)),

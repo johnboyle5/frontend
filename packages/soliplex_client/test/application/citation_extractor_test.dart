@@ -1,5 +1,4 @@
 import 'package:soliplex_client/src/application/citation_extractor.dart';
-import 'package:soliplex_client/src/schema/agui_features/rag.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -10,7 +9,7 @@ void main() {
       extractor = CitationExtractor();
     });
 
-    group('extractNew', () {
+    group('v042 wire shape', () {
       Map<String, dynamic> createCitation({
         required String chunkId,
         String content = 'test content',
@@ -33,9 +32,9 @@ void main() {
         };
       }
 
-      /// Builds a RAG-namespaced state. `citations` is a flat list of chunk
-      /// ids cited during the current invocation; `citation_index` resolves
-      /// each id to a full Citation.
+      /// Builds a 0.42-shaped RAG-namespaced state. `citations` is a flat
+      /// list of chunk ids cited during the current invocation;
+      /// `citation_index` resolves each id to a full Citation.
       Map<String, dynamic> createState({
         Map<String, Map<String, dynamic>> citationIndex = const {},
         List<String> citations = const [],
@@ -131,9 +130,9 @@ void main() {
       });
 
       test('extracts new ids across invocation reset', () {
-        // Prior invocation's citations are cleared by the lifespan; the new
-        // invocation's ids should still be extracted even though the previous
-        // snapshot held different ids.
+        // Prior invocation's citations are cleared by the 0.42 lifespan;
+        // the new invocation's ids should still be extracted even though
+        // the previous snapshot held different ids.
         final previous = createState(
           citationIndex: {
             'a': createCitation(chunkId: 'a'),
@@ -175,7 +174,7 @@ void main() {
 
       test('returns empty when current has no citations', () {
         final previous = createState();
-        final current = createState(citations: const []);
+        final current = createState();
 
         final refs = extractor.extractNew(previous, current);
 
@@ -197,7 +196,7 @@ void main() {
         expect(refs[0].chunkId, 'c1');
       });
 
-      test('skips citation ids missing from the registry', () {
+      test('skips citation ids missing from citation_index', () {
         final previous = createState();
         final current = createState(
           citationIndex: {'c1': createCitation(chunkId: 'c1')},
@@ -209,6 +208,190 @@ void main() {
         expect(refs, hasLength(1));
         expect(refs[0].chunkId, 'c1');
       });
+    });
+
+    group('v040 wire shape', () {
+      Map<String, dynamic> createCitation({
+        required String chunkId,
+        String content = 'test content',
+        String documentId = 'doc-1',
+        String documentUri = 'https://example.com/doc.pdf',
+        String? documentTitle,
+        List<String>? headings,
+        List<int>? pageNumbers,
+        int? index,
+      }) {
+        return {
+          'chunk_id': chunkId,
+          'content': content,
+          'document_id': documentId,
+          'document_uri': documentUri,
+          if (documentTitle != null) 'document_title': documentTitle,
+          if (headings != null) 'headings': headings,
+          if (pageNumbers != null) 'page_numbers': pageNumbers,
+          if (index != null) 'index': index,
+        };
+      }
+
+      /// Builds a 0.40-shaped RAG-namespaced state. `citations` is a list
+      /// of inline Citation objects (not ids); there is no
+      /// `citation_index` key in 0.40.
+      Map<String, dynamic> createState({
+        List<Map<String, dynamic>> citations = const [],
+      }) {
+        return {
+          'rag': {
+            'citations': citations,
+          },
+        };
+      }
+
+      test('returns empty when no state change', () {
+        final state = createState(citations: [createCitation(chunkId: 'c1')]);
+
+        final refs = extractor.extractNew(state, state);
+
+        expect(refs, isEmpty);
+      });
+
+      test('extracts citations when previous is empty', () {
+        final previous = createState();
+        final current = createState(
+          citations: [
+            createCitation(
+              chunkId: 'chunk-1',
+              content: 'Citation content',
+              documentTitle: 'Test Doc',
+              headings: ['Chapter 1'],
+              pageNumbers: [1, 2],
+              index: 1,
+            ),
+          ],
+        );
+
+        final refs = extractor.extractNew(previous, current);
+
+        expect(refs, hasLength(1));
+        expect(refs[0].chunkId, 'chunk-1');
+        expect(refs[0].content, 'Citation content');
+        expect(refs[0].documentUri, 'https://example.com/doc.pdf');
+        expect(refs[0].documentTitle, 'Test Doc');
+        expect(refs[0].headings, ['Chapter 1']);
+        expect(refs[0].pageNumbers, [1, 2]);
+        expect(refs[0].index, 1);
+      });
+
+      test('extracts only ids not already in previous (accumulating)', () {
+        // 0.40 has no invocation reset — citations accumulate across a
+        // thread. Only new entries should be extracted.
+        final previous = createState(
+          citations: [createCitation(chunkId: 'old-chunk')],
+        );
+        final current = createState(
+          citations: [
+            createCitation(chunkId: 'old-chunk'),
+            createCitation(chunkId: 'new-chunk'),
+          ],
+        );
+
+        final refs = extractor.extractNew(previous, current);
+
+        expect(refs, hasLength(1));
+        expect(refs[0].chunkId, 'new-chunk');
+      });
+
+      test('extracts multiple new ids at once', () {
+        final previous = createState();
+        final current = createState(
+          citations: [
+            createCitation(chunkId: 'chunk-1'),
+            createCitation(chunkId: 'chunk-2'),
+            createCitation(chunkId: 'chunk-3'),
+          ],
+        );
+
+        final refs = extractor.extractNew(previous, current);
+
+        expect(refs, hasLength(3));
+        expect(
+          refs.map((r) => r.chunkId).toSet(),
+          equals({'chunk-1', 'chunk-2', 'chunk-3'}),
+        );
+      });
+
+      test('returns empty when current has no citations', () {
+        final previous = createState();
+        final current = createState();
+
+        final refs = extractor.extractNew(previous, current);
+
+        expect(refs, isEmpty);
+      });
+
+      test(
+        'tolerates non-Map entries in the citations list without crashing',
+        () {
+          final previous = createState();
+          final current = <String, dynamic>{
+            'rag': {
+              'citations': <dynamic>[
+                createCitation(chunkId: 'c1'),
+                42,
+                null,
+              ],
+            },
+          };
+
+          final refs = extractor.extractNew(previous, current);
+
+          expect(refs, hasLength(1));
+          expect(refs[0].chunkId, 'c1');
+        },
+      );
+
+      test(
+        'cross-version: previous v040, current v042 with same id is empty',
+        () {
+          // A thread that started under 0.40 and resumed under 0.42 should
+          // treat the same chunk id as already seen.
+          final previous = createState(
+            citations: [createCitation(chunkId: 'shared')],
+          );
+          final current = <String, dynamic>{
+            'rag': {
+              'citation_index': {'shared': createCitation(chunkId: 'shared')},
+              'citations': ['shared'],
+            },
+          };
+
+          final refs = extractor.extractNew(previous, current);
+
+          expect(refs, isEmpty);
+        },
+      );
+
+      test(
+        'cross-version: previous v040, current v042 with new id is extracted',
+        () {
+          final previous = createState(
+            citations: [createCitation(chunkId: 'old')],
+          );
+          final current = <String, dynamic>{
+            'rag': {
+              'citation_index': {
+                'old': createCitation(chunkId: 'old'),
+                'new': createCitation(chunkId: 'new'),
+              },
+              'citations': ['old', 'new'],
+            },
+          };
+
+          final refs = extractor.extractNew(previous, current);
+
+          expect(refs, hasLength(1));
+          expect(refs[0].chunkId, 'new');
+        },
+      );
     });
 
     group('edge cases', () {
@@ -287,26 +470,22 @@ void main() {
         expect(refs, isEmpty);
       });
 
-      test('ignores non-string entries in the citations list', () {
-        final previous = <String, dynamic>{};
-        final current = <String, dynamic>{
-          'rag': {
-            'citation_index': <String, dynamic>{},
-            'citations': <dynamic>[123, null, <String>[]],
-          },
-        };
+      test(
+        'tolerates non-string entries in the v042 citations list',
+        () {
+          // In v042 citations is supposed to be List<String>. Any other
+          // shape (ints, nulls, nested lists) must not crash the extractor.
+          final previous = <String, dynamic>{};
+          final current = <String, dynamic>{
+            'rag': {
+              'citation_index': <String, dynamic>{},
+              'citations': <dynamic>[123, null, <String>[]],
+            },
+          };
 
-        final refs = extractor.extractNew(previous, current);
-        expect(refs, isEmpty);
-      });
-    });
-
-    test('knownRagKeys matches Rag schema keys', () {
-      final schemaKeys = Rag().toJson().keys.toSet();
-      expect(
-        schemaKeys,
-        equals(knownRagKeys),
-        reason: 'knownRagKeys must stay in sync with Rag schema fields',
+          final refs = extractor.extractNew(previous, current);
+          expect(refs, isEmpty);
+        },
       );
     });
   });

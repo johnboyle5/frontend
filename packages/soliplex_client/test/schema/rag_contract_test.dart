@@ -273,6 +273,7 @@ void main() {
       expect(result.headings, isNull);
       expect(result.labels, isNull);
       expect(result.pageNumbers, isNull);
+      expect(result.order, equals(0));
     });
 
     test('JSON keys match backend SearchResult', () {
@@ -287,6 +288,7 @@ void main() {
         'headings': ['H1'],
         'labels': ['label1'],
         'page_numbers': [1, 2],
+        'order': 3,
       };
 
       final result = SearchResult.fromJson(json);
@@ -294,6 +296,22 @@ void main() {
       expect(result.docItemRefs, equals(['ref1']));
       expect(result.labels, equals(['label1']));
       expect(result.pageNumbers, equals([1, 2]));
+      expect(result.order, equals(3));
+    });
+
+    test('order survives JSON roundtrip', () {
+      final original = SearchResult(content: 'text', score: 0.5, order: 7);
+      final json = original.toJson();
+      expect(json['order'], equals(7));
+
+      final decoded = SearchResult.fromJson(json);
+      expect(decoded.order, equals(7));
+    });
+
+    test('order defaults to 0 when absent in JSON', () {
+      final json = {'content': 'text', 'score': 0.5};
+      final decoded = SearchResult.fromJson(json);
+      expect(decoded.order, equals(0));
     });
   });
 }
