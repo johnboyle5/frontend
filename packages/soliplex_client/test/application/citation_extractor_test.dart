@@ -350,23 +350,43 @@ void main() {
       );
 
       test(
-        'cross-version: previous v040, current v042 with same id is empty',
+        'cross-version realistic flow: v040 → v042 clear → v042 re-cite',
         () {
-          // A thread that started under 0.40 and resumed under 0.42 should
-          // treat the same chunk id as already seen.
-          final previous = createState(
-            citations: [createCitation(chunkId: 'shared')],
-          );
-          final current = <String, dynamic>{
+          // Models the real event sequence when a thread loaded from
+          // 0.40-era history continues under a 0.42 backend. Each arrow
+          // is one AG-UI state event; the 0.42 lifespan hook emits a
+          // clear event at invocation start, so the extractor sees the
+          // cleared intermediate state rather than a direct jump.
+
+          // Step 1: thread history loaded under 0.40, `c1` cited.
+          final step1 = <String, dynamic>{
             'rag': {
-              'citation_index': {'shared': createCitation(chunkId: 'shared')},
-              'citations': ['shared'],
+              'citations': [createCitation(chunkId: 'c1')],
+            },
+          };
+          // Step 2: 0.42 lifespan clears citations at invocation start;
+          // citation_index persists.
+          final step2 = <String, dynamic>{
+            'rag': {
+              'citation_index': {'c1': createCitation(chunkId: 'c1')},
+              'citations': <String>[],
+            },
+          };
+          // Step 3: new 0.42 invocation cites `c1` again.
+          final step3 = <String, dynamic>{
+            'rag': {
+              'citation_index': {'c1': createCitation(chunkId: 'c1')},
+              'citations': ['c1'],
             },
           };
 
-          final refs = extractor.extractNew(previous, current);
+          // Transition 1→2: the clear is not a citation.
+          expect(extractor.extractNew(step1, step2), isEmpty);
 
-          expect(refs, isEmpty);
+          // Transition 2→3: `c1` is a new citation in the new invocation.
+          final refs = extractor.extractNew(step2, step3);
+          expect(refs, hasLength(1));
+          expect(refs[0].chunkId, 'c1');
         },
       );
 
