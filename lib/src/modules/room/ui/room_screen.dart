@@ -638,7 +638,7 @@ class _RoomScreenState extends State<RoomScreen> {
               // a section row), or Loaded with at least one file.
               if (_scopeRendersContent(roomStatus) &&
                   _scopeRendersContent(threadStatus))
-                const Divider(height: 12),
+                const SizedBox(height: SoliplexSpacing.s4),
               _buildScopeSection('Thread', threadStatus, theme),
             ],
           ],
@@ -727,14 +727,15 @@ class _RoomScreenState extends State<RoomScreen> {
             color: theme.colorScheme.outlineVariant,
           ),
           left: BorderSide(
-            color: isFailed
-                ? theme.colorScheme.errorContainer
-                : theme.colorScheme.primary,
+            color:
+                isFailed ? theme.colorScheme.error : theme.colorScheme.surface,
+            width: 4,
           ),
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: SoliplexSpacing.s1),
+        padding: const EdgeInsets.symmetric(
+            horizontal: SoliplexSpacing.s1, vertical: SoliplexSpacing.s1),
         child: Row(
           children: [
             if (icon != null)
