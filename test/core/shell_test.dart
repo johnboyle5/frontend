@@ -171,10 +171,39 @@ void main() {
         ],
       );
 
-      config.onDispose?.call();
-      await Future<void>.delayed(Duration.zero); // let async dispose flush
+      await config.dispose?.call();
       expect(log, ['dispose:b', 'dispose:a']);
     });
+
+    testWidgets(
+      'widget unmount does not trigger module onDispose',
+      (tester) async {
+        final log = <String>[];
+
+        final config = await ShellConfig.fromModules(
+          appName: 'Test',
+          theme: ThemeData(),
+          modules: [_LifecycleModule('x', log)],
+        );
+
+        await tester.pumpWidget(SoliplexShell(config: config));
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpAndSettle();
+
+        expect(
+          log,
+          isEmpty,
+          reason: 'widget unmount must not dispose modules',
+        );
+
+        await config.dispose?.call();
+        expect(
+          log,
+          ['dispose:x'],
+          reason: 'explicit caller dispose must fire onDispose',
+        );
+      },
+    );
   });
 }
 

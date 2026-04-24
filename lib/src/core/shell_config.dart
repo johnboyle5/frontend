@@ -1,5 +1,3 @@
-import 'dart:async' show unawaited;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:go_router/go_router.dart';
@@ -13,7 +11,16 @@ class ShellConfig {
   final ThemeData theme;
   final String initialRoute;
   final Listenable? refreshListenable;
-  final VoidCallback? onDispose;
+
+  /// Tears down every module's `onDispose` in reverse registration order.
+  ///
+  /// **Caller responsibility.** The shell widget does not invoke this —
+  /// it owns neither the config nor the modules. Callers that need
+  /// deterministic teardown (tests, embedded library consumers, future
+  /// lifecycle-owner wrappers) must `await shellConfig.dispose?.call()`
+  /// themselves. Standalone apps (`runSoliplexShell` + process exit)
+  /// rely on OS reclamation.
+  final Future<void> Function()? dispose;
 
   final List<RouteBase> _routes;
   final List<Override> _overrides;
@@ -28,7 +35,7 @@ class ShellConfig {
     required List<Override> overrides,
     required List<GoRouterRedirect> redirects,
     this.refreshListenable,
-    this.onDispose,
+    this.dispose,
   })  : _routes = routes,
         _overrides = overrides,
         _redirects = redirects;
@@ -65,7 +72,7 @@ class ShellConfig {
       overrides: coordinator.overrides,
       redirects: coordinator.redirects,
       refreshListenable: refreshListenable,
-      onDispose: () => unawaited(coordinator.disposeAll()),
+      dispose: coordinator.disposeAll,
     );
   }
 }
