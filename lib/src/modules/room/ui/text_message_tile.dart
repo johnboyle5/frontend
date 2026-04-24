@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
 import '../../../../soliplex_frontend.dart';
 import '../execution_tracker.dart';
+import '../room_providers.dart';
 import 'citations_section.dart';
 import 'execution/activity_indicator.dart';
-import 'execution/step_log.dart';
+import 'execution/execution_timeline.dart';
 import 'execution/thinking_block.dart';
 import 'copy_button.dart';
 import 'feedback_buttons.dart';
@@ -14,6 +16,7 @@ import 'markdown/flutter_markdown_plus_renderer.dart';
 class TextMessageTile extends StatelessWidget {
   const TextMessageTile({
     super.key,
+    required this.roomId,
     required this.message,
     this.runId,
     this.sourceReferences,
@@ -24,6 +27,7 @@ class TextMessageTile extends StatelessWidget {
     this.streamingActivity,
   });
 
+  final String roomId;
   final TextMessage message;
   final String? runId;
   final List<SourceReference>? sourceReferences;
@@ -45,11 +49,24 @@ class TextMessageTile extends StatelessWidget {
       children: [
         if (streamingActivity != null)
           ActivityIndicator(activity: streamingActivity!),
-        if (hasTracker) StepLog(tracker: executionTracker!),
         if (hasTracker)
-          ExecutionThinkingBlock(tracker: executionTracker!)
+          ExecutionTimeline(
+            roomId: roomId,
+            messageId: message.id,
+            tracker: executionTracker!,
+          ),
+        if (hasTracker)
+          ExecutionThinkingBlock(
+            roomId: roomId,
+            messageId: message.id,
+            tracker: executionTracker!,
+          )
         else if (!isUser && message.hasThinkingText)
-          _ThinkingBlock(text: message.thinkingText),
+          _ThinkingBlock(
+            roomId: roomId,
+            messageId: message.id,
+            text: message.thinkingText,
+          ),
         Text(
           isUser ? 'You' : 'Assistant',
           style: theme.textTheme.labelMedium?.copyWith(
@@ -114,14 +131,30 @@ class TextMessageTile extends StatelessWidget {
   }
 }
 
-class _ThinkingBlock extends StatelessWidget {
-  const _ThinkingBlock({required this.text});
+class _ThinkingBlock extends ConsumerWidget {
+  const _ThinkingBlock({
+    required this.roomId,
+    required this.messageId,
+    required this.text,
+  });
+
+  final String roomId;
+  final String messageId;
   final String text;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final expansion =
+        ref.read(messageExpansionsProvider).forMessage(roomId, messageId);
+    // ExpansionTile reads initiallyExpanded once on mount and does not
+    // rebuild when the store changes. Safe because _ThinkingBlock and
+    // ExecutionThinkingBlock are selected by hasTracker and are therefore
+    // mutually exclusive for any given (roomId, messageId), so only one
+    // of them writes thinkingExpanded.
     return ExpansionTile(
+      initiallyExpanded: expansion.thinkingExpanded,
+      onExpansionChanged: (v) => expansion.thinkingExpanded = v,
       title: Row(
         children: [
           Expanded(

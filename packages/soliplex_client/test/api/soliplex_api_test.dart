@@ -2495,7 +2495,7 @@ void main() {
             },
           );
 
-          // Run 1: user message + STATE_SNAPSHOT with qa_history[0]
+          // Run 1: user message + STATE_SNAPSHOT with one citation turn
           when(
             () => mockTransport.request<Map<String, dynamic>>(
               'GET',
@@ -2522,21 +2522,15 @@ void main() {
                   'type': 'STATE_SNAPSHOT',
                   'snapshot': {
                     'rag': {
-                      'citation_registry': <String, int>{},
-                      'qa_history': [
-                        {
-                          'question': 'Question 1',
-                          'answer': 'Answer 1',
-                          'citations': [
-                            {
-                              'document_id': 'doc-1',
-                              'chunk_id': 'chunk-1',
-                              'document_uri': 'file:///doc1.pdf',
-                              'content': 'Citation 1 content',
-                            },
-                          ],
+                      'citation_index': {
+                        'chunk-1': {
+                          'document_id': 'doc-1',
+                          'chunk_id': 'chunk-1',
+                          'document_uri': 'file:///doc1.pdf',
+                          'content': 'Citation 1 content',
                         },
-                      ],
+                      },
+                      'citations': ['chunk-1'],
                     },
                   },
                 },
@@ -2560,7 +2554,7 @@ void main() {
             },
           );
 
-          // Run 2: user message + STATE_SNAPSHOT with qa_history[0,1]
+          // Run 2: user message + STATE_SNAPSHOT with citations[0, 1]
           when(
             () => mockTransport.request<Map<String, dynamic>>(
               'GET',
@@ -2589,33 +2583,21 @@ void main() {
                   'type': 'STATE_SNAPSHOT',
                   'snapshot': {
                     'rag': {
-                      'citation_registry': <String, int>{},
-                      'qa_history': [
-                        {
-                          'question': 'Question 1',
-                          'answer': 'Answer 1',
-                          'citations': [
-                            {
-                              'document_id': 'doc-1',
-                              'chunk_id': 'chunk-1',
-                              'document_uri': 'file:///doc1.pdf',
-                              'content': 'Citation 1 content',
-                            },
-                          ],
+                      'citation_index': {
+                        'chunk-1': {
+                          'document_id': 'doc-1',
+                          'chunk_id': 'chunk-1',
+                          'document_uri': 'file:///doc1.pdf',
+                          'content': 'Citation 1 content',
                         },
-                        {
-                          'question': 'Question 2',
-                          'answer': 'Answer 2',
-                          'citations': [
-                            {
-                              'document_id': 'doc-2',
-                              'chunk_id': 'chunk-2',
-                              'document_uri': 'file:///doc2.pdf',
-                              'content': 'Citation 2 content',
-                            },
-                          ],
+                        'chunk-2': {
+                          'document_id': 'doc-2',
+                          'chunk_id': 'chunk-2',
+                          'document_uri': 'file:///doc2.pdf',
+                          'content': 'Citation 2 content',
                         },
-                      ],
+                      },
+                      'citations': ['chunk-2'],
                     },
                   },
                 },
@@ -2739,6 +2721,271 @@ void main() {
         expect(history.messageStates, hasLength(1));
         expect(history.messageStates['user-1']!.sourceReferences, isEmpty);
         expect(history.messageStates['user-1']!.runId, 'run-1');
+      });
+
+      test('populates runs with decoded events in arrival order', () async {
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            Uri.parse(
+              'https://api.example.com/api/v1/rooms/room-123/agui/thread-456',
+            ),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': {
+              'run-1': {
+                'run_id': 'run-1',
+                'created': '2026-01-07T01:00:00.000Z',
+                'finished': '2026-01-07T01:01:00.000Z',
+              },
+            },
+          },
+        );
+
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            Uri.parse(
+              'https://api.example.com/api/v1/rooms/room-123/agui/thread-456/run-1',
+            ),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'run_id': 'run-1',
+            'events': [
+              {
+                'type': 'RUN_STARTED',
+                'threadId': 'thread-456',
+                'runId': 'run-1',
+              },
+              {
+                'type': 'TEXT_MESSAGE_START',
+                'messageId': 'msg-1',
+                'role': 'assistant',
+              },
+              {
+                'type': 'TEXT_MESSAGE_CONTENT',
+                'messageId': 'msg-1',
+                'delta': 'hello',
+              },
+              {'type': 'TEXT_MESSAGE_END', 'messageId': 'msg-1'},
+              {
+                'type': 'RUN_FINISHED',
+                'threadId': 'thread-456',
+                'runId': 'run-1',
+              },
+            ],
+          },
+        );
+
+        final history = await api.getThreadHistory('room-123', 'thread-456');
+
+        expect(history.runs, hasLength(1));
+        expect(history.runs[0].runId, 'run-1');
+        final types = history.runs[0].events.map((e) => e.eventType).toList();
+        expect(types, [
+          EventType.runStarted,
+          EventType.textMessageStart,
+          EventType.textMessageContent,
+          EventType.textMessageEnd,
+          EventType.runFinished,
+        ]);
+      });
+
+      test('runs preserves run order across multiple runs', () async {
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            Uri.parse(
+              'https://api.example.com/api/v1/rooms/room-123/agui/thread-456',
+            ),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': {
+              'run-2': {
+                'run_id': 'run-2',
+                'created': '2026-01-07T02:00:00.000Z',
+                'finished': '2026-01-07T02:01:00.000Z',
+              },
+              'run-1': {
+                'run_id': 'run-1',
+                'created': '2026-01-07T01:00:00.000Z',
+                'finished': '2026-01-07T01:01:00.000Z',
+              },
+            },
+          },
+        );
+
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            Uri.parse(
+              'https://api.example.com/api/v1/rooms/room-123/agui/thread-456/run-1',
+            ),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'run_id': 'run-1',
+            'events': [
+              {
+                'type': 'TEXT_MESSAGE_START',
+                'messageId': 'msg-1',
+                'role': 'assistant',
+              },
+              {'type': 'TEXT_MESSAGE_END', 'messageId': 'msg-1'},
+            ],
+          },
+        );
+
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            Uri.parse(
+              'https://api.example.com/api/v1/rooms/room-123/agui/thread-456/run-2',
+            ),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'run_id': 'run-2',
+            'events': [
+              {
+                'type': 'TEXT_MESSAGE_START',
+                'messageId': 'msg-2',
+                'role': 'assistant',
+              },
+              {'type': 'TEXT_MESSAGE_END', 'messageId': 'msg-2'},
+            ],
+          },
+        );
+
+        final history = await api.getThreadHistory('room-123', 'thread-456');
+
+        expect(history.runs.map((r) => r.runId), ['run-1', 'run-2']);
+      });
+
+      test('runs skips malformed events alongside conversation replay',
+          () async {
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            Uri.parse(
+              'https://api.example.com/api/v1/rooms/room-123/agui/thread-456',
+            ),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': {
+              'run-1': {
+                'run_id': 'run-1',
+                'created': '2026-01-07T01:00:00.000Z',
+                'finished': '2026-01-07T01:01:00.000Z',
+              },
+            },
+          },
+        );
+
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            Uri.parse(
+              'https://api.example.com/api/v1/rooms/room-123/agui/thread-456/run-1',
+            ),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'run_id': 'run-1',
+            'events': [
+              {'type': 'TOTALLY_UNKNOWN_EVENT', 'foo': 'bar'},
+              {
+                'type': 'TEXT_MESSAGE_START',
+                'messageId': 'msg-1',
+                'role': 'assistant',
+              },
+              {'type': 'TEXT_MESSAGE_END', 'messageId': 'msg-1'},
+            ],
+          },
+        );
+
+        final history = await api.getThreadHistory('room-123', 'thread-456');
+
+        // Malformed event dropped from both surfaces; the two remaining
+        // events are present in runs, matching what the conversation replay
+        // saw.
+        expect(history.runs, hasLength(1));
+        expect(history.runs[0].events, hasLength(2));
+        expect(
+          history.runs[0].events.map((e) => e.eventType),
+          [EventType.textMessageStart, EventType.textMessageEnd],
+        );
+      });
+
+      test('runs is empty when no completed runs exist', () async {
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            Uri.parse(
+              'https://api.example.com/api/v1/rooms/room-123/agui/thread-456',
+            ),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': <String, dynamic>{},
+          },
+        );
+
+        final history = await api.getThreadHistory('room-123', 'thread-456');
+
+        expect(history.runs, isEmpty);
       });
     });
 

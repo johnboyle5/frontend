@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
+import 'package:soliplex_frontend/src/modules/auth/server_entry.dart';
 import 'package:soliplex_frontend/src/modules/room/ui/room_info_screen.dart';
+import 'package:soliplex_frontend/src/modules/room/upload_tracker_registry.dart';
 
 import '../../../helpers/fakes.dart';
 import '../../../helpers/test_server_entry.dart';
@@ -42,15 +44,55 @@ Widget _buildScreen({
 }) {
   final fakeApi = api ?? FakeSoliplexApi();
   fakeApi.nextRoom ??= room ?? _testRoom;
+  final entry = createTestServerEntry(api: fakeApi);
+  final uploadRegistry = UploadTrackerRegistry(
+    servers: Signal<Map<String, ServerEntry>>({entry.serverId: entry}),
+  );
   return ProviderScope(
     child: MaterialApp(
       home: RoomInfoScreen(
-        serverEntry: createTestServerEntry(api: fakeApi),
+        serverEntry: entry,
         roomId: 'room-1',
         toolRegistryResolver:
             toolRegistryResolver ?? (_) async => const ToolRegistry(),
+        uploadRegistry: uploadRegistry,
       ),
     ),
+  );
+}
+
+/// Build variant that hands back the [ServerEntry] and
+/// [UploadTrackerRegistry] so tests can interact with the tracker
+/// (e.g., pre-populate it before the screen mounts).
+({
+  Widget widget,
+  ServerEntry entry,
+  UploadTrackerRegistry uploadRegistry,
+}) _buildScreenWithRegistry({
+  Room? room,
+  FakeSoliplexApi? api,
+  Future<ToolRegistry> Function(String)? toolRegistryResolver,
+}) {
+  final fakeApi = api ?? FakeSoliplexApi();
+  fakeApi.nextRoom ??= room ?? _testRoom;
+  final entry = createTestServerEntry(api: fakeApi);
+  final registry = UploadTrackerRegistry(
+    servers: Signal<Map<String, ServerEntry>>({entry.serverId: entry}),
+  );
+  return (
+    widget: ProviderScope(
+      child: MaterialApp(
+        home: RoomInfoScreen(
+          serverEntry: entry,
+          roomId: 'room-1',
+          toolRegistryResolver:
+              toolRegistryResolver ?? (_) async => const ToolRegistry(),
+          uploadRegistry: registry,
+        ),
+      ),
+    ),
+    entry: entry,
+    uploadRegistry: registry,
   );
 }
 
@@ -303,6 +345,41 @@ void main() {
       );
       expect(find.text('Failed to load documents'), findsOneWidget);
       expect(find.text('Retry'), findsOneWidget);
+    });
+  });
+
+  group('uploaded files refresh dedupe', () {
+    testWidgets('fetches uploads when the tracker is still Loading',
+        (tester) async {
+      final api = FakeSoliplexApi()..nextRoomUploads = const [];
+      await tester.pumpWidget(_buildScreen(api: api));
+      await tester.pumpAndSettle();
+
+      expect(api.getRoomUploadsCount, 1);
+    });
+
+    testWidgets('skips the fetch when the tracker already has a Loaded list',
+        (tester) async {
+      final api = FakeSoliplexApi()..nextRoomUploads = const [];
+      final built = _buildScreenWithRegistry(api: api);
+
+      // Simulate Room → Info navigation by priming the shared tracker
+      // the same way RoomState's constructor would.
+      final tracker = built.uploadRegistry.trackerFor(
+        entry: built.entry,
+        roomId: 'room-1',
+      );
+      await tracker.refreshRoom('room-1');
+      expect(api.getRoomUploadsCount, 1);
+
+      await tester.pumpWidget(built.widget);
+      await tester.pumpAndSettle();
+
+      expect(
+        api.getRoomUploadsCount,
+        1,
+        reason: 'info-screen must not refetch when tracker is already Loaded',
+      );
     });
   });
 }

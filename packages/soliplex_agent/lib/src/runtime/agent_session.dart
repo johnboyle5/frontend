@@ -475,9 +475,9 @@ class AgentSession implements ToolExecutionContext {
 /// consumers of [AgentSession.lastExecutionEvent] should observe, or
 /// `null` when the event does not map to an execution-event emission.
 ///
-/// Exposed for testing the translation table independently of the
-/// [AgentSession] fixture overhead.
-@visibleForTesting
+/// Used on the live path by [AgentSession] and on the historical replay
+/// path by the app layer when hydrating execution-tracker state from a
+/// loaded `ThreadHistory`.
 ExecutionEvent? bridgeBaseEvent(BaseEvent event) {
   return switch (event) {
     TextMessageContentEvent(:final delta) => TextDelta(delta: delta),
@@ -493,8 +493,20 @@ ExecutionEvent? bridgeBaseEvent(BaseEvent event) {
       ServerToolCallCompleted(toolCallId: toolCallId, result: content),
     RunFinishedEvent() => const RunCompleted(),
     RunErrorEvent(:final message) => RunFailed(error: message),
-    ActivitySnapshotEvent(:final activityType, :final content) =>
-      ActivitySnapshot(activityType: activityType, content: content),
+    ActivitySnapshotEvent(
+      :final messageId,
+      :final activityType,
+      :final content,
+      :final timestamp,
+      :final replace,
+    ) =>
+      ActivitySnapshot(
+        messageId: messageId,
+        activityType: activityType,
+        content: content,
+        timestamp: timestamp,
+        replace: replace,
+      ),
     StepStartedEvent(:final stepName) => StepProgress(stepName: stepName),
 
     // Events that don't need ExecutionEvent bridging.

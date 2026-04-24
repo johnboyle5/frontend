@@ -5,9 +5,12 @@ import '../auth/require_connected_server.dart';
 import '../auth/server_manager.dart';
 import 'agent_runtime_manager.dart';
 import 'document_selections.dart';
+import 'message_expansions.dart';
+import 'room_providers.dart';
 import 'run_registry.dart';
 import 'ui/room_info_screen.dart';
 import 'ui/room_screen.dart';
+import 'upload_tracker_registry.dart';
 
 ModuleContribution roomModule({
   required ServerManager serverManager,
@@ -16,7 +19,12 @@ ModuleContribution roomModule({
   bool enableDocumentFilter = false,
 }) {
   final documentSelections = DocumentSelections();
+  final uploadRegistry = UploadTrackerRegistry(servers: serverManager.servers);
+  final messageExpansions = MessageExpansions();
   return ModuleContribution(
+    overrides: [
+      messageExpansionsProvider.overrideWithValue(messageExpansions),
+    ],
     routes: [
       GoRoute(
         path: '/room/:serverAlias/:roomId/info',
@@ -32,6 +40,7 @@ ModuleContribution roomModule({
               serverEntry: entry,
               roomId: state.pathParameters['roomId']!,
               toolRegistryResolver: runtimeManager.toolRegistryResolver,
+              uploadRegistry: uploadRegistry,
             ),
           );
         },
@@ -41,6 +50,7 @@ ModuleContribution roomModule({
         serverManager,
         runtimeManager,
         registry,
+        uploadRegistry,
         enableDocumentFilter,
         documentSelections,
       ),
@@ -49,6 +59,7 @@ ModuleContribution roomModule({
         serverManager,
         runtimeManager,
         registry,
+        uploadRegistry,
         enableDocumentFilter,
         documentSelections,
       ),
@@ -61,6 +72,7 @@ GoRoute _buildRoute(
   ServerManager serverManager,
   AgentRuntimeManager runtimeManager,
   RunRegistry registry,
+  UploadTrackerRegistry uploadRegistry,
   bool enableDocumentFilter,
   DocumentSelections documentSelections,
 ) {
@@ -80,6 +92,7 @@ GoRoute _buildRoute(
           threadId: state.pathParameters['threadId'],
           runtimeManager: runtimeManager,
           registry: registry,
+          uploadRegistry: uploadRegistry,
           enableDocumentFilter: enableDocumentFilter,
           documentSelections: documentSelections,
         ),

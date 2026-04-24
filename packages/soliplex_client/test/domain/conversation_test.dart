@@ -207,6 +207,21 @@ void main() {
         );
         expect(conv1, isNot(equals(conv2)));
       });
+
+      test('conversations with different activities are not equal', () {
+        final conv1 = Conversation.empty(threadId: 'thread-1');
+        final conv2 = conv1.copyWith(
+          activities: const [
+            ActivityRecord(
+              messageId: 'm1',
+              activityType: 'skill_tool_call',
+              content: {'tool_name': 'ask'},
+              timestamp: 1,
+            ),
+          ],
+        );
+        expect(conv1, isNot(equals(conv2)));
+      });
     });
 
     group('messageStates', () {

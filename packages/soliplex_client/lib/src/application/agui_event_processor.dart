@@ -4,6 +4,7 @@ import 'package:ag_ui/ag_ui.dart';
 import 'package:meta/meta.dart';
 import 'package:soliplex_client/src/application/json_patch.dart';
 import 'package:soliplex_client/src/application/streaming_state.dart';
+import 'package:soliplex_client/src/domain/activity_record.dart';
 import 'package:soliplex_client/src/domain/chat_message.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
 
@@ -66,14 +67,19 @@ EventProcessingResult processEvent(
     ReasoningStartEvent() ||
     ThinkingTextMessageStartEvent() ||
     ReasoningMessageStartEvent() =>
-      _processThinkingStart(conversation, streaming),
+      _processThinkingStart(
+        conversation,
+        streaming,
+      ),
     ThinkingEndEvent() ||
     ReasoningEndEvent() ||
     ThinkingTextMessageEndEvent() ||
     ReasoningMessageEndEvent() =>
       _processThinkingEnd(conversation, streaming),
     ThinkingTextMessageContentEvent(:final delta) ||
-    ReasoningMessageContentEvent(:final delta) =>
+    ReasoningMessageContentEvent(
+      :final delta,
+    ) =>
       _processThinkingContent(conversation, streaming, delta),
 
     // Text message streaming events
@@ -142,15 +148,19 @@ EventProcessingResult processEvent(
 
     // Activity snapshot events
     ActivitySnapshotEvent(
+      :final messageId,
       :final activityType,
       :final content,
+      :final replace,
       :final timestamp,
     ) =>
       _processActivitySnapshot(
         conversation,
         streaming,
+        messageId,
         activityType,
         content,
+        replace,
         timestamp,
       ),
 
@@ -427,10 +437,49 @@ EventProcessingResult _processToolCallResult(
 EventProcessingResult _processActivitySnapshot(
   Conversation conversation,
   StreamingState streaming,
+  String messageId,
   String activityType,
   Map<String, dynamic> content,
+  bool replace,
   int? timestamp,
 ) {
+  final resolvedTimestamp = timestamp ?? DateTime.now().millisecondsSinceEpoch;
+
+  // Persist the snapshot in conversation.activities per ag-ui spec:
+  //   replace=true  → overwrite the record with the same messageId
+  //   replace=false → ignore if a record with that messageId already exists
+  final existingIndex = conversation.activities.indexWhere(
+    (a) => a.messageId == messageId,
+  );
+  final List<ActivityRecord> updatedActivities;
+  if (existingIndex >= 0) {
+    if (replace) {
+      updatedActivities = [...conversation.activities]..[existingIndex] =
+            ActivityRecord(
+          messageId: messageId,
+          activityType: activityType,
+          content: content,
+          timestamp: resolvedTimestamp,
+        );
+    } else {
+      updatedActivities = conversation.activities;
+    }
+  } else {
+    updatedActivities = [
+      ...conversation.activities,
+      ActivityRecord(
+        messageId: messageId,
+        activityType: activityType,
+        content: content,
+        timestamp: resolvedTimestamp,
+      ),
+    ];
+  }
+  final updatedConversation =
+      identical(updatedActivities, conversation.activities)
+          ? conversation
+          : conversation.copyWith(activities: updatedActivities);
+
   if (activityType == 'skill_tool_call') {
     final toolName = content['tool_name'];
     // Pass through if tool_name is missing or not a String — the backend
@@ -443,16 +492,16 @@ EventProcessingResult _processActivitySnapshot(
         level: 900,
       );
       return EventProcessingResult(
-        conversation: conversation,
+        conversation: updatedConversation,
         streaming: streaming,
       );
     }
     return EventProcessingResult(
-      conversation: conversation,
+      conversation: updatedConversation,
       streaming: _withToolCallActivity(
         streaming,
         toolName,
-        timestamp: timestamp ?? DateTime.now().millisecondsSinceEpoch,
+        timestamp: resolvedTimestamp,
       ),
     );
   }
@@ -463,7 +512,7 @@ EventProcessingResult _processActivitySnapshot(
     level: 800,
   );
   return EventProcessingResult(
-    conversation: conversation,
+    conversation: updatedConversation,
     streaming: streaming,
   );
 }

@@ -1,6 +1,7 @@
 import 'dart:developer' as developer;
 
 import 'package:soliplex_client/src/domain/backend_version_info.dart';
+import 'package:soliplex_client/src/domain/file_upload.dart';
 import 'package:soliplex_client/src/domain/mcp_client_toolset.dart';
 import 'package:soliplex_client/src/domain/quiz.dart';
 import 'package:soliplex_client/src/domain/rag_document.dart';
@@ -393,6 +394,21 @@ Map<String, dynamic> ragDocumentToJson(RagDocument doc) {
     if (doc.createdAt != null) 'created_at': formatTimestamp(doc.createdAt!),
     if (doc.updatedAt != null) 'updated_at': formatTimestamp(doc.updatedAt!),
   };
+}
+
+// ============================================================
+// FileUpload mappers
+// ============================================================
+
+/// Creates a [FileUpload] from JSON.
+///
+/// Throws [FormatException] if `filename` or `url` is missing or
+/// malformed.
+FileUpload fileUploadFromJson(Map<String, dynamic> json) {
+  return FileUpload(
+    filename: _requireString(json, 'filename', 'file upload'),
+    url: Uri.parse(_requireString(json, 'url', 'file upload')),
+  );
 }
 
 // ============================================================
