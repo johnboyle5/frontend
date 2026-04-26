@@ -19,16 +19,26 @@ and the GenUI surface layer.
 
 ## What problem they solve
 
-A streaming agent emits two structured channels next to its message
-stream:
+A streaming agent emits several structured channels alongside the
+message stream:
 
 - `StateSnapshotEvent` — a full agent-state replacement.
 - `StateDeltaEvent` — a JSON Patch applied to the existing state.
+- `ActivitySnapshot` — a structured activity record (typed activity,
+  content map, timestamp, replace flag) — currently consumed by the
+  per-session `ExecutionTracker` and `Conversation.activities`, not
+  by the bus. (See "Scope of this PR" below.)
+- `RunStarted` / `RunFinished` / `RunError` lifecycle frames, plus
+  the streaming-text and tool-call events.
 
-Today both channels feed `Conversation.aguiState`, which any number of
-view layers may want to subscribe to. Without a shared contract, each
-view re-implements its own subscribe / parse / render pipeline. With
-the primitives below:
+This PR's `StateBus` handles **the state channel** — `StateSnapshotEvent`
+and `StateDeltaEvent`. It is the shared subscription point for view
+layers that need to render derived state.
+
+Today the state channel feeds `Conversation.aguiState`, which any
+number of view layers may want to subscribe to. Without a shared
+contract, each view re-implements its own subscribe / parse / render
+pipeline. With the primitives below:
 
 - The host (typically a thread view) constructs one `StateBus` per
   active thread and feeds AG-UI events into it.
@@ -47,10 +57,11 @@ flowchart LR
     subgraph AGUI["AG-UI events (server → client)"]
         Snap[StateSnapshotEvent]
         Delta[StateDeltaEvent]
+        Act[ActivitySnapshot<br/>not on bus today]
     end
 
     subgraph BUS["StateBus (per-thread)"]
-        AgentState[("agentState<br/>Signal&lt;Map&gt;")]
+        AgentState[("agentState<br/>Signal of Map")]
     end
 
     subgraph PROJ["Projections (typed views)"]
@@ -67,17 +78,19 @@ flowchart LR
 
     Snap -- "setAgentState(...)" --> AgentState
     Delta -- "update(applyJsonPatch)" --> AgentState
+    Act -. "Conversation.activities<br/>ExecutionTracker" .-> Host["Host"]
 
     AgentState -- "project(...)" --> P1
     AgentState -- "project(...)" --> P2
     AgentState -- "project(...)" --> P3
 
-    P1 -- "typed Signal&lt;List&lt;Marker&gt;&gt;" --> T1
-    P2 -- "typed Signal&lt;List&lt;Narration&gt;&gt;" --> T2
-    P3 -- "typed Signal&lt;CustomState&gt;" --> T3
+    P1 -- "typed Signal" --> T1
+    P2 -- "typed Signal" --> T2
+    P3 -- "typed Signal" --> T3
 
     T3 -. "emit(SurfaceEvent)" .-> AgentState
-    AgentState -. "events stream" .-> Host["Host forwards<br/>to agent"]
+    AgentState -. "events stream" .-> Host
+    Host -. "forward to agent" .-> Snap
 ```
 
 Solid arrows are read-side data flow (state events → bus → projections
@@ -192,22 +205,22 @@ sequenceDiagram
 
     Host->>Bus: new StateBus()
     Host->>Agent: subscribe to AG-UI events
-    Host->>Bus: bus.project(MyProjection())
-    Bus-->>Surf: typed Signal&lt;S&gt;
+    Host->>Bus: project(MyProjection())
+    Bus-->>Surf: typed Signal of S
 
     Note over Agent,Bus: streaming run begins
     Agent->>Host: StateSnapshotEvent
     Host->>Bus: setAgentState(snapshot)
-    Bus-->>Surf: signal updates → widget rebuilds
+    Bus-->>Surf: signal updates, widget rebuilds
 
     Agent->>Host: StateDeltaEvent
     Host->>Bus: update(applyJsonPatch)
-    Bus-->>Surf: signal updates → widget rebuilds
+    Bus-->>Surf: signal updates, widget rebuilds
 
     Note over Surf: user clicks a marker
     Surf->>Bus: emit(SurfaceEvent)
     Bus-->>Host: events stream
-    Host->>Agent: forward as message / tool-call
+    Host->>Agent: forward as message or tool-call
 
     Note over Host,Bus: thread torn down
     Host->>Bus: dispose()
@@ -228,6 +241,74 @@ host (per-thread)
   ├── listen to bus.events            ← write-back
   └── bus.dispose()                   ← when thread is torn down
 ```
+
+## Scopes — the bus is scope-agnostic
+
+`StateBus` doesn't know about LLMs, sessions, threads, or any other
+soliplex-specific concept. It's a reactive document with snapshot /
+delta / project / events APIs. **The owner determines the scope.**
+
+Soliplex uses (or will use) buses at four scopes, each with a
+different owner and lifetime:
+
+| Scope | Bus | Owner | Lifetime | Built today? |
+| --- | --- | --- | --- | --- |
+| App | `appBus` | shell | app session | not yet |
+| Server | `serverBus[ServerId]` | `AgentRuntime` (per-server) | server connection | not yet |
+| Room | `roomBus[(ServerId, RoomId)]` | per-room view state | room session | not yet |
+| **Thread** | `threadBuses[ThreadKey]` | per-thread state | thread session | **yes — first concrete usage in follow-up PRs** |
+
+```text
+shell
+  └── appBus                          ← non-LLM events (theme, navigation, toasts)
+       └── AgentRuntime[server-A]
+            ├── serverBus[A]          ← room list, auth, server health
+            └── thread states[A]
+                 ├── threadBuses[T1]  ← AG-UI events for one thread
+                 ├── threadBuses[T2]  ← (this is what step 3 of the redesign builds)
+                 └── ...
+```
+
+A projection declares which bus it consumes. Cross-scope projections
+are opt-in (a projection can take multiple buses if it needs
+to compose, e.g. an "active thread summary" widget that reads the
+server-bus thread list and the active thread-bus's last message).
+
+What this PR ships is the **type**. The four scopes are deliberately
+not built here — `StateBus` is scope-agnostic by design, and follow-up
+PRs add per-thread, per-server, etc. instances as concrete consumers
+land.
+
+## Discovery — no global registry
+
+There is intentionally no `StateBus.all` static list or app-wide
+registry of active buses. **Buses are owned by their constructors;
+discovery follows ownership.**
+
+| Question | Answer |
+| --- | --- |
+| What buses are active in the app right now? | Walk owners — `shell.appBus` (if exists), `runtime.serverBus`, `runtime.threadStates.values.map((t) => t.bus)`, etc. |
+| How do I find the bus for thread X? | `runtime.threadStateOf(threadKey)?.bus` (added in the per-thread state-state PR; not in this PR). |
+| How do I subscribe to "any bus, any change"? | You don't — that crosses scopes and creates coupling between unrelated thread lifetimes. Subscribe to specific buses you have references to. |
+
+Reasons we don't ship a global registry:
+
+- **Lifetime coupling** — a registry would either retain disposed
+  buses (memory leak) or require dispose-side cleanup that crosses
+  ownership boundaries (race conditions). Owner-controlled lifetime
+  is simpler and observable.
+- **Implicit dependency surface** — a global "all buses" list invites
+  consumers to subscribe to "everything", which makes the dependency
+  graph invisible. Per-bus subscriptions are explicit.
+- **Debug introspection is a separate concern** — when you want a
+  flat list for debugging, write a small inspector that walks
+  ownership at one point in time. Don't make every bus pay the cost
+  of being discoverable.
+
+If a real need for a registry surfaces later (e.g. cross-bus
+subscriptions for a future feature), it can be added as an opt-in
+mixin or wrapper — but the default `StateBus` stays
+ownership-discovered.
 
 ## What this commit ships
 
