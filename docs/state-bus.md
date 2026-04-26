@@ -70,10 +70,16 @@ flowchart LR
         P3[CustomProjection]
     end
 
-    subgraph TGT["Render targets"]
-        T1[MapView]
-        T2[NarrationPanel]
-        T3[Custom widget]
+    subgraph TGT["Surfaces (Surface of S impls)"]
+        T1["MapExtension<br/>Surface of MapState"]
+        T2["NarrationController<br/>Surface of List of Narration"]
+        T3["Custom controller<br/>Surface of S"]
+    end
+
+    subgraph WID["Widgets (watch Surface.state)"]
+        W1[MapView]
+        W2[NarrationPanel]
+        W3[Custom widget]
     end
 
     Snap -- "setAgentState(...)" --> AgentState
@@ -84,18 +90,34 @@ flowchart LR
     AgentState -- "project(...)" --> P2
     AgentState -- "project(...)" --> P3
 
-    P1 -- "typed Signal" --> T1
-    P2 -- "typed Signal" --> T2
-    P3 -- "typed Signal" --> T3
+    P1 -- "forwards into Surface.state" --> T1
+    P2 -- "forwards into Surface.state" --> T2
+    P3 -- "forwards into Surface.state" --> T3
 
-    T3 -. "emit(SurfaceEvent)" .-> AgentState
+    T1 -- "watch Surface.state" --> W1
+    T2 -- "watch Surface.state" --> W2
+    T3 -- "watch Surface.state" --> W3
+
+    W3 -. "Surface.emit(SurfaceEvent)" .-> AgentState
     AgentState -. "events stream" .-> Host
     Host -. "forward to agent" .-> Snap
 ```
 
-Solid arrows are read-side data flow (state events → bus → projections
-→ widgets). Dashed arrows are write-back (a surface emitting events
-the host forwards to the agent).
+Solid arrows are read-side data flow: AG-UI state events feed the bus,
+projections compute typed slices, those slices forward into
+`Surface<S>` implementations (the long-lived controllers like
+`mapExtension` / `narrationController`), and widgets watch the
+surfaces' `state` signals.
+
+Dashed arrows are write-back: a surface emits a `SurfaceEvent` (via
+its overridden `Surface.emit`), the bus broadcasts it on its events
+stream, and the host forwards it to the agent.
+
+Note the distinction between **Surface** (the controller — has `id`,
+`state`, `emit`) and **Widget** (the Flutter view that watches
+`Surface.state`). The Surface is the contract this PR ships;
+concrete Surface implementations and the widgets that consume them
+ship in follow-up PRs.
 
 ## `StateBus`
 
