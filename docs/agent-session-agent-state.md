@@ -27,6 +27,53 @@ change. Widgets can now `.watch` it, or pass it into the new
 `StateBus` via `bus.setAgentState(session.agentState.value)` from a
 host listener.
 
+## Data flow
+
+```mermaid
+flowchart LR
+    subgraph SERVER["AG-UI events (server → client)"]
+        Snap[StateSnapshotEvent]
+        Delta[StateDeltaEvent]
+    end
+
+    subgraph EXISTING["Existing pipeline (unchanged)"]
+        Proc["processEvent()<br/>in soliplex_client"]
+        Conv["Conversation.aguiState<br/>plain Map"]
+        RunSt["_runStateSignal<br/>Signal of RunState"]
+    end
+
+    subgraph NEW["This PR — reactive view"]
+        AgentState["AgentSession.agentState<br/>ReadonlySignal of Map<br/><br/>computed via<br/>_aguiStateOf(runState)"]
+    end
+
+    subgraph CONS["Consumers (existing + future)"]
+        Existing["Citation extraction<br/>at run quiescence"]
+        Watcher["session.agentState.watch(...)<br/>Flutter widget"]
+        BusFeed["bus.setAgentState(value)<br/>future host wiring"]
+    end
+
+    Snap -- "applied" --> Proc
+    Delta -- "RFC 6902 patch" --> Proc
+    Proc -- "mutates" --> Conv
+    Conv -- "carried by RunState" --> RunSt
+    RunSt -- "computed off" --> AgentState
+
+    Conv -. "polled at quiescence" .-> Existing
+    AgentState -- ".watch(...)" --> Watcher
+    AgentState -- ".subscribe(...)" --> BusFeed
+```
+
+The "Existing pipeline" subgraph is unchanged by this PR.
+`processEvent()` keeps mutating `Conversation.aguiState`; `RunState`
+keeps carrying the conversation by value. What this PR adds is the
+**computed signal** in the rightmost subgraph: a reactive read view
+that fires on every `RunState` change.
+
+Existing consumers (citation extraction) read `aguiState` at run
+quiescence — that path stays. New consumers (Flutter widgets, future
+`StateBus` host wiring) get a signal they can `.watch` or
+`.subscribe` to.
+
 ## Audit before this commit
 
 There was no existing reactive exposure of `aguiState` anywhere:
@@ -71,6 +118,30 @@ a new variant forces a compile error here, ensuring the signal stays
 correct as the state machine evolves.
 
 ## How a host uses it
+
+```mermaid
+sequenceDiagram
+    participant Host as Host (per-thread)
+    participant Session as AgentSession
+    participant Sig as agentState
+    participant Bus as StateBus (host-owned)
+    participant Widget as Flutter widget
+
+    Host->>Session: spawn(...)
+    Host->>Session: subscribe to session.agentState
+    Host->>Widget: build with session reference
+
+    Note over Session,Sig: streaming run begins
+    Session->>Sig: _runStateSignal updates
+    Sig-->>Host: signal fires
+    Host->>Bus: bus.setAgentState(value)
+    Bus-->>Widget: derived projection signals fire
+    Widget-->>Widget: rebuild
+
+    Note over Sig,Widget: alternative: widget watches signal directly
+    Sig-->>Widget: .watch(context) fires on every change
+    Widget-->>Widget: rebuild
+```
 
 Today's path (until follow-up PRs add per-thread `StateBus`
 ownership):
