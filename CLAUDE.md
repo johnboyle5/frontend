@@ -57,7 +57,7 @@ interchangeable — pick by rebuild scope:
 - **`signal.watch(context)`** — extension method. Subscribes the calling element;
   the whole widget's `build()` re-runs on every change. Use at the top of a
   screen-level `build()` when most of the tree depends on the signal anyway.
-  Auto-unsubscribes via GC.
+  Auto-unsubscribes when the element is unmounted.
 - **`Watch((context) => ...)`** — wrapper widget. Subscribes only the closure's
   subtree. Use for surgical reactivity inside an otherwise-static widget (e.g.,
   a spinner inside a list tile). Auto-unsubscribes deterministically on

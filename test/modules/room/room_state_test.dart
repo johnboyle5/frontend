@@ -337,6 +337,38 @@ void main() {
     state.dispose();
   });
 
+  test('runningThreadIds clears when the underlying session terminates',
+      () async {
+    api.nextRoom = Room(id: 'room-1', name: 'Test');
+    api.nextThreads = [];
+    api.nextThreadHistory = ThreadHistory(messages: const []);
+
+    final state = RoomState(
+      serverEntry: serverEntry,
+      roomId: 'room-1',
+      runtimeManager: runtimeManager,
+      registry: registry,
+      uploadRegistry: uploadRegistry,
+    );
+
+    final key = (
+      serverId: 'test-server',
+      roomId: 'room-1',
+      threadId: 'thread-A',
+    );
+    final session = ManualAgentSession(key);
+    registry.register(key, session);
+
+    expect(state.runningThreadIds.value, {'thread-A'});
+
+    session.completeAsCancelled();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(state.runningThreadIds.value, isEmpty);
+
+    state.dispose();
+  });
+
   test('runningThreadIds excludes runs from other rooms and other servers',
       () async {
     api.nextRoom = Room(id: 'room-1', name: 'Test');

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
@@ -7,41 +5,6 @@ import 'package:soliplex_frontend/src/modules/room/agent_runtime_manager.dart';
 import 'package:soliplex_frontend/src/modules/room/run_registry.dart';
 
 import '../../helpers/fakes.dart';
-
-/// Session fake whose result future is controlled by the test, so the
-/// terminal callback can be triggered at a chosen point.
-class _ManualSession implements AgentSession {
-  _ManualSession(this.threadKey);
-
-  @override
-  final ThreadKey threadKey;
-  final Completer<AgentResult> _resultCompleter = Completer<AgentResult>();
-  final Signal<RunState> _runState = Signal<RunState>(const IdleState());
-  bool cancelCalled = false;
-
-  @override
-  Future<AgentResult> get result => _resultCompleter.future;
-
-  @override
-  ReadonlySignal<RunState> get runState => _runState;
-
-  @override
-  void cancel() {
-    cancelCalled = true;
-  }
-
-  void completeAsCancelled() {
-    _runState.value = CancelledState(threadKey: threadKey);
-    _resultCompleter.complete(AgentFailure(
-      threadKey: threadKey,
-      reason: FailureReason.cancelled,
-      error: 'cancelled',
-    ));
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => null;
-}
 
 ServerConnection _fakeConnection(FakeSoliplexApi api) => ServerConnection(
       serverId: 'test-server',
@@ -223,9 +186,8 @@ void main() {
 
   test('activeKeys keeps key when prior session terminates after replacement',
       () async {
-    // Use manual sessions so we can control when each terminates.
-    final session1 = _ManualSession(_key);
-    final session2 = _ManualSession(_key);
+    final session1 = ManualAgentSession(_key);
+    final session2 = ManualAgentSession(_key);
 
     registry.register(_key, session1);
     registry.register(_key, session2);
@@ -237,6 +199,42 @@ void main() {
 
     expect(registry.activeKeys.value, contains(_key));
     expect(registry.activeSession(_key), same(session2));
+  });
+
+  test('orphan guard works for any superseded run, not only the first',
+      () async {
+    final session1 = ManualAgentSession(_key);
+    final session2 = ManualAgentSession(_key);
+    final session3 = ManualAgentSession(_key);
+
+    registry.register(_key, session1);
+    registry.register(_key, session2);
+    registry.register(_key, session3);
+
+    // Terminate the middle session: it's orphaned (replaced by session3)
+    // and the guard must protect session3's slot.
+    session2.completeAsCancelled();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(registry.activeKeys.value, contains(_key));
+    expect(registry.activeSession(_key), same(session3));
+  });
+
+  test('outcome is FailedRun when result resolves in a non-terminal state',
+      () async {
+    final session = ManualAgentSession(_key);
+    registry.register(_key, session);
+
+    // Resolve `result` while runState is still IdleState — exercises the
+    // contract-violation branch of `_outcomeFrom`.
+    session.completeWithoutTransition();
+    await Future<void>.delayed(Duration.zero);
+
+    final outcome = registry.completedOutcome(_key);
+    expect(outcome, isA<FailedRun>());
+    final failure = outcome as FailedRun;
+    expect(failure.error.toString(), contains('non-terminal state'));
+    expect(failure.error.toString(), contains('IdleState'));
   });
 
   test('dispose is idempotent', () async {
@@ -254,10 +252,7 @@ void main() {
       () async {
     registry.dispose();
 
-    final session = _ManualSession(_key);
-    // The assert is the loud signal that a structural bug occurred.
-    // Cancellation must still happen first so the session's underlying
-    // stream is not leaked even when the assert fires.
+    final session = ManualAgentSession(_key);
     expect(
       () => registry.register(_key, session),
       throwsA(isA<AssertionError>()),

@@ -16,28 +16,6 @@ import 'package:soliplex_frontend/src/modules/auth/server_entry.dart';
 import '../../../helpers/fakes.dart';
 import '../../../helpers/test_server_entry.dart';
 
-/// Session fake whose result future never completes — useful for
-/// asserting widget state while a session is "in flight".
-class _NeverCompletingSession implements AgentSession {
-  _NeverCompletingSession(this.threadKey);
-
-  @override
-  final ThreadKey threadKey;
-  final Signal<RunState> _runState = Signal<RunState>(const IdleState());
-
-  @override
-  Future<AgentResult> get result => Completer<AgentResult>().future;
-
-  @override
-  ReadonlySignal<RunState> get runState => _runState;
-
-  @override
-  void cancel() {}
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => null;
-}
-
 class _BlockingThreadsApi extends FakeSoliplexApi {
   final _completer = Completer<List<ThreadInfo>>();
 
@@ -212,11 +190,8 @@ void main() {
     );
   });
 
-  testWidgets('narrow layout: drawer thread tile shows running spinner',
+  testWidgets('narrow layout: drawer thread tile spinner appears and clears',
       (tester) async {
-    // Defends the wiring of `runningThreadIds` into the drawer
-    // ThreadSidebar — a regression here would silently degrade the
-    // mobile/touch running indicator.
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -242,23 +217,25 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-1',
     );
-    registry.register(key, _NeverCompletingSession(key));
+    final session = ManualAgentSession(key);
+    registry.register(key, session);
     await tester.pump();
 
-    expect(
-      find.descendant(
-        of: find.byType(Drawer),
-        matching: find.byType(CircularProgressIndicator),
-      ),
-      findsOneWidget,
+    final spinnerInDrawer = find.descendant(
+      of: find.byType(Drawer),
+      matching: find.byType(CircularProgressIndicator),
     );
+    expect(spinnerInDrawer, findsOneWidget);
+
+    session.completeAsCancelled();
+    await tester.pump();
+    await tester.pump();
+
+    expect(spinnerInDrawer, findsNothing);
   });
 
-  testWidgets('wide layout: sidebar thread tile shows running spinner',
+  testWidgets('wide layout: sidebar thread tile spinner appears and clears',
       (tester) async {
-    // Mirrors the narrow-layout drawer test: defends the wiring of
-    // `runningThreadIds` into the wide-layout ThreadSidebar so a
-    // copy-paste regression in `_buildContent` is caught.
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -281,16 +258,21 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-1',
     );
-    registry.register(key, _NeverCompletingSession(key));
+    final session = ManualAgentSession(key);
+    registry.register(key, session);
     await tester.pump();
 
-    expect(
-      find.descendant(
-        of: find.byType(ThreadSidebar),
-        matching: find.byType(CircularProgressIndicator),
-      ),
-      findsOneWidget,
+    final spinnerInSidebar = find.descendant(
+      of: find.byType(ThreadSidebar),
+      matching: find.byType(CircularProgressIndicator),
     );
+    expect(spinnerInSidebar, findsOneWidget);
+
+    session.completeAsCancelled();
+    await tester.pump();
+    await tester.pump();
+
+    expect(spinnerInSidebar, findsNothing);
   });
 
   testWidgets('shows RoomWelcome fallback when no thread selected',

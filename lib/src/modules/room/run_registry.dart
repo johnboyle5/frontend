@@ -46,6 +46,9 @@ class RunRegistry {
   ///
   /// If there is an existing active session for this key, it is
   /// cancelled first (at most one run per thread).
+  ///
+  /// If the registry has been disposed, the session is cancelled and
+  /// the call asserts in debug / no-ops in release.
   void register(ThreadKey key, AgentSession session) {
     if (_isDisposed) {
       // Caller bug: a disposed registry can no longer manage the
@@ -71,9 +74,9 @@ class RunRegistry {
 
     unawaited(session.result.then((result) {
       if (_isDisposed) return;
-      // Bail if a newer registration replaced this run. Removing the
-      // key here would clear it while the new session is still active,
-      // and the orphan's outcome is intentionally discarded.
+      // Bail if a newer registration replaced this run. The orphan
+      // can only resolve as cancelled-by-replacement; the new session
+      // owns the key and produces its own outcome.
       if (!identical(_runs[key], run)) return;
       final terminalState = session.runState.value;
       run.outcome = _outcomeFrom(terminalState, result);
