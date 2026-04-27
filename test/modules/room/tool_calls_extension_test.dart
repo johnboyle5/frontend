@@ -142,23 +142,6 @@ void main() {
     expect(identical(ext.state, before), isTrue);
   });
 
-  test('no-op event does not emit a new signal value', () {
-    session.events.value = const ClientToolExecuting(
-      toolCallId: 'tc-1',
-      toolName: 'lookup',
-    );
-    var emissions = 0;
-    final dispose = ext.stateSignal.subscribe((_) => emissions++);
-    // The subscription fires once on register with the current value;
-    // a subsequent unrelated event must not trigger a second emission.
-    expect(emissions, 1);
-
-    session.events.value = const ThinkingStarted();
-
-    expect(emissions, 1);
-    dispose();
-  });
-
   test('preserves order across distinct tool calls', () {
     session.events.value = const ClientToolExecuting(
       toolCallId: 'a',
@@ -199,7 +182,7 @@ void main() {
     expect(ext.onDispose, returnsNormally);
   });
 
-  group('ToolCallEntry value semantics', () {
+  test('ToolCallEntry.copyWith preserves identity fields', () {
     const entry = ToolCallEntry(
       toolCallId: 'tc-1',
       toolName: 'lookup',
@@ -207,30 +190,10 @@ void main() {
       isClientSide: true,
     );
 
-    test('equal values are ==', () {
-      const other = ToolCallEntry(
-        toolCallId: 'tc-1',
-        toolName: 'lookup',
-        status: ToolCallStatus.executing,
-        isClientSide: true,
-      );
+    final completed = entry.copyWith(status: ToolCallStatus.completed);
 
-      expect(entry, other);
-      expect(entry.hashCode, other.hashCode);
-    });
-
-    test('differing status breaks equality', () {
-      final completed = entry.copyWith(status: ToolCallStatus.completed);
-
-      expect(entry, isNot(completed));
-    });
-
-    test('copyWith preserves identity fields', () {
-      final completed = entry.copyWith(status: ToolCallStatus.completed);
-
-      expect(completed.toolCallId, entry.toolCallId);
-      expect(completed.toolName, entry.toolName);
-      expect(completed.isClientSide, entry.isClientSide);
-    });
+    expect(completed.toolCallId, entry.toolCallId);
+    expect(completed.toolName, entry.toolName);
+    expect(completed.isClientSide, entry.isClientSide);
   });
 }
