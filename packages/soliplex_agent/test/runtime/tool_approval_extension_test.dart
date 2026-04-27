@@ -4,15 +4,21 @@ import 'package:test/test.dart';
 
 class _MockLogger extends Mock implements Logger {}
 
+class _MockAgentSession extends Mock implements AgentSession {}
+
 class _Approval1 extends ToolApprovalExtension {
-  @override
-  Future<void> onAttach(AgentSession session) async {}
+  int attachCount = 0;
+  int disposeCount = 0;
 
   @override
-  List<ClientTool> get tools => const [];
+  Future<void> onAttach(AgentSession session) async {
+    attachCount++;
+  }
 
   @override
-  void onDispose() {}
+  void onDispose() {
+    disposeCount++;
+  }
 
   @override
   Future<bool> requestApproval({
@@ -25,14 +31,18 @@ class _Approval1 extends ToolApprovalExtension {
 }
 
 class _Approval2 extends ToolApprovalExtension {
-  @override
-  Future<void> onAttach(AgentSession session) async {}
+  int attachCount = 0;
+  int disposeCount = 0;
 
   @override
-  List<ClientTool> get tools => const [];
+  Future<void> onAttach(AgentSession session) async {
+    attachCount++;
+  }
 
   @override
-  void onDispose() {}
+  void onDispose() {
+    disposeCount++;
+  }
 
   @override
   Future<bool> requestApproval({
@@ -52,9 +62,9 @@ void main() {
     });
 
     test(
-      'registering two ToolApprovalExtensions logs an error and keeps '
-      'first-wins lookup',
-      () {
+      'registering two ToolApprovalExtensions drops the duplicate, logs an '
+      'error, and never attaches the dropped instance',
+      () async {
         final logger = _MockLogger();
         final first = _Approval1();
         final second = _Approval2();
@@ -68,7 +78,17 @@ void main() {
             any(that: contains('tool_approval')),
           ),
         ).called(1);
+
         expect(coordinator.getExtension<ToolApprovalExtension>(), same(first));
+
+        // The dropped duplicate is gone — its lifecycle hooks must never run.
+        await coordinator.attachAll(_MockAgentSession());
+        coordinator.disposeAll();
+
+        expect(first.attachCount, 1);
+        expect(first.disposeCount, 1);
+        expect(second.attachCount, 0);
+        expect(second.disposeCount, 0);
       },
     );
   });

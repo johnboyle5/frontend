@@ -57,8 +57,13 @@ class _FakeAgentSession implements AgentSession {
 
   void complete(AgentResult result) => _resultCompleter.complete(result);
 
+  // Surface unimplemented members loudly so a new dependency from
+  // ThreadViewState fails the test immediately instead of silently
+  // receiving a null.
   @override
-  dynamic noSuchMethod(Invocation invocation) => null;
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
+        '_FakeAgentSession.${invocation.memberName}',
+      );
 }
 
 void main() {
@@ -787,7 +792,13 @@ void main() {
       );
       await Future<void>.delayed(Duration.zero);
 
-      expect(() => state.respondToApproval(true), returnsNormally);
+      final stale = ApprovalRequest(
+        toolCallId: 'tc-x',
+        toolName: 't',
+        arguments: const {},
+        rationale: 'r',
+      );
+      expect(() => state.respondToApproval(stale, true), returnsNormally);
 
       state.dispose();
     });
@@ -815,10 +826,11 @@ void main() {
           rationale: 'send a message',
         );
 
-        expect(state.pendingApproval.value, isNotNull);
-        expect(state.pendingApproval.value!.toolCallId, 'tc-1');
+        final pending = state.pendingApproval.value;
+        expect(pending, isNotNull);
+        expect(pending!.toolCallId, 'tc-1');
 
-        state.respondToApproval(true);
+        state.respondToApproval(pending, true);
         expect(await future, isTrue);
         expect(state.pendingApproval.value, isNull);
 

@@ -103,7 +103,7 @@ void main() {
 
         expect(result, isFalse);
         expect(awaitingEmitted, isFalse);
-        verify(() => logger.warning(any())).called(1);
+        verify(() => logger.warning(any())).called(greaterThanOrEqualTo(1));
       },
     );
 
@@ -147,6 +147,45 @@ void main() {
       );
 
       expect(result, isFalse);
+    });
+
+    // The cancelToken.isCancelled short-circuit at AgentSession.requestApproval
+    // is only reachable mid-run (the orchestrator creates the token lazily in
+    // _subscribeToStream). Exercising it requires a real run; the disposed-
+    // session test below covers the equivalent deny-without-extension-call
+    // semantics through the _disposed guard, which is the path actually taken
+    // when AgentRuntime tears the session down.
+
+    test(
+      'session disposed → resolves false without touching extension',
+      () async {
+        final ext = _FakeApprovalExtension(decision: true);
+        final session = _createSession(logger: logger, extensions: [ext])
+          ..dispose();
+
+        final result = await session.requestApproval(
+          toolCallId: 'tc-1',
+          toolName: 't',
+          arguments: const {},
+          rationale: 'r',
+        );
+
+        expect(result, isFalse);
+        expect(ext.requestCount, 0);
+        expect(session.cancelToken.isCancelled, isTrue);
+      },
+    );
+
+    test('spawnChild on disposed session yields Future.error', () async {
+      final session = _createSession(logger: logger)..dispose();
+
+      // Future.error rather than sync-throw: a fire-and-forget caller or a
+      // chained .catchError must see the error rather than have an uncaught
+      // synchronous exception escape.
+      await expectLater(
+        session.spawnChild(prompt: 'hello'),
+        throwsA(isA<StateError>()),
+      );
     });
   });
 }

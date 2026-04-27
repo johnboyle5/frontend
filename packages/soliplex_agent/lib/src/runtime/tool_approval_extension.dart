@@ -1,4 +1,6 @@
+import 'package:meta/meta.dart';
 import 'package:soliplex_agent/src/runtime/session_extension.dart';
+import 'package:soliplex_agent/src/tools/tool_registry.dart';
 
 /// An extension that can respond to tool approval requests.
 ///
@@ -6,31 +8,18 @@ import 'package:soliplex_agent/src/runtime/session_extension.dart';
 /// intercept calls to `AgentSession.requestApproval` and surface them as
 /// reactive state that the UI can observe and respond to.
 ///
-/// When an instance of this extension is registered with a session,
-/// `AgentSession.requestApproval` delegates to [requestApproval]. When no
-/// extension is registered, `AgentSession.requestApproval` returns `false`
-/// (deny by default).
-///
-/// Tool approval is a single policy decision per session — one user, one
-/// allow-or-deny answer — so a flavor picks exactly one implementation
-/// (human-prompting, automated, policy-driven, ...). All subclasses share
-/// the [namespace] `tool_approval` so a duplicate registration is flagged
-/// at construction by `SessionCoordinator` — the second instance still
-/// attaches but becomes unreachable via
-/// `SessionCoordinator.getExtension<T>()` and the duplicate is logged as
-/// a configuration error.
+/// All subclasses share the [namespace] `tool_approval`. A session has at
+/// most one: if a flavor registers two, `SessionCoordinator` keeps the
+/// first-registered, drops the rest at construction, and logs an error
+/// naming each dropped class. When no extension is registered,
+/// `AgentSession.requestApproval` returns `false`.
 abstract class ToolApprovalExtension extends SessionExtension {
-  ToolApprovalExtension() {
-    assert(
-      namespace == 'tool_approval',
-      'ToolApprovalExtension subclasses MUST NOT override namespace; the '
-      'shared "tool_approval" namespace is what enables single-instance '
-      'enforcement via SessionCoordinator.',
-    );
-  }
+  @override
+  @nonVirtual
+  String get namespace => 'tool_approval';
 
   @override
-  String get namespace => 'tool_approval';
+  List<ClientTool> get tools => const [];
 
   /// Requests user consent for the given tool call.
   ///

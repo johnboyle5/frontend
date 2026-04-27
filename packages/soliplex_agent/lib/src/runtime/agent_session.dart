@@ -140,8 +140,16 @@ class AgentSession implements ToolExecutionContext {
   // ToolExecutionContext implementation
   // ---------------------------------------------------------------------------
 
+  /// CancelToken from the underlying orchestrator, or a pre-cancelled token
+  /// once the session has been disposed.
+  ///
+  /// Late tool callers (a microtask resuming after [dispose]) read a
+  /// cancelled token rather than triggering the orchestrator's
+  /// disposed-getter guard, so dispose-race short-circuits return cleanly
+  /// instead of surfacing as opaque "tool failed" errors.
   @override
-  CancelToken get cancelToken => _orchestrator.cancelToken;
+  CancelToken get cancelToken =>
+      _disposed ? (CancelToken()..cancel()) : _orchestrator.cancelToken;
 
   @override
   Future<AgentSession> spawnChild({
@@ -151,6 +159,19 @@ class AgentSession implements ToolExecutionContext {
     Duration? timeout,
     bool ephemeral = true,
   }) {
+    if (_disposed) {
+      _logger.debug(
+        'spawnChild denied: session $id already disposed '
+        '(prompt="$prompt", roomId=$roomId).',
+      );
+      // Future.error rather than sync-throw so a fire-and-forget caller or
+      // a chained .catchError sees the failure instead of crashing the
+      // isolate with an uncaught synchronous exception.
+      return Future<AgentSession>.error(
+        StateError('Cannot spawnChild on disposed session $id'),
+        StackTrace.current,
+      );
+    }
     return _runtime.spawn(
       roomId: roomId ?? threadKey.roomId,
       prompt: prompt,
@@ -169,6 +190,17 @@ class AgentSession implements ToolExecutionContext {
     required Map<String, dynamic> arguments,
     required String rationale,
   }) {
+    // Late callers (microtask resuming after dispose): deny without
+    // touching the already-disposed extension.
+    if (_disposed) {
+      _logger.debug(
+        'requestApproval denied: session $id already disposed '
+        '(tool $toolName, $toolCallId).',
+      );
+      return Future<bool>.value(false);
+    }
+    // Short-circuit before the extension call so a cancelled session never
+    // surfaces an approval dialog the orchestrator is about to throw away.
     if (cancelToken.isCancelled) {
       _logger.debug(
         'requestApproval denied: session $id already cancelled '

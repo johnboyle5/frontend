@@ -128,23 +128,21 @@ class ThreadViewState {
   ReadonlySignal<List<ToolCallEntry>>? get toolCalls =>
       _activeSession.value?.getExtension<ToolCallsExtension>()?.stateSignal;
 
-  /// Pending approval request, derived from the active session. Tracks
-  /// session swaps automatically: when the active session changes, the
-  /// computed re-reads from the new session's `HumanApprovalExtension`.
-  /// The signal's value is null when no session is attached, the active
-  /// session has no `HumanApprovalExtension`, or no approval is pending.
+  /// Pending approval for the active session, or `null` when no session is
+  /// attached, the session has no `HumanApprovalExtension`, or nothing is
+  /// pending. Updates across session swaps via `computed`.
   late final ReadonlySignal<ApprovalRequest?> pendingApproval = computed(() {
     final session = _activeSession.value;
     return session?.getExtension<HumanApprovalExtension>()?.stateSignal.value;
   });
 
-  /// Resolves the active session's pending approval request with [approved].
-  /// No-op if no session is attached, the session has no
-  /// [HumanApprovalExtension], or no request is pending.
-  void respondToApproval(bool approved) {
+  /// Resolves [request] on the active session's [HumanApprovalExtension]
+  /// with [approved]. No-op if no session is attached, the session has no
+  /// extension, or [request] is not the currently pending request.
+  void respondToApproval(ApprovalRequest request, bool approved) {
     _activeSession.value
         ?.getExtension<HumanApprovalExtension>()
-        ?.respond(approved);
+        ?.respond(request, approved);
   }
 
   void submitFeedback(String runId, FeedbackType feedback, String? reason) {

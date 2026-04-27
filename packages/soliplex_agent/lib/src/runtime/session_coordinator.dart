@@ -6,20 +6,21 @@ import 'package:soliplex_agent/src/tools/tool_registry.dart';
 import 'package:soliplex_logging/soliplex_logging.dart';
 
 /// Owns the lifecycle of a set of [SessionExtension]s for one
-/// [AgentSession]: validates namespaces at construction, attaches and
+/// [AgentSession]: dedupes namespaces at construction, attaches and
 /// disposes in order, and exposes lookup plus reactive-state enumeration
 /// to consumers that don't know the concrete extension types.
 class SessionCoordinator {
-  /// Validates namespace uniqueness; logs an error for each duplicate
-  /// non-empty namespace and retains all extensions in registration order.
-  /// Lookup via [getExtension] returns the first match.
+  /// Constructs a coordinator for [extensions]. Duplicate non-empty
+  /// namespaces are dropped at construction (first-registered wins) with
+  /// a logged error — keeping a duplicate around runs its `onAttach` /
+  /// `onDispose` and contributes its `tools`, which would silently
+  /// violate the single-policy invariants extensions are supposed to
+  /// enforce. Treat duplicate registration as a flavor configuration bug.
   SessionCoordinator(
     List<SessionExtension> extensions, {
     required Logger logger,
-  })  : _extensions = List.of(extensions),
-        _logger = logger {
-    _validateNamespaces();
-  }
+  })  : _extensions = _dedupe(extensions, logger),
+        _logger = logger;
 
   final List<SessionExtension> _extensions;
   final Logger _logger;
@@ -94,19 +95,24 @@ class SessionCoordinator {
     }
   }
 
-  void _validateNamespaces() {
+  static List<SessionExtension> _dedupe(
+    List<SessionExtension> extensions,
+    Logger logger,
+  ) {
     final seen = <String>{};
-    for (final ext in _extensions) {
+    final unique = <SessionExtension>[];
+    for (final ext in extensions) {
       final ns = ext.namespace;
-      if (ns.isEmpty) continue;
-      if (!seen.add(ns)) {
-        _logger.error(
-          'Duplicate SessionExtension namespace "$ns". '
-          'First-registered wins; additional instances are kept in the '
-          'list but unreachable via getExtension<T>(). This is a flavor '
+      if (ns.isEmpty || seen.add(ns)) {
+        unique.add(ext);
+      } else {
+        logger.error(
+          'Duplicate SessionExtension namespace "$ns"; dropping '
+          '${ext.runtimeType}. First-registered wins. This is a flavor '
           'configuration bug.',
         );
       }
     }
+    return unique;
   }
 }

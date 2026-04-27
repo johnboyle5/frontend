@@ -7,12 +7,12 @@ import 'package:soliplex_agent/soliplex_agent.dart';
 /// An in-flight tool approval request waiting for a user decision.
 @immutable
 class ApprovalRequest {
-  const ApprovalRequest({
+  ApprovalRequest({
     required this.toolCallId,
     required this.toolName,
-    required this.arguments,
+    required Map<String, dynamic> arguments,
     required this.rationale,
-  });
+  }) : arguments = Map.unmodifiable(arguments);
 
   final String toolCallId;
   final String toolName;
@@ -45,7 +45,8 @@ class ApprovalRequest {
 /// When [AgentSession.requestApproval] fires, [stateSignal] is set to the
 /// pending [ApprovalRequest]. The UI watches the signal, shows an approval
 /// dialog, then calls [respond] with the user's decision. Calling [respond]
-/// clears the signal back to `null` and resolves the session's future.
+/// clears the signal back to `null` and resolves the pending request's
+/// completer.
 ///
 /// If the session is cancelled or the extension is disposed while an approval
 /// is pending, the request is automatically denied and the signal cleared.
@@ -61,10 +62,9 @@ class HumanApprovalExtension extends ToolApprovalExtension
   int get priority => 30;
 
   @override
-  List<ClientTool> get tools => const [];
-
-  @override
   Future<void> onAttach(AgentSession session) async {
+    // unawaited: whenCancelled only completes if the session is cancelled;
+    // awaiting it would block attachAll forever.
     unawaited(session.cancelToken.whenCancelled.then((_) => _denyPending()));
   }
 
@@ -81,6 +81,8 @@ class HumanApprovalExtension extends ToolApprovalExtension
     required Map<String, dynamic> arguments,
     required String rationale,
   }) {
+    // At most one pending approval per extension: deny any prior request so
+    // a superseded tool call resolves to false instead of hanging.
     _denyPending();
     final completer = Completer<bool>();
     _setPending(
@@ -99,11 +101,14 @@ class HumanApprovalExtension extends ToolApprovalExtension
 
   /// Resolves the pending approval request with [approved] and clears state.
   ///
-  /// No-op if there is no pending request.
-  void respond(bool approved) {
+  /// No-op when [request] is not the currently pending request — guards
+  /// against late or wrong-session taps resolving a different in-flight
+  /// approval. Identity comparison is intentional: [ApprovalRequest] is the
+  /// snapshot the UI rendered, so identity equality is the right key here.
+  void respond(ApprovalRequest request, bool approved) {
     final p = _pending;
-    if (p == null) return;
-    p.resp.complete(approved);
+    if (p == null || !identical(p.req, request)) return;
+    if (!p.resp.isCompleted) p.resp.complete(approved);
     _setPending(null);
   }
 

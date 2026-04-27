@@ -130,20 +130,20 @@ void main() {
         rationale: 'send a message',
       );
 
-      expect(ext.stateSignal.value, isNotNull);
-      expect(ext.stateSignal.value!.toolCallId, 'tc-1');
-      expect(ext.stateSignal.value!.toolName, 'send_email');
-      expect(ext.stateSignal.value!.arguments, equals({'to': 'a@b.c'}));
-      expect(ext.stateSignal.value!.rationale, 'send a message');
+      final pending = ext.stateSignal.value;
+      expect(pending, isNotNull);
+      expect(pending!.toolCallId, 'tc-1');
+      expect(pending.toolName, 'send_email');
+      expect(pending.arguments, equals({'to': 'a@b.c'}));
+      expect(pending.rationale, 'send a message');
 
-      // Future is pending until respond/dispose/cancel.
       var resolved = false;
       // ignore: unawaited_futures
       future.then((_) => resolved = true);
       await Future<void>.delayed(Duration.zero);
       expect(resolved, isFalse);
 
-      ext.respond(true);
+      ext.respond(pending, true);
       expect(await future, isTrue);
     });
 
@@ -154,7 +154,7 @@ void main() {
         arguments: const {},
         rationale: 'r',
       );
-      ext.respond(true);
+      ext.respond(ext.stateSignal.value!, true);
       expect(await future, isTrue);
       expect(ext.stateSignal.value, isNull);
     });
@@ -166,14 +166,50 @@ void main() {
         arguments: const {},
         rationale: 'r',
       );
-      ext.respond(false);
+      ext.respond(ext.stateSignal.value!, false);
       expect(await future, isFalse);
       expect(ext.stateSignal.value, isNull);
     });
 
     test('respond with no pending is a silent no-op', () {
-      expect(() => ext.respond(true), returnsNormally);
+      final stale = ApprovalRequest(
+        toolCallId: 'tc-x',
+        toolName: 't',
+        arguments: const {},
+        rationale: 'r',
+      );
+      expect(() => ext.respond(stale, true), returnsNormally);
       expect(ext.stateSignal.value, isNull);
+    });
+
+    test('respond with non-current request is a silent no-op', () async {
+      final future = ext.requestApproval(
+        toolCallId: 'tc-1',
+        toolName: 't',
+        arguments: const {},
+        rationale: 'r',
+      );
+      final current = ext.stateSignal.value!;
+
+      // A different request instance with the same fields must NOT resolve
+      // the current pending — identity is the key.
+      final stale = ApprovalRequest(
+        toolCallId: 'tc-1',
+        toolName: 't',
+        arguments: const {},
+        rationale: 'r',
+      );
+      ext.respond(stale, true);
+      expect(ext.stateSignal.value, equals(current));
+
+      var resolved = false;
+      // ignore: unawaited_futures
+      future.then((_) => resolved = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(resolved, isFalse);
+
+      ext.respond(current, false);
+      expect(await future, isFalse);
     });
 
     test('second requestApproval auto-denies the first and replaces state',
@@ -194,7 +230,7 @@ void main() {
       expect(await firstFuture, isFalse);
       expect(ext.stateSignal.value!.toolCallId, 'tc-2');
 
-      ext.respond(true);
+      ext.respond(ext.stateSignal.value!, true);
       expect(await secondFuture, isTrue);
       expect(ext.stateSignal.value, isNull);
     });
@@ -240,11 +276,12 @@ void main() {
         arguments: const {},
         rationale: 'r',
       );
+      final pending = ext.stateSignal.value!;
       token.cancel();
       expect(await future, isFalse);
 
-      // No StateError on subsequent respond.
-      expect(() => ext.respond(true), returnsNormally);
+      // No StateError on subsequent respond against the same request.
+      expect(() => ext.respond(pending, true), returnsNormally);
     });
   });
 }

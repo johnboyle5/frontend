@@ -3,10 +3,9 @@ import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
 import '../human_approval_extension.dart';
 
-/// Zero-size widget that subscribes to a [pendingApproval] signal and
-/// shows an approval dialog when a tool requests user consent.
-///
-/// Place inside a [Stack] alongside the rest of the chat UI.
+/// Bridges a [ReadonlySignal] of [ApprovalRequest] to imperative
+/// `showDialog` calls. Renders nothing itself; mount anywhere in the tree
+/// that stays alive across the dialog's lifetime.
 class ApprovalHandler extends StatefulWidget {
   const ApprovalHandler({
     super.key,
@@ -15,7 +14,7 @@ class ApprovalHandler extends StatefulWidget {
   });
 
   final ReadonlySignal<ApprovalRequest?> pendingApproval;
-  final void Function(bool approved) onRespond;
+  final void Function(ApprovalRequest request, bool approved) onRespond;
 
   @override
   State<ApprovalHandler> createState() => _ApprovalHandlerState();
@@ -24,7 +23,7 @@ class ApprovalHandler extends StatefulWidget {
 class _ApprovalHandlerState extends State<ApprovalHandler> {
   void Function()? _unsub;
   ApprovalRequest? _showing;
-  NavigatorState? _dialogNavigator;
+  Route<bool>? _dialogRoute;
 
   @override
   void initState() {
@@ -38,47 +37,69 @@ class _ApprovalHandlerState extends State<ApprovalHandler> {
     if (!identical(oldWidget.pendingApproval, widget.pendingApproval)) {
       _unsub?.call();
       _showing = null;
+      _dismissDialog();
       _unsub = widget.pendingApproval.subscribe(_onChange);
     }
   }
 
   void _onChange(ApprovalRequest? request) {
     if (request == null) {
+      // Extension cleared the request (cancellation, dispose, supersede).
+      // Dismiss the showing dialog so it does not float over the next
+      // screen. The awaiting `_show` resumes, hits the identity guard,
+      // and skips onRespond.
       _showing = null;
+      _dismissDialog();
       return;
     }
     if (identical(request, _showing)) return;
-    // The extension auto-denies any prior request when a new one arrives,
-    // so any showing dialog is now stale -- dismiss it before opening
-    // the new one. The popped dialog's `_show` will see `_showing` no
-    // longer matches and skip its onRespond call.
-    _dialogNavigator?.pop();
+    _dismissDialog();
     _showing = request;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Re-check identity inside the post-frame callback: a same-frame
+      // burst of signal updates can queue stale `_show(request)` calls
+      // after `_showing` already moved on.
       if (!mounted) return;
+      if (!identical(request, _showing)) return;
       _show(request);
     });
   }
 
+  // removeRoute targets this exact dialog, even if it is mid-pop or no
+  // longer the topmost route.
+  void _dismissDialog() {
+    final route = _dialogRoute;
+    _dialogRoute = null;
+    if (route != null && route.isActive) {
+      route.navigator?.removeRoute(route);
+    }
+  }
+
   Future<void> _show(ApprovalRequest request) async {
-    _dialogNavigator = Navigator.of(context, rootNavigator: true);
-    final approved = await showDialog<bool>(
+    final route = DialogRoute<bool>(
       context: context,
       barrierDismissible: false,
       builder: (_) => ApprovalDialog(request: request),
     );
-    _dialogNavigator = null;
-    // Forward only when this dialog is still the live one. A superseded
-    // dialog (popped programmatically by _onChange) leaves _showing
-    // pointing at the new request -- the extension already auto-denied
-    // this one, so an extra onRespond would be a stale signal.
+    _dialogRoute = route;
+    final approved =
+        await Navigator.of(context, rootNavigator: true).push(route);
+    if (identical(_dialogRoute, route)) _dialogRoute = null;
+    // dispose() leaves the pending request live (see dispose comment);
+    // don't synth-deny here.
+    if (!mounted) return;
     if (!identical(request, _showing)) return;
-    widget.onRespond(approved ?? false);
+    widget.onRespond(request, approved ?? false);
     _showing = null;
   }
 
   @override
   void dispose() {
+    // Remove the orphan dialog so it does not float over the next screen.
+    // The pending request is intentionally not denied here — if the user
+    // returns to the screen, re-attaching the session re-shows the dialog
+    // via the signal.
+    _dismissDialog();
     _unsub?.call();
     super.dispose();
   }
