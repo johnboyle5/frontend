@@ -93,4 +93,34 @@ void main() {
 
     expect(find.text('Tool Approval Required'), findsOneWidget);
   });
+
+  testWidgets('replaces existing dialog when a different request arrives',
+      (tester) async {
+    final pending = Signal<ApprovalRequest?>(null);
+    final responses = <bool>[];
+    await tester.pumpWidget(
+      _harness(pendingApproval: pending, onRespond: responses.add),
+    );
+
+    pending.value = _request(toolCallId: 'tc-A');
+    await tester.pumpAndSettle();
+    expect(find.text('Tool Approval Required'), findsOneWidget);
+
+    // A new request supersedes the showing dialog. The extension's
+    // auto-deny semantics mean the prior dialog's response is moot, so
+    // the UI must drop it and show only the new one.
+    pending.value = _request(toolCallId: 'tc-B');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tool Approval Required'), findsOneWidget);
+    // No spurious response was forwarded for the superseded request.
+    expect(responses, isEmpty);
+
+    await tester.tap(find.text('Allow'));
+    await tester.pumpAndSettle();
+
+    // Only the new request's response is forwarded.
+    expect(responses, [true]);
+    expect(find.text('Tool Approval Required'), findsNothing);
+  });
 }

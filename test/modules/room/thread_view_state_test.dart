@@ -825,5 +825,42 @@ void main() {
         state.dispose();
       },
     );
+
+    test(
+      'pendingApproval re-evaluates when active session is swapped',
+      () async {
+        final approvalA = HumanApprovalExtension();
+        final approvalB = HumanApprovalExtension();
+        final sessionA = _FakeAgentSession(extensions: [approvalA]);
+        final sessionB = _FakeAgentSession(extensions: [approvalB]);
+        api.nextThreadHistory = ThreadHistory(messages: const []);
+        final state = ThreadViewState(
+          connection: connection,
+          roomId: 'room-1',
+          threadId: 'thread-1',
+          registry: registry,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        state.attachSession(sessionA);
+        expect(state.pendingApproval.value, isNull);
+
+        // Swap to a new session whose extension already has a pending
+        // request. The Computed must re-read from the newly active
+        // session's extension, not the old one.
+        approvalB.requestApproval(
+          toolCallId: 'tc-B',
+          toolName: 't',
+          arguments: const {},
+          rationale: 'r',
+        );
+        state.attachSession(sessionB);
+
+        expect(state.pendingApproval.value, isNotNull);
+        expect(state.pendingApproval.value!.toolCallId, 'tc-B');
+
+        state.dispose();
+      },
+    );
   });
 }

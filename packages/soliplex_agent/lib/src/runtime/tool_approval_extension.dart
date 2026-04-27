@@ -14,11 +14,11 @@ import 'package:soliplex_agent/src/runtime/session_extension.dart';
 /// Tool approval is a single policy decision per session — one user, one
 /// allow-or-deny answer — so a flavor picks exactly one implementation
 /// (human-prompting, automated, policy-driven, ...). All subclasses share
-/// the [namespace] `tool_approval` so registering two instances on the same
-/// session is rejected at construction by `SessionCoordinator`'s namespace
-/// uniqueness check. Without the shared namespace,
-/// `SessionCoordinator.getExtension<T>()` would silently return only the
-/// first registered instance.
+/// the [namespace] `tool_approval` so a duplicate registration is flagged
+/// at construction by `SessionCoordinator` — the second instance still
+/// attaches but becomes unreachable via
+/// `SessionCoordinator.getExtension<T>()` and the duplicate is logged as
+/// a configuration error.
 abstract class ToolApprovalExtension extends SessionExtension {
   ToolApprovalExtension() {
     assert(

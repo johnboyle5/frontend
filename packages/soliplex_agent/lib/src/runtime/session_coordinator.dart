@@ -10,14 +10,9 @@ import 'package:soliplex_logging/soliplex_logging.dart';
 /// disposes in order, and exposes lookup plus reactive-state enumeration
 /// to consumers that don't know the concrete extension types.
 class SessionCoordinator {
-  /// Logs an error for each duplicate non-empty namespace.
-  ///
-  /// Duplicates are not removed from [_extensions]; lookup via
-  /// [getExtension] continues to return the first match in registration
-  /// order. Soft-fail keeps the app usable when a flavor mistakenly
-  /// registers two single-instance extensions (e.g. two
-  /// `ToolApprovalExtension`s) while still surfacing the bug loudly to
-  /// the developer through the logger.
+  /// Validates namespace uniqueness; logs an error for each duplicate
+  /// non-empty namespace and retains all extensions in registration order.
+  /// Lookup via [getExtension] returns the first match.
   SessionCoordinator(
     List<SessionExtension> extensions, {
     required Logger logger,

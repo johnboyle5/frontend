@@ -24,6 +24,7 @@ class ApprovalHandler extends StatefulWidget {
 class _ApprovalHandlerState extends State<ApprovalHandler> {
   void Function()? _unsub;
   ApprovalRequest? _showing;
+  NavigatorState? _dialogNavigator;
 
   @override
   void initState() {
@@ -42,7 +43,16 @@ class _ApprovalHandlerState extends State<ApprovalHandler> {
   }
 
   void _onChange(ApprovalRequest? request) {
-    if (request == null || identical(request, _showing)) return;
+    if (request == null) {
+      _showing = null;
+      return;
+    }
+    if (identical(request, _showing)) return;
+    // The extension auto-denies any prior request when a new one arrives,
+    // so any showing dialog is now stale -- dismiss it before opening
+    // the new one. The popped dialog's `_show` will see `_showing` no
+    // longer matches and skip its onRespond call.
+    _dialogNavigator?.pop();
     _showing = request;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -51,12 +61,18 @@ class _ApprovalHandlerState extends State<ApprovalHandler> {
   }
 
   Future<void> _show(ApprovalRequest request) async {
+    _dialogNavigator = Navigator.of(context, rootNavigator: true);
     final approved = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (_) => ApprovalDialog(request: request),
     );
-    if (!mounted) return;
+    _dialogNavigator = null;
+    // Forward only when this dialog is still the live one. A superseded
+    // dialog (popped programmatically by _onChange) leaves _showing
+    // pointing at the new request -- the extension already auto-denied
+    // this one, so an extra onRespond would be a stale signal.
+    if (!identical(request, _showing)) return;
     widget.onRespond(approved ?? false);
     _showing = null;
   }
