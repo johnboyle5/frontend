@@ -5,6 +5,7 @@ import 'package:soliplex_agent/soliplex_agent.dart';
 
 import 'package:soliplex_frontend/src/modules/room/agent_runtime_manager.dart';
 import 'package:soliplex_frontend/src/modules/room/execution_tracker_extension.dart';
+import 'package:soliplex_frontend/src/modules/room/human_approval_extension.dart';
 import 'package:soliplex_frontend/src/modules/room/run_registry.dart';
 import 'package:soliplex_frontend/src/modules/room/thread_view_state.dart';
 
@@ -758,5 +759,71 @@ void main() {
       state.dispose();
       expect(state.executionTrackers, isEmpty);
     });
+  });
+
+  group('approval surface', () {
+    test('pendingApproval is null when no session is attached', () async {
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+        registry: registry,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(state.pendingApproval.value, isNull);
+
+      state.dispose();
+    });
+
+    test('respondToApproval is a silent no-op when no session', () async {
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+        registry: registry,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(() => state.respondToApproval(true), returnsNormally);
+
+      state.dispose();
+    });
+
+    test(
+      'pendingApproval reflects active session\'s approval extension state',
+      () async {
+        final approval = HumanApprovalExtension();
+        final session = _FakeAgentSession(extensions: [approval]);
+        api.nextThreadHistory = ThreadHistory(messages: const []);
+        final state = ThreadViewState(
+          connection: connection,
+          roomId: 'room-1',
+          threadId: 'thread-1',
+          registry: registry,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        state.attachSession(session);
+
+        final future = approval.requestApproval(
+          toolCallId: 'tc-1',
+          toolName: 'send_email',
+          arguments: const {'to': 'a@b.c'},
+          rationale: 'send a message',
+        );
+
+        expect(state.pendingApproval.value, isNotNull);
+        expect(state.pendingApproval.value!.toolCallId, 'tc-1');
+
+        state.respondToApproval(true);
+        expect(await future, isTrue);
+        expect(state.pendingApproval.value, isNull);
+
+        state.dispose();
+      },
+    );
   });
 }

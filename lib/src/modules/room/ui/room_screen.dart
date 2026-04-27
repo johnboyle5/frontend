@@ -21,6 +21,7 @@ import '../run_registry.dart';
 import '../thread_list_state.dart';
 import '../thread_view_state.dart';
 import '../compute_display_messages.dart';
+import 'approval_handler.dart';
 import 'chat_input.dart';
 import 'chunk_visualization_page.dart';
 import 'document_picker.dart';
@@ -30,7 +31,6 @@ import 'async_action_dialog.dart';
 import 'room_welcome.dart';
 import 'thread_sidebar.dart';
 import 'upload_event_banner.dart';
-import '../human_approval_extension.dart';
 import '../upload_tracker.dart';
 import '../upload_tracker_registry.dart';
 
@@ -831,7 +831,10 @@ class _RoomScreenState extends State<RoomScreen> {
 
     return Stack(
       children: [
-        _ApprovalHandler(threadView: threadView),
+        ApprovalHandler(
+          pendingApproval: threadView.pendingApproval,
+          onRespond: threadView.respondToApproval,
+        ),
         Column(
           children: [
             Expanded(
@@ -988,119 +991,6 @@ class _SendErrorBanner extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Zero-size widget that subscribes to [ThreadViewState.pendingApproval] and
-/// shows an approval dialog when a tool requests user consent.
-///
-/// Placed inside a [Stack] so it has no effect on layout.
-class _ApprovalHandler extends StatefulWidget {
-  const _ApprovalHandler({required this.threadView});
-  final ThreadViewState threadView;
-
-  @override
-  State<_ApprovalHandler> createState() => _ApprovalHandlerState();
-}
-
-class _ApprovalHandlerState extends State<_ApprovalHandler> {
-  void Function()? _unsub;
-  String? _activeToolCallId;
-
-  @override
-  void initState() {
-    super.initState();
-    _subscribe(widget.threadView);
-  }
-
-  @override
-  void didUpdateWidget(_ApprovalHandler oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.threadView != widget.threadView) {
-      _unsub?.call();
-      _activeToolCallId = null;
-      _subscribe(widget.threadView);
-    }
-  }
-
-  void _subscribe(ThreadViewState view) {
-    final signal = view.pendingApproval;
-    if (signal == null) return;
-    _unsub = signal.subscribe((request) {
-      if (request == null || request.toolCallId == _activeToolCallId) return;
-      _activeToolCallId = request.toolCallId;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _showDialog(request, view);
-      });
-    });
-  }
-
-  Future<void> _showDialog(
-    ApprovalRequest request,
-    ThreadViewState view,
-  ) async {
-    final ext = view.approvalExtension;
-    if (ext == null || !mounted) return;
-
-    final approved = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _ApprovalDialog(request: request),
-    );
-    ext.respond(approved ?? false);
-    _activeToolCallId = null;
-  }
-
-  @override
-  void dispose() {
-    _unsub?.call();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
-}
-
-class _ApprovalDialog extends StatelessWidget {
-  const _ApprovalDialog({required this.request});
-  final ApprovalRequest request;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      title: Row(
-        children: [
-          Icon(Icons.security, color: theme.colorScheme.primary, size: 20),
-          const SizedBox(width: 8),
-          const Text('Tool Approval Required'),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            request.toolName,
-            style: theme.textTheme.titleSmall
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(request.rationale, style: theme.textTheme.bodyMedium),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Deny'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Allow'),
-        ),
-      ],
     );
   }
 }

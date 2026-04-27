@@ -82,7 +82,7 @@ class ThreadViewState {
       );
 
   CancelToken? _cancelToken;
-  AgentSession? _activeSession;
+  final Signal<AgentSession?> _activeSession = Signal<AgentSession?>(null);
   void Function()? _runStateUnsub;
   bool _isDisposed = false;
 
@@ -114,7 +114,7 @@ class ThreadViewState {
   /// Returns all execution trackers for this thread: historical (from loaded
   /// thread history) merged with any live trackers from the active session.
   Map<String, ExecutionTracker> get executionTrackers {
-    final ext = _activeSession?.getExtension<ExecutionTrackerExtension>();
+    final ext = _activeSession.value?.getExtension<ExecutionTrackerExtension>();
     if (ext == null) return Map.unmodifiable(_historicalTrackers);
     return {..._historicalTrackers, ...ext.trackers};
   }
@@ -126,17 +126,26 @@ class ThreadViewState {
   /// signal returns null the moment the session detaches, even if its list
   /// had populated entries.
   ReadonlySignal<List<ToolCallEntry>>? get toolCalls =>
-      _activeSession?.getExtension<ToolCallsExtension>()?.stateSignal;
+      _activeSession.value?.getExtension<ToolCallsExtension>()?.stateSignal;
 
-  /// Pending approval request from the active session, or null if no session
-  /// is attached or no approval is pending.
-  ReadonlySignal<ApprovalRequest?>? get pendingApproval =>
-      _activeSession?.getExtension<HumanApprovalExtension>()?.stateSignal;
+  /// Pending approval request, derived from the active session. Tracks
+  /// session swaps automatically: when the active session changes, the
+  /// computed re-reads from the new session's `HumanApprovalExtension`.
+  /// The signal's value is null when no session is attached, the active
+  /// session has no `HumanApprovalExtension`, or no approval is pending.
+  late final ReadonlySignal<ApprovalRequest?> pendingApproval = computed(() {
+    final session = _activeSession.value;
+    return session?.getExtension<HumanApprovalExtension>()?.stateSignal.value;
+  });
 
-  /// The [HumanApprovalExtension] attached to the active session, or null.
-  /// Use [respond] to resolve a pending request shown via [pendingApproval].
-  HumanApprovalExtension? get approvalExtension =>
-      _activeSession?.getExtension<HumanApprovalExtension>();
+  /// Resolves the active session's pending approval request with [approved].
+  /// No-op if no session is attached, the session has no
+  /// [HumanApprovalExtension], or no request is pending.
+  void respondToApproval(bool approved) {
+    _activeSession.value
+        ?.getExtension<HumanApprovalExtension>()
+        ?.respond(approved);
+  }
 
   void submitFeedback(String runId, FeedbackType feedback, String? reason) {
     unawaited(
@@ -192,14 +201,14 @@ class ThreadViewState {
       _sessionState.value = null;
       return;
     }
-    _activeSession?.cancel();
+    _activeSession.value?.cancel();
   }
 
   void _attachSession(AgentSession session) {
     if (_isDisposed) return;
     _detachSession();
     _cancelToken?.cancel('session attached');
-    _activeSession = session;
+    _activeSession.value = session;
     _sessionState.value = session.state;
     _runStateUnsub = session.runState.subscribe(_onRunState);
   }
@@ -249,7 +258,7 @@ class ThreadViewState {
   void _detachSession() {
     // Absorb live trackers from the extension before clearing the session
     // reference, so historical data persists after the session ends.
-    final ext = _activeSession?.getExtension<ExecutionTrackerExtension>();
+    final ext = _activeSession.value?.getExtension<ExecutionTrackerExtension>();
     if (ext != null) {
       // Live tracker wins over any historical entry with the same key.
       for (final entry in ext.trackers.entries) {
@@ -258,7 +267,7 @@ class ThreadViewState {
     }
     _runStateUnsub?.call();
     _runStateUnsub = null;
-    _activeSession = null;
+    _activeSession.value = null;
     _streamingState.value = null;
     _sessionState.value = null;
   }
