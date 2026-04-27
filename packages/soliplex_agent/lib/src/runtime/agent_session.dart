@@ -10,9 +10,9 @@ import 'package:soliplex_agent/src/orchestration/run_orchestrator.dart';
 import 'package:soliplex_agent/src/orchestration/run_state.dart';
 import 'package:soliplex_agent/src/runtime/agent_runtime.dart';
 import 'package:soliplex_agent/src/runtime/agent_session_state.dart';
-import 'package:soliplex_agent/src/runtime/agent_ui_delegate.dart';
 import 'package:soliplex_agent/src/runtime/session_coordinator.dart';
 import 'package:soliplex_agent/src/runtime/session_extension.dart';
+import 'package:soliplex_agent/src/runtime/tool_approval_extension.dart';
 import 'package:soliplex_agent/src/tools/tool_execution_context.dart';
 import 'package:soliplex_agent/src/tools/tool_registry.dart';
 import 'package:soliplex_client/soliplex_client.dart';
@@ -44,12 +44,10 @@ class AgentSession implements ToolExecutionContext {
     required ToolRegistry toolRegistry,
     required Logger logger,
     required SessionCoordinator coordinator,
-    AgentUiDelegate? uiDelegate,
   })  : _runtime = runtime,
         _orchestrator = orchestrator,
         _toolRegistry = toolRegistry,
         _coordinator = coordinator,
-        _uiDelegate = uiDelegate,
         _logger = logger,
         id = '${threadKey.threadId}-'
             '${DateTime.now().microsecondsSinceEpoch}';
@@ -70,7 +68,6 @@ class AgentSession implements ToolExecutionContext {
   final RunOrchestrator _orchestrator;
   final ToolRegistry _toolRegistry;
   final SessionCoordinator _coordinator;
-  final AgentUiDelegate? _uiDelegate;
   final Logger _logger;
 
   static const _toolTimeout = Duration(seconds: 60);
@@ -143,8 +140,16 @@ class AgentSession implements ToolExecutionContext {
   // ToolExecutionContext implementation
   // ---------------------------------------------------------------------------
 
+  /// CancelToken from the underlying orchestrator, or a pre-cancelled token
+  /// once the session has been disposed.
+  ///
+  /// Late tool callers (a microtask resuming after [dispose]) read a
+  /// cancelled token rather than triggering the orchestrator's
+  /// disposed-getter guard, so dispose-race short-circuits return cleanly
+  /// instead of surfacing as opaque "tool failed" errors.
   @override
-  CancelToken get cancelToken => _orchestrator.cancelToken;
+  CancelToken get cancelToken =>
+      _disposed ? (CancelToken()..cancel()) : _orchestrator.cancelToken;
 
   @override
   Future<AgentSession> spawnChild({
@@ -154,6 +159,19 @@ class AgentSession implements ToolExecutionContext {
     Duration? timeout,
     bool ephemeral = true,
   }) {
+    if (_disposed) {
+      _logger.debug(
+        'spawnChild denied: session $id already disposed '
+        '(prompt="$prompt", roomId=$roomId).',
+      );
+      // Future.error rather than sync-throw so a fire-and-forget caller or
+      // a chained .catchError sees the failure instead of crashing the
+      // isolate with an uncaught synchronous exception.
+      return Future<AgentSession>.error(
+        StateError('Cannot spawnChild on disposed session $id'),
+        StackTrace.current,
+      );
+    }
     return _runtime.spawn(
       roomId: roomId ?? threadKey.roomId,
       prompt: prompt,
@@ -171,8 +189,33 @@ class AgentSession implements ToolExecutionContext {
     required String toolName,
     required Map<String, dynamic> arguments,
     required String rationale,
-  }) async {
-    if (_uiDelegate == null) return false;
+  }) {
+    // Late callers (microtask resuming after dispose): deny without
+    // touching the already-disposed extension.
+    if (_disposed) {
+      _logger.debug(
+        'requestApproval denied: session $id already disposed '
+        '(tool $toolName, $toolCallId).',
+      );
+      return Future<bool>.value(false);
+    }
+    // Short-circuit before the extension call so a cancelled session never
+    // surfaces an approval dialog the orchestrator is about to throw away.
+    if (cancelToken.isCancelled) {
+      _logger.debug(
+        'requestApproval denied: session $id already cancelled '
+        '(tool $toolName, $toolCallId).',
+      );
+      return Future<bool>.value(false);
+    }
+    final ext = _coordinator.getExtension<ToolApprovalExtension>();
+    if (ext == null) {
+      _logger.warning(
+        'Tool $toolName ($toolCallId) requested approval on session $id '
+        'but no ToolApprovalExtension is registered; denying by default.',
+      );
+      return Future<bool>.value(false);
+    }
     emitEvent(
       AwaitingApproval(
         toolCallId: toolCallId,
@@ -180,15 +223,12 @@ class AgentSession implements ToolExecutionContext {
         rationale: rationale,
       ),
     );
-    return Future.any([
-      _uiDelegate.requestToolApproval(
-        session: this,
-        toolName: toolName,
-        arguments: arguments,
-        rationale: rationale,
-      ),
-      cancelToken.whenCancelled.then((_) => false),
-    ]);
+    return ext.requestApproval(
+      toolCallId: toolCallId,
+      toolName: toolName,
+      arguments: arguments,
+      rationale: rationale,
+    );
   }
 
   @override

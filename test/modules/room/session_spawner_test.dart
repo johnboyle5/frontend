@@ -17,7 +17,9 @@ class _StubAgentSession implements AgentSession {
   void dispose() => disposed = true;
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => null;
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
+        '_StubAgentSession.${invocation.memberName}',
+      );
 }
 
 void main() {

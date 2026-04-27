@@ -6,6 +6,7 @@ import 'package:soliplex_agent/soliplex_agent.dart';
 import 'execution_tracker.dart';
 import 'execution_tracker_extension.dart';
 import 'historical_replay.dart';
+import 'human_approval_extension.dart';
 import 'run_registry.dart';
 import 'send_error.dart';
 import 'session_spawner.dart';
@@ -81,7 +82,7 @@ class ThreadViewState {
       );
 
   CancelToken? _cancelToken;
-  AgentSession? _activeSession;
+  final Signal<AgentSession?> _activeSession = Signal<AgentSession?>(null);
   void Function()? _runStateUnsub;
   bool _isDisposed = false;
 
@@ -113,7 +114,7 @@ class ThreadViewState {
   /// Returns all execution trackers for this thread: historical (from loaded
   /// thread history) merged with any live trackers from the active session.
   Map<String, ExecutionTracker> get executionTrackers {
-    final ext = _activeSession?.getExtension<ExecutionTrackerExtension>();
+    final ext = _activeSession.value?.getExtension<ExecutionTrackerExtension>();
     if (ext == null) return Map.unmodifiable(_historicalTrackers);
     return {..._historicalTrackers, ...ext.trackers};
   }
@@ -125,7 +126,24 @@ class ThreadViewState {
   /// signal returns null the moment the session detaches, even if its list
   /// had populated entries.
   ReadonlySignal<List<ToolCallEntry>>? get toolCalls =>
-      _activeSession?.getExtension<ToolCallsExtension>()?.stateSignal;
+      _activeSession.value?.getExtension<ToolCallsExtension>()?.stateSignal;
+
+  /// Pending approval for the active session, or `null` when no session is
+  /// attached, the session has no `HumanApprovalExtension`, or nothing is
+  /// pending. Updates across session swaps via `computed`.
+  late final ReadonlySignal<ApprovalRequest?> pendingApproval = computed(() {
+    final session = _activeSession.value;
+    return session?.getExtension<HumanApprovalExtension>()?.stateSignal.value;
+  });
+
+  /// Resolves [request] on the active session's [HumanApprovalExtension]
+  /// with [approved]. No-op if no session is attached, the session has no
+  /// extension, or [request] is not the currently pending request.
+  void respondToApproval(ApprovalRequest request, bool approved) {
+    _activeSession.value
+        ?.getExtension<HumanApprovalExtension>()
+        ?.respond(request, approved);
+  }
 
   void submitFeedback(String runId, FeedbackType feedback, String? reason) {
     unawaited(
@@ -181,14 +199,14 @@ class ThreadViewState {
       _sessionState.value = null;
       return;
     }
-    _activeSession?.cancel();
+    _activeSession.value?.cancel();
   }
 
   void _attachSession(AgentSession session) {
     if (_isDisposed) return;
     _detachSession();
     _cancelToken?.cancel('session attached');
-    _activeSession = session;
+    _activeSession.value = session;
     _sessionState.value = session.state;
     _runStateUnsub = session.runState.subscribe(_onRunState);
   }
@@ -238,7 +256,7 @@ class ThreadViewState {
   void _detachSession() {
     // Absorb live trackers from the extension before clearing the session
     // reference, so historical data persists after the session ends.
-    final ext = _activeSession?.getExtension<ExecutionTrackerExtension>();
+    final ext = _activeSession.value?.getExtension<ExecutionTrackerExtension>();
     if (ext != null) {
       // Live tracker wins over any historical entry with the same key.
       for (final entry in ext.trackers.entries) {
@@ -247,7 +265,7 @@ class ThreadViewState {
     }
     _runStateUnsub?.call();
     _runStateUnsub = null;
-    _activeSession = null;
+    _activeSession.value = null;
     _streamingState.value = null;
     _sessionState.value = null;
   }

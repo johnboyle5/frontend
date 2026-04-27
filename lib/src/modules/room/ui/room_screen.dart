@@ -7,12 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_client/soliplex_client.dart'
-    show
-        RagDocument,
-        Room,
-        SourceReferenceFormatting,
-        buildDocumentFilter,
-        buildRagDocumentFilterOverlay;
+    show RagDocument, Room, SourceReferenceFormatting, buildDocumentFilter;
 import '../../auth/server_entry.dart';
 import '../document_selections.dart';
 import '../pick_file.dart';
@@ -26,6 +21,7 @@ import '../run_registry.dart';
 import '../thread_list_state.dart';
 import '../thread_view_state.dart';
 import '../compute_display_messages.dart';
+import 'approval_handler.dart';
 import 'chat_input.dart';
 import 'chunk_visualization_page.dart';
 import 'document_picker.dart';
@@ -123,9 +119,12 @@ class _RoomScreenState extends State<RoomScreen> {
   Map<String, dynamic>? _buildStateOverlay() {
     if (!_filterEnabled) return null;
     final selected = _selectedDocuments;
-    return buildRagDocumentFilterOverlay(
-      selected.isEmpty ? null : buildDocumentFilter(selected.toList()),
-    );
+    return {
+      'rag': <String, dynamic>{
+        'document_filter':
+            selected.isEmpty ? null : buildDocumentFilter(selected.toList()),
+      },
+    };
   }
 
   @override
@@ -830,97 +829,106 @@ class _RoomScreenState extends State<RoomScreen> {
 
     _restoreUnsentText(sendError?.unsentText);
 
-    return Column(
+    return Stack(
       children: [
-        Expanded(
-          child: switch (status) {
-            MessagesLoading() => const Center(
-                child: CircularProgressIndicator(),
-              ),
-            MessagesFailed(:final error) => ErrorRetryPanel(
-                title: 'Failed to load messages',
-                error: error,
-                onRetry: threadView.refresh,
-              ),
-            MessagesLoaded(:final messages, :final messageStates) =>
-              computeDisplayMessages(messages, streaming).isEmpty
-                  ? RoomWelcome(
-                      room: room,
-                      onSuggestionTapped: (suggestion) =>
-                          threadView.sendMessage(
-                        suggestion,
-                        _state.runtime,
-                        stateOverlay: _buildStateOverlay(),
-                      ),
-                      onQuizTapped: _onQuizTapped,
-                      fallback: _threadEmptyFallback(context),
-                    )
-                  : MessageTimeline(
-                      key: ValueKey(threadView.threadId),
-                      roomId: widget.roomId,
-                      messages: messages,
-                      messageStates: messageStates,
-                      streamingState: streaming,
-                      executionTrackers: threadView.executionTrackers,
-                      onFeedbackSubmit: threadView.submitFeedback,
-                      onInspect: (runId) {
-                        final inspector = ProviderScope.containerOf(context)
-                            .read(networkInspectorProvider);
-                        final filtered = filterEventsByRunId(
-                          inspector.events,
-                          runId,
-                        );
-                        final groups = groupHttpEvents(filtered);
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => RunHttpDetailPage(groups: groups),
-                          ),
-                        );
-                      },
-                      onShowChunkVisualization: (ref) =>
-                          ChunkVisualizationPage.show(
-                        context: context,
-                        api: widget.serverEntry.connection.api,
-                        roomId: widget.roomId,
-                        chunkId: ref.chunkId,
-                        documentTitle: ref.displayTitle,
-                        pageNumbers: ref.pageNumbers,
-                      ),
-                    ),
-          },
+        ApprovalHandler(
+          pendingApproval: threadView.pendingApproval,
+          onRespond: threadView.respondToApproval,
         ),
-        if (sendError != null)
-          _SendErrorBanner(
-            error: sendError,
-            onDismiss: () => threadView.clearSendError(),
-          ),
-        if (attachEnabled)
-          UploadEventBanner(
-            tracker: _state.uploadTracker,
-            roomId: widget.roomId,
-            threadId: threadView.threadId,
-          ),
-        ChatInput(
-          onSend: (text) => threadView.sendMessage(
-            text,
-            _state.runtime,
-            stateOverlay: _buildStateOverlay(),
-          ),
-          onCancel: threadView.cancelRun,
-          sessionState: threadView.sessionState,
-          controller: _chatController,
-          focusNode: _chatFocusNode,
-          enabled: status is MessagesLoaded,
-          selectedDocuments: _selectedDocuments,
-          onFilterTap: _filterEnabled ? _openDocumentPicker : null,
-          onDocumentRemoved: _filterEnabled
-              ? (doc) => _updateSelection(
-                    Set.of(_selectedDocuments)..remove(doc),
-                  )
-              : null,
-          onAttachFile: attachEnabled
-              ? () => _pickAndUploadToThread(threadView.threadId)
-              : null,
+        Column(
+          children: [
+            Expanded(
+              child: switch (status) {
+                MessagesLoading() => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                MessagesFailed(:final error) => ErrorRetryPanel(
+                    title: 'Failed to load messages',
+                    error: error,
+                    onRetry: threadView.refresh,
+                  ),
+                MessagesLoaded(:final messages, :final messageStates) =>
+                  computeDisplayMessages(messages, streaming).isEmpty
+                      ? RoomWelcome(
+                          room: room,
+                          onSuggestionTapped: (suggestion) =>
+                              threadView.sendMessage(
+                            suggestion,
+                            _state.runtime,
+                            stateOverlay: _buildStateOverlay(),
+                          ),
+                          onQuizTapped: _onQuizTapped,
+                          fallback: _threadEmptyFallback(context),
+                        )
+                      : MessageTimeline(
+                          key: ValueKey(threadView.threadId),
+                          roomId: widget.roomId,
+                          messages: messages,
+                          messageStates: messageStates,
+                          streamingState: streaming,
+                          executionTrackers: threadView.executionTrackers,
+                          onFeedbackSubmit: threadView.submitFeedback,
+                          onInspect: (runId) {
+                            final inspector = ProviderScope.containerOf(context)
+                                .read(networkInspectorProvider);
+                            final filtered = filterEventsByRunId(
+                              inspector.events,
+                              runId,
+                            );
+                            final groups = groupHttpEvents(filtered);
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    RunHttpDetailPage(groups: groups),
+                              ),
+                            );
+                          },
+                          onShowChunkVisualization: (ref) =>
+                              ChunkVisualizationPage.show(
+                            context: context,
+                            api: widget.serverEntry.connection.api,
+                            roomId: widget.roomId,
+                            chunkId: ref.chunkId,
+                            documentTitle: ref.displayTitle,
+                            pageNumbers: ref.pageNumbers,
+                          ),
+                        ),
+              },
+            ),
+            if (sendError != null)
+              _SendErrorBanner(
+                error: sendError,
+                onDismiss: () => threadView.clearSendError(),
+              ),
+            if (attachEnabled)
+              UploadEventBanner(
+                tracker: _state.uploadTracker,
+                roomId: widget.roomId,
+                threadId: threadView.threadId,
+              ),
+            ChatInput(
+              onSend: (text) => threadView.sendMessage(
+                text,
+                _state.runtime,
+                stateOverlay: _buildStateOverlay(),
+              ),
+              onCancel: threadView.cancelRun,
+              sessionState: threadView.sessionState,
+              controller: _chatController,
+              focusNode: _chatFocusNode,
+              enabled: status is MessagesLoaded,
+              selectedDocuments: _selectedDocuments,
+              onFilterTap: _filterEnabled ? _openDocumentPicker : null,
+              onDocumentRemoved: _filterEnabled
+                  ? (doc) => _updateSelection(
+                        Set.of(_selectedDocuments)..remove(doc),
+                      )
+                  : null,
+              onAttachFile: attachEnabled
+                  ? () => _pickAndUploadToThread(threadView.threadId)
+                  : null,
+            ),
+          ],
         ),
       ],
     );

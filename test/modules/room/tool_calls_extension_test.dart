@@ -10,7 +10,9 @@ class _FakeSession implements AgentSession {
   ReadonlySignal<ExecutionEvent?> get lastExecutionEvent => events;
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => null;
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
+        '_FakeSession.${invocation.memberName}',
+      );
 }
 
 void main() {

@@ -5,6 +5,7 @@ import 'package:soliplex_agent/soliplex_agent.dart';
 
 import 'package:soliplex_frontend/src/modules/room/agent_runtime_manager.dart';
 import 'package:soliplex_frontend/src/modules/room/execution_tracker_extension.dart';
+import 'package:soliplex_frontend/src/modules/room/human_approval_extension.dart';
 import 'package:soliplex_frontend/src/modules/room/run_registry.dart';
 import 'package:soliplex_frontend/src/modules/room/thread_view_state.dart';
 
@@ -56,8 +57,13 @@ class _FakeAgentSession implements AgentSession {
 
   void complete(AgentResult result) => _resultCompleter.complete(result);
 
+  // Surface unimplemented members loudly so a new dependency from
+  // ThreadViewState fails the test immediately instead of silently
+  // receiving a null.
   @override
-  dynamic noSuchMethod(Invocation invocation) => null;
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
+        '_FakeAgentSession.${invocation.memberName}',
+      );
 }
 
 void main() {
@@ -758,5 +764,115 @@ void main() {
       state.dispose();
       expect(state.executionTrackers, isEmpty);
     });
+  });
+
+  group('approval surface', () {
+    test('pendingApproval is null when no session is attached', () async {
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+        registry: registry,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(state.pendingApproval.value, isNull);
+
+      state.dispose();
+    });
+
+    test('respondToApproval is a silent no-op when no session', () async {
+      api.nextThreadHistory = ThreadHistory(messages: const []);
+      final state = ThreadViewState(
+        connection: connection,
+        roomId: 'room-1',
+        threadId: 'thread-1',
+        registry: registry,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final stale = ApprovalRequest(
+        toolCallId: 'tc-x',
+        toolName: 't',
+        arguments: const {},
+        rationale: 'r',
+      );
+      expect(() => state.respondToApproval(stale, true), returnsNormally);
+
+      state.dispose();
+    });
+
+    test(
+      'pendingApproval reflects active session\'s approval extension state',
+      () async {
+        final approval = HumanApprovalExtension();
+        final session = _FakeAgentSession(extensions: [approval]);
+        api.nextThreadHistory = ThreadHistory(messages: const []);
+        final state = ThreadViewState(
+          connection: connection,
+          roomId: 'room-1',
+          threadId: 'thread-1',
+          registry: registry,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        state.attachSession(session);
+
+        final future = approval.requestApproval(
+          toolCallId: 'tc-1',
+          toolName: 'send_email',
+          arguments: const {'to': 'a@b.c'},
+          rationale: 'send a message',
+        );
+
+        final pending = state.pendingApproval.value;
+        expect(pending, isNotNull);
+        expect(pending!.toolCallId, 'tc-1');
+
+        state.respondToApproval(pending, true);
+        expect(await future, isTrue);
+        expect(state.pendingApproval.value, isNull);
+
+        state.dispose();
+      },
+    );
+
+    test(
+      'pendingApproval re-evaluates when active session is swapped',
+      () async {
+        final approvalA = HumanApprovalExtension();
+        final approvalB = HumanApprovalExtension();
+        final sessionA = _FakeAgentSession(extensions: [approvalA]);
+        final sessionB = _FakeAgentSession(extensions: [approvalB]);
+        api.nextThreadHistory = ThreadHistory(messages: const []);
+        final state = ThreadViewState(
+          connection: connection,
+          roomId: 'room-1',
+          threadId: 'thread-1',
+          registry: registry,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        state.attachSession(sessionA);
+        expect(state.pendingApproval.value, isNull);
+
+        // Swap to a new session whose extension already has a pending
+        // request. The Computed must re-read from the newly active
+        // session's extension, not the old one.
+        approvalB.requestApproval(
+          toolCallId: 'tc-B',
+          toolName: 't',
+          arguments: const {},
+          rationale: 'r',
+        );
+        state.attachSession(sessionB);
+
+        expect(state.pendingApproval.value, isNotNull);
+        expect(state.pendingApproval.value!.toolCallId, 'tc-B');
+
+        state.dispose();
+      },
+    );
   });
 }

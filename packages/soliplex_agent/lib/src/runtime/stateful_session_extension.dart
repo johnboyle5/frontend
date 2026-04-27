@@ -45,6 +45,7 @@ mixin StatefulSessionExtension<T> on SessionExtension
     implements HasStatefulObservation {
   Signal<T>? _stateSignal;
   ReadonlySignal<Object?>? _objectSignal;
+  bool _disposed = false;
 
   /// Initialises the backing signal. Must be called exactly once, in the
   /// constructor, before [onAttach] runs.
@@ -67,7 +68,12 @@ mixin StatefulSessionExtension<T> on SessionExtension
   }
 
   /// Replaces the current state, notifying all subscribers.
+  ///
+  /// No-op once the extension is disposed: late writes from async tool
+  /// operations that resume after [onDispose] would otherwise throw on a
+  /// disposed signal and surface as opaque "tool failed" errors.
   set state(T value) {
+    if (_disposed) return;
     assert(_stateSignal != null, 'Call setInitialState() in the constructor');
     _stateSignal!.value = value;
   }
@@ -83,6 +89,7 @@ mixin StatefulSessionExtension<T> on SessionExtension
 
   @override
   void onDispose() {
+    _disposed = true;
     _objectSignal?.dispose();
     _objectSignal = null;
     _stateSignal?.dispose();
