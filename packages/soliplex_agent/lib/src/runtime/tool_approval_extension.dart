@@ -9,15 +9,36 @@ import 'package:soliplex_agent/src/runtime/session_extension.dart';
 /// When an instance of this extension is registered with a session,
 /// `AgentSession.requestApproval` delegates to [requestApproval]. When no
 /// extension is registered, `AgentSession.requestApproval` returns `false`
-/// (deny by default). Only one `ToolApprovalExtension` may be registered
-/// per session (enforced by the namespace uniqueness check in
-/// `SessionCoordinator`).
+/// (deny by default).
+///
+/// Tool approval is a single policy decision per session — one user, one
+/// allow-or-deny answer — so a flavor picks exactly one implementation
+/// (human-prompting, automated, policy-driven, ...). All subclasses share
+/// the [namespace] `tool_approval` so registering two instances on the same
+/// session is rejected at construction by `SessionCoordinator`'s namespace
+/// uniqueness check. Without the shared namespace,
+/// `SessionCoordinator.getExtension<T>()` would silently return only the
+/// first registered instance.
 abstract class ToolApprovalExtension extends SessionExtension {
+  ToolApprovalExtension() {
+    assert(
+      namespace == 'tool_approval',
+      'ToolApprovalExtension subclasses MUST NOT override namespace; the '
+      'shared "tool_approval" namespace is what enables single-instance '
+      'enforcement via SessionCoordinator.',
+    );
+  }
+
+  @override
+  String get namespace => 'tool_approval';
+
   /// Requests user consent for the given tool call.
   ///
-  /// Returns `true` to proceed with execution, `false` to deny.
-  /// The `AgentSession` races this future against its `CancelToken` —
-  /// cancellation automatically produces `false`.
+  /// Returns `true` to proceed with execution, `false` to deny. The session
+  /// uses a synchronous cancel-token check before delegating here; the
+  /// extension is responsible for resolving any pending request to `false`
+  /// when the session is cancelled mid-request (typically via a
+  /// `cancelToken.whenCancelled` listener registered in [onAttach]).
   Future<bool> requestApproval({
     required String toolCallId,
     required String toolName,

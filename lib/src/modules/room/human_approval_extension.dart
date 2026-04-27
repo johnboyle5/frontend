@@ -49,9 +49,6 @@ class HumanApprovalExtension extends ToolApprovalExtension
   Completer<bool>? _pending;
 
   @override
-  String get namespace => 'human_approval';
-
-  @override
   int get priority => 30;
 
   @override

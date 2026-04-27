@@ -10,8 +10,14 @@ import 'package:soliplex_logging/soliplex_logging.dart';
 /// disposes in order, and exposes lookup plus reactive-state enumeration
 /// to consumers that don't know the concrete extension types.
 class SessionCoordinator {
-  /// Throws [ArgumentError] if any two extensions share a non-empty
-  /// namespace.
+  /// Logs an error for each duplicate non-empty namespace.
+  ///
+  /// Duplicates are not removed from [_extensions]; lookup via
+  /// [getExtension] continues to return the first match in registration
+  /// order. Soft-fail keeps the app usable when a flavor mistakenly
+  /// registers two single-instance extensions (e.g. two
+  /// `ToolApprovalExtension`s) while still surfacing the bug loudly to
+  /// the developer through the logger.
   SessionCoordinator(
     List<SessionExtension> extensions, {
     required Logger logger,
@@ -99,9 +105,11 @@ class SessionCoordinator {
       final ns = ext.namespace;
       if (ns.isEmpty) continue;
       if (!seen.add(ns)) {
-        throw ArgumentError(
+        _logger.error(
           'Duplicate SessionExtension namespace "$ns". '
-          'Each named extension must have a unique namespace.',
+          'First-registered wins; additional instances are kept in the '
+          'list but unreachable via getExtension<T>(). This is a flavor '
+          'configuration bug.',
         );
       }
     }
