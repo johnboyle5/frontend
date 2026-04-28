@@ -161,25 +161,6 @@ void main() {
       await controller.close();
     });
 
-    test('disposed signal retains last value', () async {
-      stubCreateThread();
-      stubCreateRun();
-      stubDeleteThread();
-      final controller = StreamController<BaseEvent>();
-      stubRunAgent(stream: controller.stream);
-
-      await runtime.spawn(roomId: _roomId, prompt: 'Hello');
-      final valueBeforeDispose = runtime.sessions.value;
-      expect(valueBeforeDispose, hasLength(1));
-
-      await runtime.dispose();
-
-      // After dispose, signal retains its last value (frozen)
-      expect(runtime.sessions.value, hasLength(1));
-
-      await controller.close();
-    });
-
     test('signal and stream emit in same order', () async {
       stubCreateThread();
       stubCreateRun();
@@ -204,15 +185,40 @@ void main() {
     });
   });
 
-  group('_scheduleCompletion disposal race', () {
-    test(
-        'external session.dispose before completion runs does not read '
-        'disposed runState', () async {
-      // Setup: spawn a session that never completes on its own. We then
-      // dispose it externally (simulating a view teardown). When the
-      // result future eventually fires (from _completeIfPending inside
-      // dispose), _scheduleCompletion's .then must short-circuit before
-      // touching session.runState — that signal is already disposed.
+  group('session disposal during pending completion', () {
+    test('external dispose does not read session signals after disposal',
+        () async {
+      stubCreateThread();
+      stubCreateRun();
+      stubDeleteThread();
+      final controller = StreamController<BaseEvent>();
+      stubRunAgent(stream: controller.stream);
+
+      final captured = <String>[];
+      await runZoned(
+        () async {
+          final session = await runtime.spawn(roomId: _roomId, prompt: 'Hello');
+          session.dispose();
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        },
+        zoneSpecification: ZoneSpecification(
+          print: (_, __, ___, line) => captured.add(line),
+        ),
+      );
+
+      expect(
+        captured.where((line) => line.contains('read after disposed')),
+        isEmpty,
+        reason: 'No session signal may be read after session.dispose().',
+      );
+      unawaited(controller.close());
+    });
+
+    test('autoDispose session is removed from tracking after external dispose',
+        () async {
+      // The runtime's completion handler must run even when the session was
+      // disposed by its owner — otherwise _rootTimeoutTimers, _sessions,
+      // and the spawn queue all leak the disposed session.
       stubCreateThread();
       stubCreateRun();
       stubDeleteThread();
@@ -222,23 +228,17 @@ void main() {
       final session = await runtime.spawn(
         roomId: _roomId,
         prompt: 'Hello',
+        autoDispose: true,
       );
-      // Drain the spawn's initial tick so the coordinator has attached
-      // _scheduleCompletion's future listener.
-      await Future<void>.delayed(Duration.zero);
+      expect(runtime.sessions.value, hasLength(1));
 
-      // Dispose externally — this completes the pending result future
-      // and synchronously disposes the runState signal.
       session.dispose();
-
-      // Allow the .then microtask to run. With the guard in place this
-      // is a no-op; without it, we'd see a "read after disposed"
-      // warning from AgentRuntime._captureThreadHistory.
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      expect(session.isDisposed, isTrue);
+      expect(runtime.sessions.value, isEmpty);
+      expect(runtime.activeSessions, isEmpty);
 
-      await controller.close();
+      unawaited(controller.close());
     });
   });
 }

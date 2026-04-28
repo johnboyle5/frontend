@@ -384,12 +384,13 @@ class AgentRuntime {
         : session.result;
     unawaited(
       future.then((_) async {
-        // Either the runtime itself is gone, or the session was disposed
-        // externally (e.g. view teardown completed the result future via
-        // session.dispose()). Touching session.runState.value after that
-        // fires a "read after disposed" warning.
-        if (_disposed || session.isDisposed) return;
-        _captureThreadHistory(session);
+        if (_disposed) return;
+        if (!session.isDisposed) {
+          // Skip when the session's owner has already torn it down:
+          // _captureThreadHistory reads session.runState.value, and
+          // session.dispose() disposes that signal.
+          _captureThreadHistory(session);
+        }
         if (autoDispose) {
           await _handleSessionComplete(session);
         } else {
