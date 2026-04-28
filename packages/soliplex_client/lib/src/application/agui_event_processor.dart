@@ -296,9 +296,7 @@ EventProcessingResult _processTextStart(
   );
 }
 
-/// Runs [onMatch] only when [streaming] is an active [TextStreaming] for
-/// [messageId]. Otherwise returns [conversation] and [streaming] unchanged —
-/// events for a stale or already-closed stream are ignored.
+/// Events for a stale or already-closed stream are ignored.
 EventProcessingResult _onActiveTextStream(
   Conversation conversation,
   StreamingState streaming,
