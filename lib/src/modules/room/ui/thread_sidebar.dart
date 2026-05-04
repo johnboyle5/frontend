@@ -110,7 +110,7 @@ class ThreadSidebar extends StatelessWidget {
           const Divider(),
           TextButton.icon(
             onPressed: onVersions,
-            icon: const Icon(Icons.info_outline, size: 16),
+            icon: const Icon(Icons.info, size: 16),
             label: const Text('Versions'),
             style: TextButton.styleFrom(alignment: Alignment.centerLeft),
           ),

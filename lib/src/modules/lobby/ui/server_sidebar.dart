@@ -158,9 +158,12 @@ class _ActionButtons extends StatelessWidget {
           label: const Text('Network Inspector'),
           style: TextButton.styleFrom(alignment: Alignment.centerLeft),
         ),
-        TextButton(
+        const Divider(),
+        TextButton.icon(
           onPressed: onVersions,
-          child: const Text('Versions'),
+          icon: const Icon(Icons.info, size: 16),
+          label: const Text('Network Versions'),
+          style: TextButton.styleFrom(alignment: Alignment.centerLeft),
         ),
       ],
     );
