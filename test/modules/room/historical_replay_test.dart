@@ -155,18 +155,10 @@ void main() {
       ]);
     });
 
-    // Decision: a tool-yield bundle (ToolCallStart, no assistant text)
-    // is not standalone — its events (thinking, tool steps) belong to
-    // the surrounding run from the user's perspective. They must be
-    // hoisted across the bundle boundary and absorbed by the next
-    // normal bundle's first assistant tracker. Without this, every
-    // loaded thread that interleaves tool yields silently loses its
-    // pre-tool thinking.
     test(
         "tool-yield bundle's events forward into the next normal "
         "bundle's first assistant tracker", () {
       final runs = [
-        // Tool-yield bundle: thinking + tool call, no assistant text.
         RunEventBundle(
           runId: 'run-yield',
           events: const [
@@ -186,7 +178,6 @@ void main() {
             ),
           ],
         ),
-        // Normal bundle: assistant text resumes.
         RunEventBundle(
           runId: 'run-resume',
           events: const [
@@ -198,12 +189,8 @@ void main() {
 
       final trackers = replayToTrackers(runs);
 
-      // Only one tracker exists (no tracker for the tool-yield bundle).
       expect(trackers.keys, ['asst-1']);
-      // The tool-yield bundle's pre-tool thinking made it into the
-      // resuming bundle's tracker.
       expect(trackers['asst-1']!.thinkingBlocks.value, ['pre-tool']);
-      // Tool steps (search) are present in the resuming bundle too.
       expect(
         trackers['asst-1']!.steps.value.map((s) => s.label),
         ['Thinking', 'search'],

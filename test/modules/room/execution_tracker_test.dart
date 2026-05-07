@@ -357,7 +357,7 @@ void main() {
       expect(step.activities.single.toolName, 'execute_script');
     });
 
-    test('activity arriving with no active step is an orphan', () {
+    test('activity arriving with no active step is standalone', () {
       events.value = const ActivitySnapshot(
         messageId: 'bwrap:call_1',
         activityType: 'skill_tool_call',
@@ -366,10 +366,11 @@ void main() {
       );
 
       expect(tracker.timeline.value, hasLength(1));
-      expect(tracker.timeline.value.single, isA<TimelineOrphanActivity>());
+      expect(tracker.timeline.value.single, isA<TimelineStandaloneActivity>());
     });
 
-    test('activity after a completed step with no new active step is orphan',
+    test(
+        'activity after a completed step with no new active step is standalone',
         () {
       events.value = const ClientToolExecuting(
         toolName: 'execute_skill',
@@ -388,7 +389,7 @@ void main() {
       );
 
       expect(tracker.timeline.value, hasLength(2));
-      expect(tracker.timeline.value.last, isA<TimelineOrphanActivity>());
+      expect(tracker.timeline.value.last, isA<TimelineStandaloneActivity>());
     });
 
     test('multiple steps each get their own activities', () {
@@ -527,11 +528,6 @@ void main() {
       tracker.dispose();
     });
 
-    // Decision: when historical events end mid-thinking (no clearing
-    // ThinkingEnded / RunCompleted / ToolCallStarted), the constructor
-    // must finalize so the spinner doesn't stay on forever and the
-    // active step is marked completed. Regression guard for the stuck-
-    // spinner bug on historical runs that produced no terminal event.
     test(
         'events ending mid-thinking are finalized: no spinner, no '
         'active step', () {
@@ -548,10 +544,6 @@ void main() {
     });
   });
 
-  // Decision: freeze() on a live tracker in mid-thinking must clear the
-  // spinner and complete active steps (the same finalization the
-  // historical constructor does). Without this, a thread that's frozen
-  // before its run produces a terminal event leaves a stuck spinner.
   test('freeze mid-thinking clears spinner and completes active step', () {
     events.value = const ThinkingStarted();
     events.value = const ThinkingContent(delta: 'hello');

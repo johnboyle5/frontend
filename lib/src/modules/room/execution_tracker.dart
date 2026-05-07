@@ -54,25 +54,17 @@ class ExecutionTracker {
   /// Unified timeline of steps with their nested activities, in arrival
   /// order. Activities that arrive while a step is active are nested
   /// under that step; activities arriving outside any active step are
-  /// emitted as [TimelineOrphanActivity].
+  /// emitted as [TimelineStandaloneActivity].
   final Signal<List<TimelineEntry>> _timeline =
       Signal<List<TimelineEntry>>(const []);
   ReadonlySignal<List<TimelineEntry>> get timeline => _timeline;
 
-  /// Marks the tracker terminal: stops the spinner, completes any
-  /// still-active steps, releases the subscription, and stops the
-  /// stopwatch. Called by [freeze] (live path) and the
-  /// [ExecutionTracker.historical] constructor (replay path) so that
-  /// bundles ending mid-thinking — no clearing terminal event — don't
-  /// leave a stuck spinner or active steps.
+  /// Marks the tracker terminal: clears the spinner, completes any
+  /// still-active steps, and releases the subscription.
   ///
-  /// Ordering matters: `_completeAllSteps` and the spinner reset must
-  /// run before `_isFrozen = true`. `_completeAllSteps` is asserted
-  /// non-frozen so a future maintainer who swaps the lines fails fast
-  /// in debug instead of silently mutating signals on a frozen tracker.
-  /// Synchronous signal subscribers re-read state from inside their
-  /// callbacks; they should observe the cleared spinner before the
-  /// frozen flag, never the reverse.
+  /// `_completeAllSteps` and the spinner reset must run before
+  /// `_isFrozen = true`. `_completeAllSteps` asserts non-frozen so a
+  /// maintainer who swaps the order fails fast in debug.
   void freeze() {
     _isThinkingStreaming.value = false;
     _completeAllSteps(StepStatus.completed);
@@ -100,9 +92,8 @@ class ExecutionTracker {
           ];
         }
       case ThinkingEnded():
-        // Clear the spinner without touching step lifecycle. Active
-        // step (if any) is left for the next event (tool call /
-        // run terminal) to mark complete.
+        // Active step is left for the next tool call or run terminal
+        // event to complete.
         _isThinkingStreaming.value = false;
       case ServerToolCallStarted(:final toolName):
         _completeActiveStep();
@@ -244,10 +235,10 @@ class ExecutionTracker {
           _timeline.value = [...current]..[i] = entry.withActivities(updated);
           return;
         }
-      } else if (entry is TimelineOrphanActivity &&
+      } else if (entry is TimelineStandaloneActivity &&
           entry.activity.messageId == decoded.messageId) {
         _timeline.value = [...current]..[i] =
-            TimelineOrphanActivity(activity: decoded);
+            TimelineStandaloneActivity(activity: decoded);
         return;
       }
     }
@@ -259,7 +250,10 @@ class ExecutionTracker {
         return;
       }
     }
-    _timeline.value = [...current, TimelineOrphanActivity(activity: decoded)];
+    _timeline.value = [
+      ...current,
+      TimelineStandaloneActivity(activity: decoded)
+    ];
   }
 
   void dispose() {

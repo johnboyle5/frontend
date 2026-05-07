@@ -195,7 +195,8 @@ void main() {
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
   });
 
-  testWidgets('orphan activity rendered when no active step', (tester) async {
+  testWidgets('standalone activity rendered when no active step',
+      (tester) async {
     events.value = const ActivitySnapshot(
       messageId: 'bwrap:call_1',
       activityType: 'skill_tool_call',

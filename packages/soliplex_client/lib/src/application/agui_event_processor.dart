@@ -572,17 +572,6 @@ StreamingState _withToolCallActivity(
 /// `Completed` / `Failed` / `Cancelled` (post-terminal duplicate or
 /// out-of-order event) — we can't synthesize and shouldn't silently
 /// corrupt the existing terminal status either.
-///
-/// Fall-through behavior:
-/// - Status is preserved when already terminal (`Completed`, `Failed`,
-///   `Cancelled`) — overwriting would silently mutate a visible state
-///   the user has already observed.
-/// - Status transitions to `Failed(error: message)` only from `Idle`
-///   (no terminal state to preserve).
-/// - The fall-through always logs at `level: 900`, regardless of whether
-///   buffered thinking is present, so the unexpected protocol case is
-///   observable. The log includes the buffered-thinking length when
-///   relevant since that's data the dropping costs us.
 EventProcessingResult _processRunError(
   Conversation conversation,
   StreamingState streaming,
@@ -603,7 +592,8 @@ EventProcessingResult _processRunError(
       streaming is AwaitingText ? streaming.bufferedThinkingText.length : 0;
   developer.log(
     'RunErrorEvent received while status is non-Running '
-    '(${conversation.status.runtimeType}, message="$message"); '
+    '(status=${conversation.status.runtimeType}, '
+    'streaming=${streaming.runtimeType}, message="$message"); '
     'cannot synthesize without a runId. Possible cases: pre-run error, '
     'duplicate after terminal, or out-of-order event. '
     'Dropping $droppedThinkingChars chars of buffered thinking.',

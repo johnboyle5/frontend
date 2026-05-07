@@ -472,7 +472,7 @@ class RunOrchestrator {
       // non-cancel path leaves a breadcrumb.
       unawaited(
         handle.events
-            .listen(null, onError: (Object e) => _logger.debug('drain: $e'))
+            .listen(null, onError: (Object e) => _logger.warning('drain: $e'))
             .cancel(),
       );
       return;

@@ -57,17 +57,12 @@ Map<String, ExecutionTracker> replayToTrackers(List<RunEventBundle> runs) {
         }
       }
     } else if (hasToolCall) {
-      // Tool-yield: events flow to hoisted pending, no bucket created.
-      // Next normal bundle's first assistant message will absorb them.
       for (final raw in bundle.events) {
         final execEvent = bridgeBaseEvent(raw);
         if (execEvent == null) continue;
         pending.add(execEvent);
       }
     } else {
-      // No-response: no assistant start, no tool call. Bucket events
-      // under the synthesized no-response message id so its captured
-      // thinking attaches to the rendered tile.
       final synthesizedId = '$noResponseIdPrefix${bundle.runId}';
       final bucket = buckets.putIfAbsent(synthesizedId, () => []);
       if (pending.isNotEmpty) {

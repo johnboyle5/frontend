@@ -161,10 +161,6 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
-/// Muted bubble for an assistant `TextMessage` synthesized after a run
-/// terminated without producing assistant text. The icon and copy depend
-/// on the [TerminalReason] so cancelled / failed / finished read
-/// distinctly.
 class _TerminalReasonBubble extends StatelessWidget {
   const _TerminalReasonBubble({required this.reason});
 

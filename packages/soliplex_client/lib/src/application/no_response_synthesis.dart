@@ -2,27 +2,10 @@ import 'package:soliplex_client/src/application/streaming_state.dart';
 import 'package:soliplex_client/src/domain/chat_message.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
 
-/// Id prefix for "no-response" assistant messages — assistant
-/// `TextMessage`s synthesized when a run terminated with buffered thinking
-/// but no actual reply (no `TextMessageStart` / `Content` / `End`).
-///
-/// Three production sites compose ids as `'$noResponseIdPrefix$runId'`
-/// from a typed runId they already hold. They never parse the prefix
-/// back — the runId is always available from the call-site context
-/// (event payload, `RunState`, or `RunEventBundle`). The prefix exists
-/// solely so the three sites agree on the same id for the same run:
-///
-/// 1. [synthesizeNoResponseIfNeeded] (this file) — constructs the id
-///    when synthesizing the message during event processing.
-/// 2. `ExecutionTrackerExtension._rekeyAwaitingForNoResponseIfPresent` —
-///    composes the id from a terminal `RunState.runId` to look up the
-///    synthesized message and rekey the awaiting tracker under it.
-/// 3. `replayToTrackers` in `historical_replay.dart` — composes the id
-///    from `RunEventBundle.runId` to bucket events from no-response
-///    bundles under the synthesized message's tile.
-///
-/// Treat the value as stable; changing it requires updating all three
-/// sites.
+/// Id prefix for synthesized "no-response" assistant `TextMessage`s.
+/// Ids are composed as `'$noResponseIdPrefix$runId'` so synthesis,
+/// tracker rekeying, and historical replay agree on the same id for
+/// the same run.
 const noResponseIdPrefix = 'no-response-';
 
 /// Appends a synthesized "no response" `TextMessage` to [conversation]
@@ -39,14 +22,6 @@ const noResponseIdPrefix = 'no-response-';
 /// Otherwise appends `TextMessage(text: '', thinkingText: <buffered>,
 /// terminalReason: [reason])` so downstream UI can render the muted
 /// "Run finished/failed/cancelled without a response" tile.
-///
-/// Used by:
-/// - `processEvent` `RunFinishedEvent` arm (`reason: finished`).
-/// - `processEvent` `RunErrorEvent` arm (`reason: failed`).
-/// - `RunOrchestrator.cancelRun` (`reason: cancelled`).
-///
-/// Single helper, three call sites — keeps the synthesis condition in one
-/// place.
 Conversation synthesizeNoResponseIfNeeded({
   required Conversation conversation,
   required StreamingState streaming,
