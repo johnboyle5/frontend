@@ -70,7 +70,16 @@ class TextMessage extends ChatMessage {
     this.isStreaming = false,
     this.thinkingText = '',
     this.terminalReason,
-  });
+    this.terminalErrorDetail,
+  })  : assert(
+          terminalReason == null || (text == '' && user == ChatUser.assistant),
+          'TextMessage with terminalReason must be an empty assistant message',
+        ),
+        assert(
+          terminalErrorDetail == null ||
+              terminalReason == TerminalReason.failed,
+          'terminalErrorDetail is only meaningful for terminalReason: failed',
+        );
 
   /// Creates a text message with the given ID and auto-generated timestamp.
   factory TextMessage.create({
@@ -80,6 +89,7 @@ class TextMessage extends ChatMessage {
     bool isStreaming = false,
     String thinkingText = '',
     TerminalReason? terminalReason,
+    String? terminalErrorDetail,
   }) {
     return TextMessage(
       id: id,
@@ -88,6 +98,7 @@ class TextMessage extends ChatMessage {
       isStreaming: isStreaming,
       thinkingText: thinkingText,
       terminalReason: terminalReason,
+      terminalErrorDetail: terminalErrorDetail,
       createdAt: DateTime.now(),
     );
   }
@@ -107,6 +118,11 @@ class TextMessage extends ChatMessage {
   /// response" copy.
   final TerminalReason? terminalReason;
 
+  /// Backend error message attached to a `TerminalReason.failed` synthesis,
+  /// so the persisted tile can render "Run failed: <detail>" instead of a
+  /// generic "Run failed without a response."
+  final String? terminalErrorDetail;
+
   /// Whether this message has thinking text.
   bool get hasThinkingText => thinkingText.isNotEmpty;
 
@@ -119,6 +135,7 @@ class TextMessage extends ChatMessage {
     bool? isStreaming,
     String? thinkingText,
     TerminalReason? terminalReason,
+    String? terminalErrorDetail,
   }) {
     return TextMessage(
       id: id ?? this.id,
@@ -128,6 +145,7 @@ class TextMessage extends ChatMessage {
       isStreaming: isStreaming ?? this.isStreaming,
       thinkingText: thinkingText ?? this.thinkingText,
       terminalReason: terminalReason ?? this.terminalReason,
+      terminalErrorDetail: terminalErrorDetail ?? this.terminalErrorDetail,
     );
   }
 

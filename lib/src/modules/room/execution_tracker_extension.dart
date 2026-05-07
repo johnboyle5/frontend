@@ -88,7 +88,7 @@ class ExecutionTrackerExtension extends SessionExtension
     Conversation? conversation,
   ) {
     if (runId == null || conversation == null) return;
-    final synthesizedId = '$noResponseIdPrefix$runId';
+    final synthesizedId = noResponseMessageId(runId);
     if (conversation.messages.any((m) => m.id == synthesizedId)) {
       _registry.renameAwaitingTo(synthesizedId);
     }

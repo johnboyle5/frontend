@@ -184,6 +184,64 @@ void main() {
 
       expect(message.hasThinkingText, isFalse);
     });
+
+    group('terminal-state invariants', () {
+      test('terminalReason on a non-empty message is rejected', () {
+        // Synthesized terminal-reason tiles must have empty text — they
+        // exist precisely because the model produced no reply. Allowing
+        // both `text != ''` and `terminalReason != null` would let two
+        // independent codepaths render the same TextMessage differently.
+        expect(
+          () => TextMessage.create(
+            id: 'no-response-1',
+            user: ChatUser.assistant,
+            text: 'has text',
+            terminalReason: TerminalReason.finished,
+          ),
+          throwsA(isA<AssertionError>()),
+        );
+      });
+
+      test('terminalReason on a non-assistant message is rejected', () {
+        expect(
+          () => TextMessage.create(
+            id: 'no-response-1',
+            user: ChatUser.user,
+            text: '',
+            terminalReason: TerminalReason.finished,
+          ),
+          throwsA(isA<AssertionError>()),
+        );
+      });
+
+      test('terminalErrorDetail without terminalReason: failed is rejected',
+          () {
+        // Detail is the backend error from RunErrorEvent — only meaningful
+        // when the run actually failed.
+        expect(
+          () => TextMessage.create(
+            id: 'no-response-1',
+            user: ChatUser.assistant,
+            text: '',
+            terminalReason: TerminalReason.cancelled,
+            terminalErrorDetail: 'rate limit',
+          ),
+          throwsA(isA<AssertionError>()),
+        );
+      });
+
+      test('terminalErrorDetail with terminalReason: failed is accepted', () {
+        final message = TextMessage.create(
+          id: 'no-response-1',
+          user: ChatUser.assistant,
+          text: '',
+          terminalReason: TerminalReason.failed,
+          terminalErrorDetail: 'rate limit',
+        );
+
+        expect(message.terminalErrorDetail, equals('rate limit'));
+      });
+    });
   });
 
   group('DroppedEventMessage', () {

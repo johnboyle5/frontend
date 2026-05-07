@@ -126,6 +126,107 @@ void main() {
     expect(find.text('Deep thought'), findsOneWidget);
   });
 
+  group('terminal-reason bubble', () {
+    TextMessage terminalMessage({
+      required TerminalReason reason,
+      String? errorDetail,
+    }) =>
+        TextMessage(
+          id: 'no-response-run-1',
+          user: ChatUser.assistant,
+          createdAt: DateTime(2026),
+          text: '',
+          thinkingText: 'reasoning',
+          terminalReason: reason,
+          terminalErrorDetail: errorDetail,
+        );
+
+    testWidgets('finished renders "Run finished without a response"',
+        (tester) async {
+      await tester.pumpWidget(_wrap(
+        TextMessageTile(
+          roomId: 'r',
+          message: terminalMessage(reason: TerminalReason.finished),
+        ),
+      ));
+
+      expect(find.text('Run finished without a response'), findsOneWidget);
+      expect(find.byIcon(Icons.info_outline), findsOneWidget);
+    });
+
+    testWidgets(
+        'failed without detail falls back to '
+        '"Run failed without a response"', (tester) async {
+      await tester.pumpWidget(_wrap(
+        TextMessageTile(
+          roomId: 'r',
+          message: terminalMessage(reason: TerminalReason.failed),
+        ),
+      ));
+
+      expect(find.text('Run failed without a response'), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    });
+
+    testWidgets('failed with detail renders "Run failed: <error>"',
+        (tester) async {
+      await tester.pumpWidget(_wrap(
+        TextMessageTile(
+          roomId: 'r',
+          message: terminalMessage(
+            reason: TerminalReason.failed,
+            errorDetail: 'rate limit exceeded',
+          ),
+        ),
+      ));
+
+      // Backend error must reach the persisted tile (not just the
+      // transient send-error banner) so reload still shows the cause.
+      expect(find.text('Run failed: rate limit exceeded'), findsOneWidget);
+      expect(
+        find.text('Run failed without a response'),
+        findsNothing,
+        reason: 'detail must replace the generic copy, not append to it',
+      );
+    });
+
+    testWidgets('cancelled renders "Run cancelled without a response"',
+        (tester) async {
+      await tester.pumpWidget(_wrap(
+        TextMessageTile(
+          roomId: 'r',
+          message: terminalMessage(reason: TerminalReason.cancelled),
+        ),
+      ));
+
+      expect(find.text('Run cancelled without a response'), findsOneWidget);
+      expect(find.byIcon(Icons.cancel_outlined), findsOneWidget);
+    });
+
+    testWidgets('terminalReason: null falls back to the normal bubble',
+        (tester) async {
+      // Regression guard: the bubble switch must not accidentally render
+      // the muted terminal-reason copy on a normal assistant reply.
+      await tester.pumpWidget(_wrap(
+        TextMessageTile(
+          roomId: 'r',
+          message: TextMessage(
+            id: 'asst-1',
+            user: ChatUser.assistant,
+            createdAt: DateTime(2026),
+            text: 'Real reply',
+          ),
+        ),
+      ));
+
+      expect(find.text('Real reply'), findsOneWidget);
+      expect(
+        find.textContaining('without a response'),
+        findsNothing,
+      );
+    });
+  });
+
   testWidgets('fallback thinking block persists collapse across remount',
       (tester) async {
     // Mirror of the expand-persists test: collapse (false) must also be

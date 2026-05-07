@@ -1,0 +1,137 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:soliplex_agent/soliplex_agent.dart';
+import 'package:soliplex_frontend/src/modules/room/execution_tracker_extension.dart';
+import 'package:soliplex_frontend/src/modules/room/tracker_registry.dart';
+
+const _threadId = 'thread-1';
+const _key = (serverId: 'server-1', roomId: 'room-1', threadId: _threadId);
+const _runId = 'run-1';
+
+class _FakeSession implements AgentSession {
+  final Signal<RunState> _runState = Signal<RunState>(const IdleState());
+  final Signal<ExecutionEvent?> _events = Signal<ExecutionEvent?>(null);
+
+  @override
+  ReadonlySignal<RunState> get runState => _runState.readonly();
+
+  @override
+  ReadonlySignal<ExecutionEvent?> get lastExecutionEvent => _events.readonly();
+
+  void emitRunState(RunState state) => _runState.value = state;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('_FakeSession.${invocation.memberName}');
+}
+
+Conversation _conversationWith(List<ChatMessage> messages) =>
+    Conversation.empty(threadId: _threadId).copyWith(messages: messages);
+
+TextMessage _synthesized(String runId) => TextMessage.create(
+      id: noResponseMessageId(runId),
+      user: ChatUser.assistant,
+      text: '',
+      thinkingText: 'reasoning',
+      terminalReason: TerminalReason.cancelled,
+    );
+
+void main() {
+  late _FakeSession session;
+  late ExecutionTrackerExtension ext;
+
+  setUp(() async {
+    session = _FakeSession();
+    ext = ExecutionTrackerExtension();
+    await ext.onAttach(session);
+  });
+
+  tearDown(() => ext.onDispose());
+
+  test('rekeys awaiting tracker when terminal state has synthesized message',
+      () {
+    // Seed an awaiting tracker by entering RunningState with AwaitingText.
+    session.emitRunState(
+      const RunningState(
+        threadKey: _key,
+        runId: _runId,
+        conversation: Conversation(threadId: _threadId),
+        streaming: AwaitingText(),
+      ),
+    );
+    expect(ext.trackers.containsKey(awaitingTrackerKey), isTrue);
+
+    final synthesized = _synthesized(_runId);
+    session.emitRunState(
+      CancelledState(
+        threadKey: _key,
+        runId: _runId,
+        conversation: _conversationWith([synthesized]),
+      ),
+    );
+
+    expect(ext.trackers.containsKey(awaitingTrackerKey), isFalse);
+    expect(ext.trackers.containsKey(noResponseMessageId(_runId)), isTrue);
+  });
+
+  test('skips rekey when runId is null (e.g., pre-run failure)', () {
+    session.emitRunState(
+      const RunningState(
+        threadKey: _key,
+        runId: _runId,
+        conversation: Conversation(threadId: _threadId),
+        streaming: AwaitingText(),
+      ),
+    );
+    expect(ext.trackers.containsKey(awaitingTrackerKey), isTrue);
+
+    // Synthesized message is present but runId is null — terminal state
+    // never resolved a run, so the rekey is skipped instead of crashing.
+    session.emitRunState(
+      FailedState(
+        threadKey: _key,
+        reason: FailureReason.internalError,
+        error: 'pre-run',
+      ),
+    );
+
+    // The awaiting tracker is frozen on terminal but not renamed.
+    expect(ext.trackers.containsKey(awaitingTrackerKey), isTrue);
+    expect(
+      ext.trackers.containsKey(noResponseMessageId(_runId)),
+      isFalse,
+    );
+  });
+
+  test('skips rekey when synthesized message is not in the conversation', () {
+    session.emitRunState(
+      const RunningState(
+        threadKey: _key,
+        runId: _runId,
+        conversation: Conversation(threadId: _threadId),
+        streaming: AwaitingText(),
+      ),
+    );
+
+    // Conversation has no synthesized "no response" message — the run
+    // produced an actual reply that's already attached. No rekey needed.
+    session.emitRunState(
+      CompletedState(
+        threadKey: _key,
+        runId: _runId,
+        conversation: _conversationWith([
+          TextMessage.create(
+            id: 'asst-1',
+            user: ChatUser.assistant,
+            text: 'hello',
+          ),
+        ]),
+      ),
+    );
+
+    expect(ext.trackers.containsKey(awaitingTrackerKey), isTrue);
+    expect(
+      ext.trackers.containsKey(noResponseMessageId(_runId)),
+      isFalse,
+    );
+  });
+}

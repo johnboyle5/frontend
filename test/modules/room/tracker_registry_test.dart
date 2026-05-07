@@ -195,6 +195,57 @@ void main() {
     });
   });
 
+  group('renameAwaitingTo', () {
+    test('moves the awaiting tracker to the new key', () {
+      registry.onStreaming(
+        const AwaitingText(currentActivity: ThinkingActivity()),
+        events,
+      );
+      final awaitingTracker = registry.trackers[awaitingTrackerKey];
+
+      registry.renameAwaitingTo('no-response-run-1');
+
+      expect(registry.trackers.containsKey(awaitingTrackerKey), isFalse);
+      expect(registry.trackers['no-response-run-1'], same(awaitingTracker));
+    });
+
+    test('moved tracker is the one frozen on subsequent onRunTerminated', () {
+      // Verifies _activeId was rewritten from awaitingTrackerKey to the
+      // synthesized id; otherwise _freezeActive would no-op (the awaiting
+      // entry no longer exists under that key).
+      registry.onStreaming(
+        const AwaitingText(currentActivity: ThinkingActivity()),
+        events,
+      );
+      registry.renameAwaitingTo('no-response-run-1');
+
+      registry.onRunTerminated();
+
+      expect(registry.trackers['no-response-run-1']!.isFrozen, isTrue);
+    });
+
+    test('no-ops when the new key equals the awaiting sentinel', () {
+      registry.onStreaming(
+        const AwaitingText(currentActivity: ThinkingActivity()),
+        events,
+      );
+      final before = registry.trackers[awaitingTrackerKey];
+
+      registry.renameAwaitingTo(awaitingTrackerKey);
+
+      expect(registry.trackers[awaitingTrackerKey], same(before));
+    });
+
+    test('safely no-ops when no awaiting tracker exists', () {
+      // Synthesized message exists in the conversation but the awaiting
+      // tracker was never created (or already disposed). Must not throw
+      // and must not corrupt registry state.
+      registry.renameAwaitingTo('no-response-run-1');
+
+      expect(registry.trackers, isEmpty);
+    });
+  });
+
   test('ignores AwaitingText when tracker already active', () {
     registry.onStreaming(
       const TextStreaming(

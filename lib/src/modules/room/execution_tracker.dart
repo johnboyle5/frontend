@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:soliplex_agent/soliplex_agent.dart';
 
 import 'execution_step.dart';
@@ -110,7 +112,15 @@ class ExecutionTracker {
       case RunCompleted():
         _completeAllSteps(StepStatus.completed);
         _isThinkingStreaming.value = false;
-      case RunFailed() || RunCancelled():
+      case RunFailed(:final error):
+        developer.log(
+          'Run failed: $error',
+          name: 'soliplex_frontend.execution_tracker',
+          level: 900,
+        );
+        _completeAllSteps(StepStatus.failed);
+        _isThinkingStreaming.value = false;
+      case RunCancelled():
         _completeAllSteps(StepStatus.failed);
         _isThinkingStreaming.value = false;
       case ActivitySnapshot(

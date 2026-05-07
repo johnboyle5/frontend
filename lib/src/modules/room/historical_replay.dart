@@ -19,8 +19,8 @@ import 'execution_tracker.dart';
 ///   captures the call).
 /// - **No-response**: neither assistant `TextMessageStart` nor
 ///   `ToolCallStart`. Bucket events (including any prior pending) under
-///   `'$noResponseIdPrefix${bundle.runId}'` so the synthesized
-///   no-response tile has a tracker to attach to.
+///   [noResponseMessageId] for the run so the synthesized no-response
+///   tile has a tracker to attach to.
 Map<String, ExecutionTracker> replayToTrackers(List<RunEventBundle> runs) {
   final buckets = <String, List<ExecutionEvent>>{};
   // Hoisted across bundles: tool-yield events accumulate here until the
@@ -63,7 +63,7 @@ Map<String, ExecutionTracker> replayToTrackers(List<RunEventBundle> runs) {
         pending.add(execEvent);
       }
     } else {
-      final synthesizedId = '$noResponseIdPrefix${bundle.runId}';
+      final synthesizedId = noResponseMessageId(bundle.runId);
       final bucket = buckets.putIfAbsent(synthesizedId, () => []);
       if (pending.isNotEmpty) {
         bucket.addAll(pending);
@@ -77,32 +77,14 @@ Map<String, ExecutionTracker> replayToTrackers(List<RunEventBundle> runs) {
     }
   }
 
-  // TODO(no-response-tool-yield): Leftover `pending` events are dropped
-  // here. This loses data when the last bundle in a thread is a
-  // tool-yield (has ToolCallStartEvent, no assistant TextMessageStart)
-  // and no follow-up bundle ever arrives.
-  //
-  // To preserve them, a post-pass would need to:
-  //   1. Detect the case after the bundle loop completes.
-  //   2. Bucket leftover `pending` under
-  //      `'${noResponseIdPrefix}${lastBundle.runId}'`.
-  //   3. Inject a corresponding synthesized `TextMessage` into
-  //      `history.messages` so the tracker has a tile to attach to.
-  //
-  // Skipped because the case requires global knowledge of the stream end,
-  // which breaks the event-driven contract used by the rest of synthesis.
-  //
-  // Reproduction recipe:
-  //   1. Open a thread; send a prompt that triggers a tool call.
-  //   2. Wait for the model to start the tool yield (thinking + ToolCallStart).
-  //   3. Force-quit the app, kill the network, or otherwise abort before the
-  //      tool result is submitted and a follow-up run completes.
-  //   4. Re-open the thread. The yielding run's thinking will be missing.
+  // A trailing tool-yield bundle's hoisted events have no follow-up
+  // assistant message to absorb them; logged here so the case is at
+  // least observable. See https://github.com/soliplex/frontend/issues/221.
   if (pending.isNotEmpty) {
     developer.log(
       'replayToTrackers: dropping ${pending.length} unattached events from '
       'a trailing tool-yield bundle (no follow-up bundle). See '
-      'TODO(no-response-tool-yield) above.',
+      'github.com/soliplex/frontend/issues/221.',
       name: 'soliplex_frontend.historical_replay',
       level: 900,
     );

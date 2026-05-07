@@ -881,6 +881,7 @@ class RunOrchestrator {
     _setState(
       FailedState(
         threadKey: running.threadKey,
+        runId: running.runId,
         reason: FailureReason.networkLost,
         error: 'Stream ended without terminal event',
         conversation: withCitations,

@@ -138,7 +138,10 @@ class _MessageBubble extends StatelessWidget {
     final terminalReason = message.terminalReason;
 
     if (terminalReason != null) {
-      return _TerminalReasonBubble(reason: terminalReason);
+      return _TerminalReasonBubble(
+        reason: terminalReason,
+        errorDetail: message.terminalErrorDetail,
+      );
     }
 
     return Container(
@@ -162,9 +165,10 @@ class _MessageBubble extends StatelessWidget {
 }
 
 class _TerminalReasonBubble extends StatelessWidget {
-  const _TerminalReasonBubble({required this.reason});
+  const _TerminalReasonBubble({required this.reason, this.errorDetail});
 
   final TerminalReason reason;
+  final String? errorDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -176,7 +180,9 @@ class _TerminalReasonBubble extends StatelessWidget {
         ),
       TerminalReason.failed => (
           Icons.error_outline,
-          'Run failed without a response',
+          errorDetail != null
+              ? 'Run failed: $errorDetail'
+              : 'Run failed without a response',
         ),
       TerminalReason.cancelled => (
           Icons.cancel_outlined,

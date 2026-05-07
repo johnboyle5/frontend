@@ -584,6 +584,7 @@ EventProcessingResult _processRunError(
         streaming: streaming,
         runId: runId,
         reason: TerminalReason.failed,
+        terminalErrorDetail: message,
       ).withStatus(Failed(error: message)),
       streaming: const AwaitingText(),
     );

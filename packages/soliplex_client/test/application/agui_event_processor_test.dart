@@ -99,6 +99,30 @@ void main() {
       });
 
       test(
+          'RunFinishedEvent while streaming text does NOT '
+          'synthesize a no-response message', () {
+        // A reply was in progress (TextMessageStart fired). The reply is
+        // the response — there's nothing to synthesize.
+        final runningConversation = conversation.withStatus(
+          const Running(runId: 'run-1'),
+        );
+        const textStreaming = app_streaming.TextStreaming(
+          messageId: 'msg-1',
+          user: ChatUser.assistant,
+          text: 'partial',
+          thinkingText: 'reasoning',
+        );
+        const event = RunFinishedEvent(threadId: 'thread-1', runId: 'run-1');
+
+        final result = processEvent(runningConversation, textStreaming, event);
+
+        expect(
+          result.conversation.messages.whereType<TextMessage>(),
+          isEmpty,
+        );
+      });
+
+      test(
           'RunFinishedEvent with pending tool call does NOT '
           'synthesize a no-response message', () {
         final runningConversation =
@@ -172,6 +196,9 @@ void main() {
 
         final synthesized = result.conversation.messages.last as TextMessage;
         expect(synthesized.terminalReason, equals(TerminalReason.failed));
+        // The backend error must be attached to the persisted tile so it
+        // survives reload — not just the transient send-error banner.
+        expect(synthesized.terminalErrorDetail, equals('boom'));
       });
     });
 
