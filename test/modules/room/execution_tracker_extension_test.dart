@@ -27,12 +27,10 @@ class _FakeSession implements AgentSession {
 Conversation _conversationWith(List<ChatMessage> messages) =>
     Conversation.empty(threadId: _threadId).copyWith(messages: messages);
 
-TextMessage _synthesized(String runId) => TextMessage.create(
+NoResponseTile _synthesized(String runId) => NoResponseTile.create(
       id: noResponseMessageId(runId),
-      user: ChatUser.assistant,
-      text: '',
       thinkingText: 'reasoning',
-      terminalReason: TerminalReason.cancelled,
+      reason: TerminalReason.cancelled,
     );
 
 void main() {

@@ -2,16 +2,16 @@ import 'package:soliplex_client/src/application/streaming_state.dart';
 import 'package:soliplex_client/src/domain/chat_message.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
 
-/// Id of the synthesized "no-response" assistant `TextMessage` for [runId].
-/// Synthesis, tracker rekeying, and historical replay all derive ids
-/// through this helper so they agree on the same id for the same run.
+/// Single source of truth for synthesized no-response message ids;
+/// synthesis, tracker rekeying, and historical replay must derive ids
+/// through this helper so they agree for the same run.
 String noResponseMessageId(String runId) => '$_noResponseIdPrefix$runId';
 
 const _noResponseIdPrefix = 'no-response-';
 
-/// Appends a synthesized "no response" `TextMessage` to [conversation]
-/// when a run has reached a terminal state with buffered thinking but no
-/// assistant `TextMessageStart` / `Content` / `End` for an actual reply.
+/// Appends a synthesized [NoResponseTile] to [conversation] when a run has
+/// reached a terminal state with buffered thinking but no assistant
+/// `TextMessageStart` / `Content` / `End` for an actual reply.
 ///
 /// Returns [conversation] unchanged when:
 /// - [streaming] is not [AwaitingText] (a reply was in progress).
@@ -20,11 +20,10 @@ const _noResponseIdPrefix = 'no-response-';
 ///   `streaming` (the run is yielding to client tools — the tool call
 ///   IS the response, not a missing one).
 ///
-/// Otherwise appends `TextMessage(text: '', thinkingText: <buffered>,
-/// terminalReason: [reason], terminalErrorDetail: [terminalErrorDetail])`
-/// so downstream UI can render the muted
-/// "Run finished/failed/cancelled without a response" tile, optionally
-/// carrying the backend error message for the `failed` case.
+/// Otherwise appends a [NoResponseTile] carrying [reason] and the buffered
+/// thinking so downstream UI can render the muted "Run
+/// finished/failed/cancelled without a response" tile, optionally with the
+/// backend error message for the `failed` case.
 Conversation synthesizeNoResponseIfNeeded({
   required Conversation conversation,
   required StreamingState streaming,
@@ -37,13 +36,11 @@ Conversation synthesizeNoResponseIfNeeded({
   if (_hasUnresolvedToolCalls(conversation)) return conversation;
 
   return conversation.withAppendedMessage(
-    TextMessage.create(
+    NoResponseTile.create(
       id: noResponseMessageId(runId),
-      user: ChatUser.assistant,
-      text: '',
       thinkingText: streaming.bufferedThinkingText,
-      terminalReason: reason,
-      terminalErrorDetail: terminalErrorDetail,
+      reason: reason,
+      errorDetail: terminalErrorDetail,
     ),
   );
 }

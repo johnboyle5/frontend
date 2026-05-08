@@ -561,8 +561,6 @@ StreamingState _withToolCallActivity(
   };
 }
 
-// Run-error handling
-
 /// Handles `RunErrorEvent` with a runId-aware no-response synthesis path.
 ///
 /// The synthesis helper needs a runId to mint a stable message id. The
@@ -570,8 +568,8 @@ StreamingState _withToolCallActivity(
 /// event itself doesn't carry one. When the conversation is in any other
 /// status at the time `RunErrorEvent` arrives — `Idle` (pre-run error),
 /// `Completed` / `Failed` / `Cancelled` (post-terminal duplicate or
-/// out-of-order event) — we can't synthesize and shouldn't silently
-/// corrupt the existing terminal status either.
+/// out-of-order event) — synthesis is impossible without a runId, and the
+/// existing terminal status must not be overwritten.
 EventProcessingResult _processRunError(
   Conversation conversation,
   StreamingState streaming,
@@ -591,13 +589,15 @@ EventProcessingResult _processRunError(
   }
   final droppedThinkingChars =
       streaming is AwaitingText ? streaming.bufferedThinkingText.length : 0;
+  final thinkingNote = droppedThinkingChars > 0
+      ? ' Discarding $droppedThinkingChars chars of buffered thinking.'
+      : '';
   developer.log(
     'RunErrorEvent received while status is non-Running '
     '(status=${conversation.status.runtimeType}, '
     'streaming=${streaming.runtimeType}, message="$message"); '
     'cannot synthesize without a runId. Possible cases: pre-run error, '
-    'duplicate after terminal, or out-of-order event. '
-    'Dropping $droppedThinkingChars chars of buffered thinking.',
+    'duplicate after terminal, or out-of-order event.$thinkingNote',
     name: 'soliplex_client.event_processor',
     level: 900,
   );

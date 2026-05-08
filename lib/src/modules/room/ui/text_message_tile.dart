@@ -135,14 +135,6 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isUser = message.user == ChatUser.user;
-    final terminalReason = message.terminalReason;
-
-    if (terminalReason != null) {
-      return _TerminalReasonBubble(
-        reason: terminalReason,
-        errorDetail: message.terminalErrorDetail,
-      );
-    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -160,56 +152,6 @@ class _MessageBubble extends StatelessWidget {
           : message.text.isEmpty
               ? const Text('...')
               : FlutterMarkdownPlusRenderer(data: message.text),
-    );
-  }
-}
-
-class _TerminalReasonBubble extends StatelessWidget {
-  const _TerminalReasonBubble({required this.reason, this.errorDetail});
-
-  final TerminalReason reason;
-  final String? errorDetail;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final (icon, label) = switch (reason) {
-      TerminalReason.finished => (
-          Icons.info_outline,
-          'Run finished without a response',
-        ),
-      TerminalReason.failed => (
-          Icons.error_outline,
-          errorDetail != null
-              ? 'Run failed: $errorDetail'
-              : 'Run failed without a response',
-        ),
-      TerminalReason.cancelled => (
-          Icons.cancel_outlined,
-          'Run cancelled without a response',
-        ),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

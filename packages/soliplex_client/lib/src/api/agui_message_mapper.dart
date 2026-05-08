@@ -15,8 +15,8 @@ import 'package:soliplex_client/src/domain/chat_message.dart';
 /// - [ToolCallMessage] → [AssistantMessage] with toolCalls, followed by
 ///   [ToolMessage]s for completed tool calls
 /// - [GenUiMessage] → [AssistantMessage] with descriptive content
-/// - [ErrorMessage], [LoadingMessage], and [DroppedEventMessage] are
-///   skipped (transient or frontend-only messages)
+/// - [ErrorMessage], [LoadingMessage], [DroppedEventMessage], and
+///   [NoResponseTile] are skipped (transient or frontend-only messages)
 List<Message> convertToAgui(List<ChatMessage> chatMessages) {
   final result = <Message>[];
 
@@ -34,6 +34,7 @@ List<Message> convertToAgui(List<ChatMessage> chatMessages) {
       case ErrorMessage():
       case LoadingMessage():
       case DroppedEventMessage():
+      case NoResponseTile():
         // Skip transient or frontend-only messages
         continue;
     }

@@ -5,6 +5,7 @@ import '../execution_tracker.dart';
 import 'error_message_tile.dart';
 import 'gen_ui_tile.dart';
 import 'loading_message_tile.dart';
+import 'no_response_tile_widget.dart';
 import 'text_message_tile.dart';
 import 'tool_call_tile.dart';
 import 'workdir_files_section.dart';
@@ -58,6 +59,12 @@ class MessageTile extends StatelessWidget {
             onShowChunkVisualization: onShowChunkVisualization,
             onFetchWorkdirFiles: onFetchWorkdirFiles,
             onDownloadWorkdirFile: onDownloadWorkdirFile,
+            executionTracker: executionTracker,
+            streamingActivity: streamingActivity,
+          ),
+        final NoResponseTile m => NoResponseTileWidget(
+            roomId: roomId,
+            message: m,
             executionTracker: executionTracker,
             streamingActivity: streamingActivity,
           ),

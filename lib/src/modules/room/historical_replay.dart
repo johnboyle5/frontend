@@ -14,9 +14,7 @@ import 'execution_tracker.dart';
 ///   prior tool-yield bundles drain into the first assistant bucket.
 /// - **Tool-yield**: contains a `ToolCallStart` but no assistant
 ///   `TextMessageStart`. Events flow into the hoisted `pending` so the
-///   next normal bundle's first assistant message absorbs them — the
-///   live path tracks the same way (the active tracker at tool dispatch
-///   captures the call).
+///   next normal bundle's first assistant message absorbs them.
 /// - **No-response**: neither assistant `TextMessageStart` nor
 ///   `ToolCallStart`. Bucket events (including any prior pending) under
 ///   [noResponseMessageId] for the run so the synthesized no-response
@@ -79,7 +77,7 @@ Map<String, ExecutionTracker> replayToTrackers(List<RunEventBundle> runs) {
 
   // A trailing tool-yield bundle's hoisted events have no follow-up
   // assistant message to absorb them; logged here so the case is at
-  // least observable. See https://github.com/soliplex/frontend/issues/221.
+  // least observable.
   if (pending.isNotEmpty) {
     developer.log(
       'replayToTrackers: dropping ${pending.length} unattached events from '

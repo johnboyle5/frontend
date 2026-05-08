@@ -184,63 +184,52 @@ void main() {
 
       expect(message.hasThinkingText, isFalse);
     });
+  });
 
-    group('terminal-state invariants', () {
-      test('terminalReason on a non-empty message is rejected', () {
-        // Synthesized terminal-reason tiles must have empty text — they
-        // exist precisely because the model produced no reply. Allowing
-        // both `text != ''` and `terminalReason != null` would let two
-        // independent codepaths render the same TextMessage differently.
-        expect(
-          () => TextMessage.create(
-            id: 'no-response-1',
-            user: ChatUser.assistant,
-            text: 'has text',
-            terminalReason: TerminalReason.finished,
-          ),
-          throwsA(isA<AssertionError>()),
-        );
-      });
+  group('NoResponseTile', () {
+    test('synthesized tile is always an assistant message', () {
+      final tile = NoResponseTile.create(
+        id: 'no-response-run-1',
+        thinkingText: '',
+        reason: TerminalReason.finished,
+      );
 
-      test('terminalReason on a non-assistant message is rejected', () {
-        expect(
-          () => TextMessage.create(
-            id: 'no-response-1',
-            user: ChatUser.user,
-            text: '',
-            terminalReason: TerminalReason.finished,
-          ),
-          throwsA(isA<AssertionError>()),
-        );
-      });
+      expect(tile.user, equals(ChatUser.assistant));
+    });
 
-      test('terminalErrorDetail without terminalReason: failed is rejected',
-          () {
-        // Detail is the backend error from RunErrorEvent — only meaningful
-        // when the run actually failed.
-        expect(
-          () => TextMessage.create(
-            id: 'no-response-1',
-            user: ChatUser.assistant,
-            text: '',
-            terminalReason: TerminalReason.cancelled,
-            terminalErrorDetail: 'rate limit',
-          ),
-          throwsA(isA<AssertionError>()),
-        );
-      });
+    test('hasThinkingText reflects thinking content', () {
+      final empty = NoResponseTile.create(
+        id: 'no-response-run-1',
+        thinkingText: '',
+        reason: TerminalReason.failed,
+      );
+      final filled = NoResponseTile.create(
+        id: 'no-response-run-2',
+        thinkingText: 'reasoning',
+        reason: TerminalReason.failed,
+      );
 
-      test('terminalErrorDetail with terminalReason: failed is accepted', () {
-        final message = TextMessage.create(
-          id: 'no-response-1',
-          user: ChatUser.assistant,
-          text: '',
-          terminalReason: TerminalReason.failed,
-          terminalErrorDetail: 'rate limit',
-        );
+      expect(empty.hasThinkingText, isFalse);
+      expect(filled.hasThinkingText, isTrue);
+    });
 
-        expect(message.terminalErrorDetail, equals('rate limit'));
-      });
+    test('errorDetail is optional and survives construction', () {
+      // Backend error must reach the persisted tile so reload still shows
+      // the cause.
+      final withDetail = NoResponseTile.create(
+        id: 'no-response-run-1',
+        thinkingText: '',
+        reason: TerminalReason.failed,
+        errorDetail: 'rate limit',
+      );
+      final withoutDetail = NoResponseTile.create(
+        id: 'no-response-run-2',
+        thinkingText: '',
+        reason: TerminalReason.cancelled,
+      );
+
+      expect(withDetail.errorDetail, equals('rate limit'));
+      expect(withoutDetail.errorDetail, isNull);
     });
   });
 
@@ -481,6 +470,11 @@ void main() {
           source: DropSource.decode,
           reason: 'malformed JSON',
         ),
+        NoResponseTile.create(
+          id: 'no-response-run-1',
+          thinkingText: '',
+          reason: TerminalReason.finished,
+        ),
       ];
 
       final types = messages.map((m) {
@@ -491,12 +485,21 @@ void main() {
           GenUiMessage() => 'genUi',
           LoadingMessage() => 'loading',
           DroppedEventMessage() => 'dropped',
+          NoResponseTile() => 'noResponse',
         };
       }).toList();
 
       expect(
         types,
-        equals(['text', 'error', 'toolCall', 'genUi', 'loading', 'dropped']),
+        equals([
+          'text',
+          'error',
+          'toolCall',
+          'genUi',
+          'loading',
+          'dropped',
+          'noResponse',
+        ]),
       );
     });
 

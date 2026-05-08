@@ -74,15 +74,14 @@ void main() {
         final result =
             processEvent(runningConversation, streamingWithThinking, event);
 
-        final synthesized = result.conversation.messages.last as TextMessage;
+        final synthesized = result.conversation.messages.last as NoResponseTile;
         expect(synthesized.id, equals('no-response-run-1'));
         expect(synthesized.user, equals(ChatUser.assistant));
-        expect(synthesized.text, isEmpty);
         expect(
           synthesized.thinkingText,
           equals('I considered the options...'),
         );
-        expect(synthesized.terminalReason, equals(TerminalReason.finished));
+        expect(synthesized.reason, equals(TerminalReason.finished));
       });
 
       test(
@@ -117,7 +116,7 @@ void main() {
         final result = processEvent(runningConversation, textStreaming, event);
 
         expect(
-          result.conversation.messages.whereType<TextMessage>(),
+          result.conversation.messages.whereType<NoResponseTile>(),
           isEmpty,
         );
       });
@@ -144,7 +143,7 @@ void main() {
         );
 
         expect(
-          result.conversation.messages.whereType<TextMessage>(),
+          result.conversation.messages.whereType<NoResponseTile>(),
           isEmpty,
         );
       });
@@ -194,11 +193,11 @@ void main() {
           event,
         );
 
-        final synthesized = result.conversation.messages.last as TextMessage;
-        expect(synthesized.terminalReason, equals(TerminalReason.failed));
+        final synthesized = result.conversation.messages.last as NoResponseTile;
+        expect(synthesized.reason, equals(TerminalReason.failed));
         // The backend error must be attached to the persisted tile so it
         // survives reload — not just the transient send-error banner.
-        expect(synthesized.terminalErrorDetail, equals('boom'));
+        expect(synthesized.errorDetail, equals('boom'));
       });
     });
 

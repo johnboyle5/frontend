@@ -400,11 +400,11 @@ void main() {
       orchestrator.cancelRun();
 
       final cancelled = orchestrator.currentState as CancelledState;
-      final synthesized = cancelled.conversation!.messages.last as TextMessage;
+      final synthesized =
+          cancelled.conversation!.messages.last as NoResponseTile;
       expect(synthesized.id, equals('no-response-$_runId'));
-      expect(synthesized.terminalReason, equals(TerminalReason.cancelled));
+      expect(synthesized.reason, equals(TerminalReason.cancelled));
       expect(synthesized.thinkingText, equals('considering options'));
-      expect(synthesized.text, isEmpty);
 
       await controller.close();
     });

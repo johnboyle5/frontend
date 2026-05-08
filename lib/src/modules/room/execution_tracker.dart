@@ -62,11 +62,8 @@ class ExecutionTracker {
   ReadonlySignal<List<TimelineEntry>> get timeline => _timeline;
 
   /// Marks the tracker terminal: clears the spinner, completes any
-  /// still-active steps, and releases the subscription.
-  ///
-  /// `_completeAllSteps` and the spinner reset must run before
-  /// `_isFrozen = true`. `_completeAllSteps` asserts non-frozen so a
-  /// maintainer who swaps the order fails fast in debug.
+  /// still-active steps, and releases the subscription. `_completeAllSteps`
+  /// asserts non-frozen, so it must run before `_isFrozen = true`.
   void freeze() {
     _isThinkingStreaming.value = false;
     _completeAllSteps(StepStatus.completed);
