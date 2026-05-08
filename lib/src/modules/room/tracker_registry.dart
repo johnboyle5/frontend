@@ -79,6 +79,18 @@ class TrackerRegistry {
       );
       return;
     }
+    final clobbered = _trackers[key];
+    if (clobbered != null) {
+      // `seedHistorical` declared "live always wins over historical", but
+      // an unguarded overwrite here loses any tracker (live or historical)
+      // already bound to the same key. Freeze the loser so its
+      // subscription is released and warn so the divergence is observable.
+      clobbered.freeze();
+      _logger.warning(
+        'renameAwaitingTo overwrote an existing tracker at the target key.',
+        attributes: {'targetKey': key},
+      );
+    }
     _trackers[key] = tracker;
     if (_activeId == awaitingTrackerKey) {
       _activeId = key;

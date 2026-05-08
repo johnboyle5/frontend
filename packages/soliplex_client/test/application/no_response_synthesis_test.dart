@@ -5,57 +5,11 @@ import 'package:soliplex_client/src/domain/conversation.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('synthesizeNoResponseIfNeeded', () {
+  group('synthesize…NoResponse', () {
     late Conversation conversation;
 
     setUp(() {
       conversation = Conversation.empty(threadId: 'thread-1');
-    });
-
-    group('preconditions', () {
-      test(
-          'throws ArgumentError when reason is failed without '
-          'terminalErrorDetail', () {
-        expect(
-          () => synthesizeNoResponseIfNeeded(
-            conversation: conversation,
-            streaming: const AwaitingText(bufferedThinkingText: 'thinking'),
-            runId: 'run-1',
-            reason: TerminalReason.failed,
-          ),
-          throwsArgumentError,
-        );
-      });
-
-      test(
-          'throws ArgumentError when reason is finished but '
-          'terminalErrorDetail is set', () {
-        expect(
-          () => synthesizeNoResponseIfNeeded(
-            conversation: conversation,
-            streaming: const AwaitingText(bufferedThinkingText: 'thinking'),
-            runId: 'run-1',
-            reason: TerminalReason.finished,
-            terminalErrorDetail: 'unexpected detail',
-          ),
-          throwsArgumentError,
-        );
-      });
-
-      test(
-          'throws ArgumentError when reason is cancelled but '
-          'terminalErrorDetail is set', () {
-        expect(
-          () => synthesizeNoResponseIfNeeded(
-            conversation: conversation,
-            streaming: const AwaitingText(bufferedThinkingText: 'thinking'),
-            runId: 'run-1',
-            reason: TerminalReason.cancelled,
-            terminalErrorDetail: 'unexpected detail',
-          ),
-          throwsArgumentError,
-        );
-      });
     });
 
     group('decline conditions', () {
@@ -67,29 +21,33 @@ void main() {
           thinkingText: 'reasoning',
         );
 
-        final result = synthesizeNoResponseIfNeeded(
+        final result = synthesizeFinishedNoResponse(
           conversation: conversation,
           streaming: streaming,
           runId: 'run-1',
-          reason: TerminalReason.finished,
         );
 
         expect(result.synthesized, isFalse);
-        expect(result.conversation, same(conversation));
+        expect(
+          result.conversation.messages.whereType<NoResponseTile>(),
+          isEmpty,
+        );
       });
 
       test('declines when buffered thinking is empty', () {
         const streaming = AwaitingText();
 
-        final result = synthesizeNoResponseIfNeeded(
+        final result = synthesizeFinishedNoResponse(
           conversation: conversation,
           streaming: streaming,
           runId: 'run-1',
-          reason: TerminalReason.finished,
         );
 
         expect(result.synthesized, isFalse);
-        expect(result.conversation, same(conversation));
+        expect(
+          result.conversation.messages.whereType<NoResponseTile>(),
+          isEmpty,
+        );
       });
 
       test('declines when a tool call is pending', () {
@@ -100,15 +58,17 @@ void main() {
           ),
         );
 
-        final result = synthesizeNoResponseIfNeeded(
+        final result = synthesizeFinishedNoResponse(
           conversation: convo,
           streaming: const AwaitingText(bufferedThinkingText: 'thinking'),
           runId: 'run-1',
-          reason: TerminalReason.finished,
         );
 
         expect(result.synthesized, isFalse);
-        expect(result.conversation, same(convo));
+        expect(
+          result.conversation.messages.whereType<NoResponseTile>(),
+          isEmpty,
+        );
       });
 
       test('declines when a tool call is streaming', () {
@@ -120,11 +80,10 @@ void main() {
           ),
         );
 
-        final result = synthesizeNoResponseIfNeeded(
+        final result = synthesizeFinishedNoResponse(
           conversation: convo,
           streaming: const AwaitingText(bufferedThinkingText: 'thinking'),
           runId: 'run-1',
-          reason: TerminalReason.finished,
         );
 
         expect(result.synthesized, isFalse);
@@ -139,11 +98,10 @@ void main() {
           ),
         );
 
-        final result = synthesizeNoResponseIfNeeded(
+        final result = synthesizeFinishedNoResponse(
           conversation: convo,
           streaming: const AwaitingText(bufferedThinkingText: 'thinking'),
           runId: 'run-1',
-          reason: TerminalReason.finished,
         );
 
         expect(result.synthesized, isFalse);
@@ -159,11 +117,10 @@ void main() {
           ),
         );
 
-        final result = synthesizeNoResponseIfNeeded(
+        final result = synthesizeFinishedNoResponse(
           conversation: convo,
           streaming: const AwaitingText(bufferedThinkingText: 'thinking'),
           runId: 'run-1',
-          reason: TerminalReason.finished,
         );
 
         expect(result.synthesized, isTrue);
@@ -171,12 +128,13 @@ void main() {
     });
 
     group('synthesis', () {
-      test('appends NoResponseTile.finished with thinking and stable id', () {
-        final result = synthesizeNoResponseIfNeeded(
+      test(
+          'synthesizeFinishedNoResponse appends a finished tile with thinking '
+          'and stable id', () {
+        final result = synthesizeFinishedNoResponse(
           conversation: conversation,
           streaming: const AwaitingText(bufferedThinkingText: 'I considered'),
           runId: 'run-42',
-          reason: TerminalReason.finished,
         );
 
         expect(result.synthesized, isTrue);
@@ -187,13 +145,14 @@ void main() {
         expect(tile.errorDetail, isNull);
       });
 
-      test('appends NoResponseTile.failed with errorDetail propagated', () {
-        final result = synthesizeNoResponseIfNeeded(
+      test(
+          'synthesizeFailedNoResponse appends a failed tile with errorDetail '
+          'propagated', () {
+        final result = synthesizeFailedNoResponse(
           conversation: conversation,
           streaming: const AwaitingText(bufferedThinkingText: 'partial'),
           runId: 'run-42',
-          reason: TerminalReason.failed,
-          terminalErrorDetail: 'boom',
+          errorDetail: 'boom',
         );
 
         expect(result.synthesized, isTrue);
@@ -202,12 +161,13 @@ void main() {
         expect(tile.errorDetail, equals('boom'));
       });
 
-      test('appends NoResponseTile.cancelled with no errorDetail', () {
-        final result = synthesizeNoResponseIfNeeded(
+      test(
+          'synthesizeCancelledNoResponse appends a cancelled tile with no '
+          'errorDetail', () {
+        final result = synthesizeCancelledNoResponse(
           conversation: conversation,
           streaming: const AwaitingText(bufferedThinkingText: 'partial'),
           runId: 'run-42',
-          reason: TerminalReason.cancelled,
         );
 
         expect(result.synthesized, isTrue);

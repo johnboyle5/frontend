@@ -164,8 +164,12 @@ void main() {
       });
 
       test(
-          'RunErrorEvent on Idle conversation transitions to Failed '
-          '(no terminal status to preserve)', () {
+          'RunErrorEvent on Idle conversation flips to Failed and appends '
+          'a stable-id ErrorMessage so the user sees a visible failure row',
+          () {
+        // Backend protocol violation: RunErrorEvent without a preceding
+        // RunStartedEvent. Status alone doesn't render in the messages
+        // list, so the user would otherwise see nothing.
         const event = RunErrorEvent(message: 'pre-run error');
 
         final result = processEvent(conversation, streaming, event);
@@ -175,6 +179,12 @@ void main() {
           (result.conversation.status as Failed).error,
           equals('pre-run error'),
         );
+        final surfaced = result.conversation.messages.last as ErrorMessage;
+        expect(
+          surfaced.id,
+          equals(preRunErrorMessageId(conversation.threadId, 'pre-run error')),
+        );
+        expect(surfaced.errorText, equals('pre-run error'));
       });
 
       test(
@@ -243,10 +253,9 @@ void main() {
           'duplicate RunFinishedEvent on Completed conversation with buffered '
           'thinking does NOT re-synthesize a NoResponseTile (status guard '
           'precedes synthesis decline)', () {
-        // The pre-guard implementation only didn't re-synthesize because
-        // the empty thinking buffer made synthesis decline. With buffered
-        // thinking present, an unguarded path would synthesize a second
-        // NoResponseTile colliding on `noResponseMessageId('run-1')`.
+        // Without the status guard, buffered thinking would let synthesis
+        // fire a second NoResponseTile and collide on
+        // `noResponseMessageId('run-1')`.
         final completedConversation = conversation.withStatus(
           const Completed(),
         );

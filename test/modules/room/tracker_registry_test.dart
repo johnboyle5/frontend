@@ -249,6 +249,41 @@ void main() {
 
       expect(registry.trackers, isEmpty);
     });
+
+    test(
+        'disposes the existing tracker when the target key already holds one '
+        'so the loser does not leak its subscription', () {
+      // seedHistorical declared "live always wins over historical", but
+      // an unguarded overwrite at the target key would leak the loser's
+      // subscription. Simulate the collision by seeding then renaming.
+      final historicalEvents = Signal<ExecutionEvent?>(null);
+      final historicalTracker = ExecutionTracker(
+        executionEvents: historicalEvents,
+        logger: testLogger(),
+      );
+      registry.seedHistorical({'no-response-run-1': historicalTracker});
+
+      registry.onStreaming(
+        const AwaitingText(currentActivity: ThinkingActivity()),
+        events,
+      );
+      final awaitingTracker = registry.trackers[awaitingTrackerKey];
+
+      registry.renameAwaitingTo('no-response-run-1');
+
+      expect(
+        registry.trackers['no-response-run-1'],
+        same(awaitingTracker),
+        reason: 'the live awaiting tracker must win over the historical one',
+      );
+      expect(
+        historicalTracker.isFrozen,
+        isTrue,
+        reason: 'the clobbered tracker must be disposed (which freezes it) '
+            'so its subscription is released — without the cleanup the '
+            'historical tracker silently retains its event listener',
+      );
+    });
   });
 
   test('ignores AwaitingText when tracker already active', () {

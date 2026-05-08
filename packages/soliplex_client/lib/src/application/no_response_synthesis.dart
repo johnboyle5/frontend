@@ -6,9 +6,9 @@ import 'package:soliplex_logging/soliplex_logging.dart';
 final Logger _logger =
     LogManager.instance.getLogger('soliplex_client.no_response_synthesis');
 
-/// Outcome of [synthesizeNoResponseIfNeeded]. The `synthesized` flag tells
-/// callers whether a [NoResponseTile] was appended without forcing them to
-/// compare conversations by reference.
+/// Outcome of the `synthesize…NoResponse` entries. The `synthesized` flag
+/// tells callers whether a [NoResponseTile] was appended without forcing
+/// them to compare conversations by reference.
 typedef NoResponseSynthesisResult = ({
   Conversation conversation,
   bool synthesized,
@@ -24,12 +24,73 @@ String noResponseMessageId(String runId) => '$_noResponseIdPrefix$runId';
 /// buffered thinking or unresolved tool calls).
 String runErrorMessageId(String runId) => '$_runErrorIdPrefix$runId';
 
+/// Id for an `ErrorMessage` synthesized when `RunErrorEvent` arrives on
+/// `Idle` status (no preceding `RunStartedEvent` — backend protocol
+/// violation). Hashed from [threadId] + [message] so a duplicate event
+/// produces the same id and downstream dedup keeps one message.
+String preRunErrorMessageId(String threadId, String message) =>
+    '$_preRunErrorIdPrefix$threadId-${message.hashCode}';
+
 const _noResponseIdPrefix = 'no-response-';
 const _runErrorIdPrefix = 'run-error-';
+const _preRunErrorIdPrefix = 'pre-run-error-';
 
-/// Appends a synthesized [NoResponseTile] to [conversation] when a run has
-/// reached a terminal state with buffered thinking but no assistant
-/// `TextMessageStart` / `Content` / `End` for an actual reply.
+/// Appends a synthesized [NoResponseTile.finished] when a run completed
+/// normally with buffered thinking but no assistant text reply.
+NoResponseSynthesisResult synthesizeFinishedNoResponse({
+  required Conversation conversation,
+  required StreamingState streaming,
+  required String runId,
+}) =>
+    _synthesize(
+      conversation: conversation,
+      streaming: streaming,
+      runId: runId,
+      buildTile: (id, thinking) => NoResponseTile.finished(
+        id: id,
+        thinkingText: thinking,
+      ),
+    );
+
+/// Appends a synthesized [NoResponseTile.failed] when a run failed with
+/// buffered thinking but no assistant text reply. [errorDetail] is the
+/// backend error message; the type-level invariant on [NoResponseTile.failed]
+/// requires it to be non-null.
+NoResponseSynthesisResult synthesizeFailedNoResponse({
+  required Conversation conversation,
+  required StreamingState streaming,
+  required String runId,
+  required String errorDetail,
+}) =>
+    _synthesize(
+      conversation: conversation,
+      streaming: streaming,
+      runId: runId,
+      buildTile: (id, thinking) => NoResponseTile.failed(
+        id: id,
+        thinkingText: thinking,
+        errorDetail: errorDetail,
+      ),
+    );
+
+/// Appends a synthesized [NoResponseTile.cancelled] when a run was
+/// cancelled with buffered thinking but no assistant text reply.
+NoResponseSynthesisResult synthesizeCancelledNoResponse({
+  required Conversation conversation,
+  required StreamingState streaming,
+  required String runId,
+}) =>
+    _synthesize(
+      conversation: conversation,
+      streaming: streaming,
+      runId: runId,
+      buildTile: (id, thinking) => NoResponseTile.cancelled(
+        id: id,
+        thinkingText: thinking,
+      ),
+    );
+
+/// Shared decline gate for the three terminal entries.
 ///
 /// Declines (returning the input conversation and `synthesized: false`) when:
 /// - [streaming] is not [AwaitingText] (a reply was in progress).
@@ -37,50 +98,21 @@ const _runErrorIdPrefix = 'run-error-';
 /// - The conversation has any tool call with status `pending`, `streaming`,
 ///   or `executing` (the run is yielding to client tools — the tool call
 ///   IS the response, not a missing one).
-///
-/// Otherwise appends a [NoResponseTile] carrying [reason] and the buffered
-/// thinking so downstream UI can render the muted "Run
-/// finished/failed/cancelled without a response" tile, optionally with the
-/// backend error message for the `failed` case.
-///
-/// Throws [ArgumentError] if [terminalErrorDetail] doesn't match [reason]:
-/// it must be non-null when [reason] is [TerminalReason.failed] and null
-/// otherwise.
-NoResponseSynthesisResult synthesizeNoResponseIfNeeded({
+NoResponseSynthesisResult _synthesize({
   required Conversation conversation,
   required StreamingState streaming,
   required String runId,
-  required TerminalReason reason,
-  String? terminalErrorDetail,
+  required NoResponseTile Function(String id, String thinkingText) buildTile,
 }) {
-  if ((reason == TerminalReason.failed) != (terminalErrorDetail != null)) {
-    final errorDetailState = terminalErrorDetail == null ? 'null' : 'set';
-    throw ArgumentError(
-      'terminalErrorDetail is required iff reason is TerminalReason.failed '
-      '(reason: $reason, errorDetail: $errorDetailState)',
-    );
-  }
   if (streaming is! AwaitingText ||
       streaming.bufferedThinkingText.isEmpty ||
       _hasUnresolvedToolCalls(conversation)) {
     return (conversation: conversation, synthesized: false);
   }
-
-  final tile = switch (reason) {
-    TerminalReason.failed => NoResponseTile.failed(
-        id: noResponseMessageId(runId),
-        thinkingText: streaming.bufferedThinkingText,
-        errorDetail: terminalErrorDetail!,
-      ),
-    TerminalReason.cancelled => NoResponseTile.cancelled(
-        id: noResponseMessageId(runId),
-        thinkingText: streaming.bufferedThinkingText,
-      ),
-    TerminalReason.finished => NoResponseTile.finished(
-        id: noResponseMessageId(runId),
-        thinkingText: streaming.bufferedThinkingText,
-      ),
-  };
+  final tile = buildTile(
+    noResponseMessageId(runId),
+    streaming.bufferedThinkingText,
+  );
   return (
     conversation: conversation.withAppendedMessage(tile),
     synthesized: true,

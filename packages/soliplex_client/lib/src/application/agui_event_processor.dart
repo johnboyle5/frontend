@@ -561,7 +561,7 @@ StreamingState _withToolCallActivity(
 ///
 /// On the `Running` path: commits any in-flight `TextStreaming` reply as
 /// a finalized `TextMessage` (so a user reading half-streamed text keeps
-/// it), then routes through `synthesizeNoResponseIfNeeded` to surface the
+/// it), then routes through `synthesizeFinishedNoResponse` to surface the
 /// run's buffered thinking, if any, as a [NoResponseTile].
 EventProcessingResult _processRunFinished(
   Conversation conversation,
@@ -588,21 +588,25 @@ EventProcessingResult _processRunFinished(
     runId: runId,
     terminalEvent: 'RunFinishedEvent',
   );
-  final result = synthesizeNoResponseIfNeeded(
+  final result = synthesizeFinishedNoResponse(
     conversation: withPartial,
     streaming: streaming,
     runId: runId,
-    reason: TerminalReason.finished,
   );
-  // Empty-thinking + empty-text RunFinished produces no message in the
-  // list at all — `AgentSession` will return `AgentSuccess(output: '')`.
-  // Surface as info so the corner case shows up in BackendLogSink instead
-  // of being silent.
+  // RunFinished with no synthesized tile and no in-flight text produces
+  // no message in the list at all — `AgentSession` will return
+  // `AgentSuccess(output: '')`. Surface as info so the corner case shows
+  // up in BackendLogSink instead of being silent. Decline can fire for
+  // empty thinking, an unresolved tool call, or both — log both counts
+  // so a triage reader can tell which branch decided.
   if (!result.synthesized && streaming is! TextStreaming) {
     _logger.info(
-      'RunFinishedEvent produced no assistant text and no buffered thinking',
+      'RunFinishedEvent produced no NoResponseTile (synthesis declined)',
       attributes: {
         'runId': runId,
+        'bufferedThinkingChars': streaming is AwaitingText
+            ? streaming.bufferedThinkingText.length
+            : 0,
         'unresolvedToolCallCount': conversation.toolCalls
             .where(
               (tc) =>
@@ -646,12 +650,11 @@ EventProcessingResult _processRunError(
       runId: runId,
       terminalEvent: 'RunErrorEvent',
     );
-    final result = synthesizeNoResponseIfNeeded(
+    final result = synthesizeFailedNoResponse(
       conversation: withPartial,
       streaming: streaming,
       runId: runId,
-      reason: TerminalReason.failed,
-      terminalErrorDetail: message,
+      errorDetail: message,
     );
     // The partial-text commit already produces a user-visible signal in
     // the messages list — synthesis declines on TextStreaming by design,
@@ -697,8 +700,6 @@ EventProcessingResult _processRunError(
   }
   final droppedThinkingChars =
       streaming is AwaitingText ? streaming.bufferedThinkingText.length : 0;
-  // Idle is the normal pre-run-error path; warn only on duplicates after
-  // a terminal status, where the event is genuinely unexpected.
   final logAttributes = {
     'status': conversation.status.runtimeType.toString(),
     'streaming': streaming.runtimeType.toString(),
@@ -706,23 +707,37 @@ EventProcessingResult _processRunError(
     'droppedThinkingChars': droppedThinkingChars,
   };
   if (conversation.status is Idle) {
-    _logger.info(
-      'RunErrorEvent on Idle: pre-run failure',
+    // RunErrorEvent without a preceding RunStartedEvent is a backend
+    // protocol violation. Log at error so Sentry sees it, then append
+    // an ErrorMessage so the user gets a visible failure row instead of
+    // a silent status-only flip.
+    _logger.error(
+      'RunErrorEvent on Idle: pre-run failure (backend protocol violation)',
       attributes: logAttributes,
     );
-  } else {
-    _logger.warning(
-      'RunErrorEvent on terminal status; preserving prior status. '
-      'Possible cases: duplicate after terminal, or out-of-order event.',
-      attributes: logAttributes,
+    return EventProcessingResult(
+      conversation: conversation
+          .withAppendedMessage(
+            ErrorMessage.create(
+              id: preRunErrorMessageId(conversation.threadId, message),
+              message: message,
+            ),
+          )
+          .withStatus(Failed(error: message)),
+      streaming: const AwaitingText(),
     );
   }
+  _logger.warning(
+    'RunErrorEvent on terminal status; preserving prior status. '
+    'Possible cases: duplicate after terminal, or out-of-order event.',
+    attributes: logAttributes,
+  );
   final nextStatus = switch (conversation.status) {
-    Idle() => Failed(error: message),
     Completed() || Failed() || Cancelled() => conversation.status,
+    Idle() ||
     Running() =>
-      // Unreachable: handled above.
-      throw StateError('Running unreachable in non-Running branch'),
+      // Unreachable: Idle handled above; Running handled at the top.
+      throw StateError('Idle/Running unreachable in terminal-preserve branch'),
   };
   return EventProcessingResult(
     conversation: conversation.withStatus(nextStatus),

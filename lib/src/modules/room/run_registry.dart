@@ -1,7 +1,9 @@
 import 'dart:async' show unawaited;
-import 'dart:developer' as dev;
 
 import 'package:soliplex_agent/soliplex_agent.dart';
+import 'package:soliplex_logging/soliplex_logging.dart';
+
+final Logger _logger = LogManager.instance.getLogger('soliplex.run_registry');
 
 /// Terminal outcome of an agent run.
 sealed class RunOutcome {
@@ -54,13 +56,12 @@ class RunRegistry {
     if (_isDisposed) {
       // Caller bug: a disposed registry can no longer manage the
       // session. Cancel first so the session is never leaked even
-      // if the assert fires, log so the bug is observable in
+      // if the assert fires, log so the bug reaches BackendLogSink in
       // release, then assert so it's loud in debug.
       session.cancel();
-      dev.log(
+      _logger.error(
         'register called on disposed RunRegistry; cancelling session',
-        name: 'RunRegistry',
-        level: 1000,
+        attributes: {'key': key.toString()},
       );
       assert(false, 'register called on disposed RunRegistry for $key');
       return;

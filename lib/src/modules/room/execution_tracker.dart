@@ -57,10 +57,10 @@ class ExecutionTracker {
   ReadonlySignal<List<SkillToolCallActivity>> get skillToolCalls =>
       _skillToolCalls;
 
-  /// Unified timeline of steps with their nested activities, in arrival
-  /// order. Activities that arrive while a step is active are nested
-  /// under that step; activities arriving outside any active step are
-  /// emitted as [TimelineStandaloneActivity].
+  /// Timeline of steps with their nested activities, in arrival order.
+  /// Activities that arrive while a step is active are nested under that
+  /// step; activities arriving outside any active step are emitted as
+  /// [TimelineStandaloneActivity].
   final Signal<List<TimelineEntry>> _timeline =
       Signal<List<TimelineEntry>>(const []);
   ReadonlySignal<List<TimelineEntry>> get timeline => _timeline;

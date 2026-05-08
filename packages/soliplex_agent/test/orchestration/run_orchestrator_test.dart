@@ -418,12 +418,10 @@ void main() {
       expect(orchestrator.currentState, isA<FailedState>());
       final failed = orchestrator.currentState as FailedState;
       final messages = failed.conversation!.messages;
-      // Partial text committed as a TextMessage (not vanished).
       final committed =
           messages.firstWhere((m) => m.id == 'msg-1') as TextMessage;
       expect(committed.text, equals('partial'));
       expect(committed.user, equals(ChatUser.assistant));
-      // ErrorMessage surfaces the failure alongside the partial reply.
       final surfaced = messages.firstWhere((m) => m.id == 'run-error-$_runId')
           as ErrorMessage;
       expect(surfaced.errorText, equals('connection lost'));
@@ -470,7 +468,6 @@ void main() {
 
       orchestrator.cancelRun();
 
-      // Already-terminal state must not flip back to Cancelled.
       expect(orchestrator.currentState, isA<CompletedState>());
     });
 
@@ -489,7 +486,6 @@ void main() {
 
       orchestrator.cancelRun();
 
-      // Already-terminal state must not flip from Failed to Cancelled.
       expect(orchestrator.currentState, isA<FailedState>());
     });
 
@@ -550,10 +546,9 @@ void main() {
     test(
         'cancelRun mid-text-stream commits the partial reply as a finalized '
         'TextMessage (mirrors RunFinished/RunError behavior)', () async {
-      // Without the partial-text commit, a user reading half-streamed
-      // text watches it vanish on Stop. The previous implementation
-      // relied on synthesis, which declines on TextStreaming, so the
-      // partial reply was silently lost.
+      // Without the partial-text commit, a half-streamed reply vanishes
+      // when streaming resets to AwaitingText on Stop. Synthesis declines
+      // on TextStreaming, so the commit is the only surfacing path.
       stubCreateRun();
       final controller = StreamController<BaseEvent>();
       stubRunAgent(stream: controller.stream);
@@ -1666,6 +1661,58 @@ void main() {
         expect(orchestrator.currentState, isA<CancelledState>());
       },
     );
+
+    test(
+        'cancelRun during runToCompletion createRun await yields '
+        'CancelledState.preRun (IdleState arm + post-await race close)',
+        () async {
+      // Stop pressed during a slow createRun while in IdleState.
+      // Pins two coupled contracts:
+      //   - cancelRun's IdleState arm cancels `_cancelToken` so the
+      //     in-flight createRun await aborts (without this arm, the
+      //     run continues silently after the response arrives).
+      //   - _initializeStream's post-await race close throws
+      //     CancelledException when the await resolved before the
+      //     token cancellation propagated, so _handleStartError can
+      //     route the user's intent to CancelledState.preRun rather
+      //     than overwriting it with RunningState via _subscribeToStream.
+      final createRunCompleter = Completer<RunInfo>();
+      when(
+        () => api.createRun(any(), any()),
+      ).thenAnswer((_) => createRunCompleter.future);
+      stubRunAgent(stream: const Stream<BaseEvent>.empty());
+
+      final runFuture = orchestrator.runToCompletion(
+        key: _key,
+        userMessage: 'Hi',
+        toolExecutor: (_) async => [],
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(orchestrator.currentState, isA<IdleState>());
+
+      orchestrator.cancelRun();
+
+      // Resolve the await *after* cancelRun has cancelled the token,
+      // simulating the race where startRun's future already had its
+      // value before the cancellation propagated.
+      createRunCompleter.complete(_runInfo());
+      final result = await runFuture;
+
+      expect(
+        result,
+        isA<CancelledState>(),
+        reason: 'state must be CancelledState; without the IdleState arm '
+            'the cancel is dropped, and without the post-await race '
+            'close _subscribeToStream would overwrite it with RunningState',
+      );
+      final cancelled = result as CancelledState;
+      expect(
+        cancelled.startedRun,
+        isFalse,
+        reason: 'pre-run cancel: no backend run was in flight from the '
+            'orchestrator-state perspective',
+      );
+    });
   });
 
   group('graceful SSE close', () {

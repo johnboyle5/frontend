@@ -194,15 +194,10 @@ class FailedState extends RunState {
   final Conversation? conversation;
 
   /// Whether a backend run was in flight at the time of failure.
-  ///
-  /// Equivalent to [runId] != null. Prefer this getter at call sites that
-  /// just need the disposition; reach for [runId] when the id itself is
-  /// needed.
   bool get startedRun => runId != null;
 
   /// Returns [runId] when a backend run was in flight, otherwise throws
-  /// [StateError]. Use at call sites that have already established (e.g.
-  /// via [startedRun] or by construction) that a runId must exist.
+  /// [StateError].
   String requireRunId() {
     final id = runId;
     if (id == null) {
@@ -340,15 +335,10 @@ class CancelledState extends RunState {
   final Conversation? conversation;
 
   /// Whether a backend run was in flight at the time of cancellation.
-  ///
-  /// Equivalent to [runId] != null. Prefer this getter at call sites that
-  /// just need the disposition; reach for [runId] when the id itself is
-  /// needed.
   bool get startedRun => runId != null;
 
   /// Returns [runId] when a backend run was in flight, otherwise throws
-  /// [StateError]. Use at call sites that have already established (e.g.
-  /// via [startedRun] or by construction) that a runId must exist.
+  /// [StateError].
   String requireRunId() {
     final id = runId;
     if (id == null) {

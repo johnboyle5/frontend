@@ -234,11 +234,10 @@ class RunOrchestrator {
           runId: runId,
           terminalEvent: 'cancelRun',
         );
-        final synthesisResult = synthesizeNoResponseIfNeeded(
+        final synthesisResult = synthesizeCancelledNoResponse(
           conversation: withPartial,
           streaming: streaming,
           runId: runId,
-          reason: TerminalReason.cancelled,
         );
         final withCitations =
             _extractCitations(synthesisResult.conversation, runId);
@@ -280,16 +279,15 @@ class RunOrchestrator {
           return;
         }
         _logger.warning(
-          'cancelRun ignored: no cancellable run',
+          'cancelRun ignored: idle (no run active)',
           attributes: {'state': _currentState.runtimeType.toString()},
         );
         return;
       case CompletedState(:final threadKey) ||
             FailedState(:final threadKey) ||
             CancelledState(:final threadKey):
-        // Already-terminal states are no-ops by design.
         _logger.warning(
-          'cancelRun ignored: no cancellable run',
+          'cancelRun ignored: already terminal',
           attributes: {
             'state': _currentState.runtimeType.toString(),
             'threadKey': threadKey.toString(),
@@ -417,7 +415,20 @@ class RunOrchestrator {
       cancelToken: _cancelToken,
       onReconnectStatus: _activeOnReconnectStatus,
     );
-    if (_disposed) return;
+    // Dispose during the await leaves us with an unowned stream; not
+    // draining here leaks the SSE socket. Token-cancellation race
+    // (Stop pressed during the await but resolved before cancellation
+    // propagated) leaves us with an unwanted subscription that would
+    // overwrite the user's cancel intent. Both paths drain and bail
+    // before _subscribeToStream.
+    if (_disposed) {
+      _drainUnownedStream(handle.events, 'Initialize drain failed');
+      return;
+    }
+    if (_cancelToken?.isCancelled ?? false) {
+      _drainUnownedStream(handle.events, 'Initialize drain failed');
+      throw CancelledException(reason: _cancelToken?.reason);
+    }
     _subscribeToStream(
       handle.events,
       RunningState(
@@ -426,6 +437,23 @@ class RunOrchestrator {
         conversation: conversation,
         streaming: const AwaitingText(),
       ),
+    );
+  }
+
+  /// Drains an SSE stream we no longer own (cancel/dispose during a
+  /// post-`startRun` await). Listening with no `onData` and immediately
+  /// cancelling releases the underlying socket. `onError` routes through
+  /// `Logger.error` so a future bug landing here from a non-cancel path
+  /// leaves a Sentry-grade breadcrumb instead of an unhandled future.
+  void _drainUnownedStream(Stream<BaseEvent> events, String errorMessage) {
+    unawaited(
+      events
+          .listen(
+            null,
+            onError: (Object e, StackTrace st) =>
+                _logger.error(errorMessage, error: e, stackTrace: st),
+          )
+          .cancel(),
     );
   }
 
@@ -497,21 +525,7 @@ class RunOrchestrator {
           '(state=${_currentState.runtimeType})',
         );
       }
-      // The drain is a byproduct of cancel/dispose, not an event we
-      // want to surface — but log so a future bug landing here from a
-      // non-cancel path leaves a breadcrumb.
-      unawaited(
-        handle.events
-            .listen(
-              null,
-              onError: (Object e, StackTrace st) => _logger.error(
-                'Resume drain failed',
-                error: e,
-                stackTrace: st,
-              ),
-            )
-            .cancel(),
-      );
+      _drainUnownedStream(handle.events, 'Resume drain failed');
       return;
     }
     _subscribeToStream(
@@ -617,14 +631,40 @@ class RunOrchestrator {
       };
 
   /// Defensively completes [_terminalCompleter] during [dispose] (R4).
+  ///
+  /// Routes through `.duringRun(runId:)` for `RunningState`/`ToolYieldingState`
+  /// so the documented `runId != null iff a backend run was in flight`
+  /// invariant holds for downstream consumers (`AgentSession._completeWith`,
+  /// `RunRegistry._outcomeFrom`).
   void _completeTerminalOnDispose() {
     if (_terminalCompleter?.isCompleted ?? true) return;
-    final key = switch (_currentState) {
-      RunningState(:final threadKey) => threadKey,
-      ToolYieldingState(:final threadKey) => threadKey,
-      _ => const (serverId: '', roomId: '', threadId: ''),
+    final terminal = switch (_currentState) {
+      RunningState(:final threadKey, :final runId, :final conversation) =>
+        CancelledState.duringRun(
+          threadKey: threadKey,
+          runId: runId,
+          conversation: conversation,
+        ),
+      ToolYieldingState(:final threadKey, :final runId, :final conversation) =>
+        CancelledState.duringRun(
+          threadKey: threadKey,
+          runId: runId,
+          conversation: conversation,
+        ),
+      IdleState() ||
+      CompletedState() ||
+      FailedState() ||
+      CancelledState() =>
+        CancelledState.preRun(
+          threadKey: switch (_currentState) {
+            CompletedState(:final threadKey) => threadKey,
+            FailedState(:final threadKey) => threadKey,
+            CancelledState(:final threadKey) => threadKey,
+            _ => const (serverId: '', roomId: '', threadId: ''),
+          },
+        ),
     };
-    _terminalCompleter!.complete(CancelledState.preRun(threadKey: key));
+    _terminalCompleter!.complete(terminal);
   }
 
   void _guardRunToCompletion() {
