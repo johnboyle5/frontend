@@ -2766,5 +2766,136 @@ void main() {
         await controller.close();
       },
     );
+
+    test(
+      'live DecodeFailed with String rawData preserves it on the tile',
+      () async {
+        // Top-level JSON parse failures arrive with `rawData: String`.
+        // The orchestrator must pass that through unmodified — the tile
+        // widget renders the raw bytes so a developer can inspect the
+        // wire content the parser rejected.
+        stubCreateRun();
+        final controller = StreamController<DecodeOutcome>();
+        when(
+          () => agUiStreamClient.runAgent(
+            any(),
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            resumePolicy: any(named: 'resumePolicy'),
+            onReconnectStatus: any(named: 'onReconnectStatus'),
+          ),
+        ).thenAnswer((_) => controller.stream);
+
+        await orchestrator.startRun(key: _key, userMessage: 'Hi');
+        controller
+          ..add(
+            const DecodedEvent(
+              RunStartedEvent(threadId: 'thread-1', runId: _runId),
+              {'type': 'RUN_STARTED'},
+            ),
+          )
+          ..add(
+            const DecodeFailed(
+              FormatException('Unexpected character'),
+              'not valid json at all',
+            ),
+          )
+          ..add(
+            const DecodedEvent(
+              RunFinishedEvent(threadId: 'thread-1', runId: _runId),
+              {'type': 'RUN_FINISHED'},
+            ),
+          );
+        await Future<void>.delayed(Duration.zero);
+
+        final completed = orchestrator.currentState as CompletedState;
+        final drop = completed.conversation.messages
+            .whereType<DroppedEventMessage>()
+            .single;
+        expect(drop.rawPayload, equals('not valid json at all'));
+
+        await controller.close();
+      },
+    );
+
+    test(
+      'live drop tile ids align with the replay formula at the same '
+      'event position',
+      () async {
+        // Live mints `dropped-${runId}-${eventIndex}` from a per-event
+        // counter; replay mints `dropped-${runId}-${i}` from the loop
+        // index over backend-stored events. Both formulas must produce
+        // the same id for the same backend event so reload reconstructs
+        // the same drop set. This pins the live counter's positional
+        // invariant; the replay-side companion is in
+        // `soliplex_api_test.dart`'s `replay drop tile ids are
+        // deterministic across reloads`.
+        stubCreateRun();
+        final controller = StreamController<DecodeOutcome>();
+        when(
+          () => agUiStreamClient.runAgent(
+            any(),
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            resumePolicy: any(named: 'resumePolicy'),
+            onReconnectStatus: any(named: 'onReconnectStatus'),
+          ),
+        ).thenAnswer((_) => controller.stream);
+
+        await orchestrator.startRun(key: _key, userMessage: 'Hi');
+        // Outcome positions: 0 RunStarted, 1 DecodeFailed, 2 TextStart,
+        // 3 STATE_SNAPSHOT (throws inside processEvent), 4 RunFinished.
+        controller
+          ..add(
+            const DecodedEvent(
+              RunStartedEvent(threadId: 'thread-1', runId: _runId),
+              {'type': 'RUN_STARTED'},
+            ),
+          )
+          ..add(
+            const DecodeFailed(
+              FormatException('boom'),
+              {'type': 'GIBBERISH'},
+            ),
+          )
+          ..add(
+            const DecodedEvent(
+              TextMessageStartEvent(messageId: 'msg-1'),
+              {'type': 'TEXT_MESSAGE_START'},
+            ),
+          )
+          ..add(
+            const DecodedEvent(
+              StateSnapshotEvent(snapshot: ['not', 'a', 'map']),
+              {
+                'type': 'STATE_SNAPSHOT',
+                'snapshot': ['not', 'a', 'map'],
+              },
+            ),
+          )
+          ..add(
+            const DecodedEvent(
+              RunFinishedEvent(threadId: 'thread-1', runId: _runId),
+              {'type': 'RUN_FINISHED'},
+            ),
+          );
+        await Future<void>.delayed(Duration.zero);
+
+        final completed = orchestrator.currentState as CompletedState;
+        final drops = completed.conversation.messages
+            .whereType<DroppedEventMessage>()
+            .map((m) => m.id)
+            .toList();
+        // Replay over the same backend events would mint these same
+        // ids — `dropped-<runId>-<positional-index>` aligns the live
+        // counter to the replay loop's `i`.
+        expect(
+          drops,
+          equals(['dropped-$_runId-1', 'dropped-$_runId-3']),
+        );
+
+        await controller.close();
+      },
+    );
   });
 }
