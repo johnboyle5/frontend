@@ -197,6 +197,34 @@ void main() {
       );
     });
 
+    test(
+        'trailing tool-yield bundle with no follow-up drops its hoisted '
+        'events without crashing or attaching them to a synthesized id', () {
+      // Issue #221: a tool-yield bundle with no normal-bundle follow-up
+      // has nowhere to attach its hoisted events. The replay must log the
+      // drop and return without crashing.
+      final runs = [
+        RunEventBundle(
+          runId: 'run-yield-only',
+          events: const [
+            ThinkingTextMessageStartEvent(),
+            ThinkingTextMessageContentEvent(delta: 'pre-tool'),
+            ThinkingTextMessageEndEvent(),
+            ToolCallStartEvent(
+              toolCallId: 'tc-1',
+              toolCallName: 'search',
+              parentMessageId: 'parent-1',
+            ),
+            ToolCallEndEvent(toolCallId: 'tc-1'),
+          ],
+        ),
+      ];
+
+      final trackers = replayToTrackers(runs);
+
+      expect(trackers, isEmpty);
+    });
+
     test('multi-run thread yields one tracker per assistant message', () {
       final runs = [
         RunEventBundle(

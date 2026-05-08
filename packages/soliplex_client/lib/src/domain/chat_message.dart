@@ -130,37 +130,63 @@ class TextMessage extends ChatMessage {
 /// ended so the UI can render the appropriate muted "Run
 /// finished/failed/cancelled without a response" tile. Frontend-only —
 /// never sent over the wire (filtered in `agui_message_mapper.dart`).
+///
+/// Construct via the named factories ([NoResponseTile.failed],
+/// [NoResponseTile.cancelled], [NoResponseTile.finished]); the link between
+/// `reason` and `errorDetail` is enforced at the type level.
 @immutable
 class NoResponseTile extends ChatMessage {
-  /// Creates a no-response tile with all properties.
-  const NoResponseTile({
+  /// Run failed (`RunErrorEvent`). [errorDetail] is the backend message so
+  /// the tile renders "Run failed: <detail>" rather than the generic copy.
+  factory NoResponseTile.failed({
+    required String id,
+    required String thinkingText,
+    required String errorDetail,
+    DateTime? createdAt,
+  }) =>
+      NoResponseTile._(
+        id: id,
+        createdAt: createdAt ?? DateTime.now(),
+        thinkingText: thinkingText,
+        reason: TerminalReason.failed,
+        errorDetail: errorDetail,
+      );
+
+  /// Run was cancelled (`cancelRun`).
+  factory NoResponseTile.cancelled({
+    required String id,
+    required String thinkingText,
+    DateTime? createdAt,
+  }) =>
+      NoResponseTile._(
+        id: id,
+        createdAt: createdAt ?? DateTime.now(),
+        thinkingText: thinkingText,
+        reason: TerminalReason.cancelled,
+        errorDetail: null,
+      );
+
+  /// Run completed normally (`RunFinishedEvent`).
+  factory NoResponseTile.finished({
+    required String id,
+    required String thinkingText,
+    DateTime? createdAt,
+  }) =>
+      NoResponseTile._(
+        id: id,
+        createdAt: createdAt ?? DateTime.now(),
+        thinkingText: thinkingText,
+        reason: TerminalReason.finished,
+        errorDetail: null,
+      );
+
+  const NoResponseTile._({
     required super.id,
     required super.createdAt,
     required this.thinkingText,
     required this.reason,
-    this.errorDetail,
-  })  : assert(
-          reason == TerminalReason.failed || errorDetail == null,
-          'errorDetail is only meaningful for TerminalReason.failed',
-        ),
-        super(user: ChatUser.assistant);
-
-  /// Creates a no-response tile with the given id and auto-generated
-  /// timestamp.
-  factory NoResponseTile.create({
-    required String id,
-    required String thinkingText,
-    required TerminalReason reason,
-    String? errorDetail,
-  }) {
-    return NoResponseTile(
-      id: id,
-      thinkingText: thinkingText,
-      reason: reason,
-      errorDetail: errorDetail,
-      createdAt: DateTime.now(),
-    );
-  }
+    required this.errorDetail,
+  }) : super(user: ChatUser.assistant);
 
   /// Buffered thinking captured before the run terminated. May be empty.
   final String thinkingText;
@@ -168,9 +194,8 @@ class NoResponseTile extends ChatMessage {
   /// The terminal disposition of the run.
   final TerminalReason reason;
 
-  /// Backend error message for `TerminalReason.failed`, so the tile can
-  /// render "Run failed: <detail>" rather than the generic copy. Always
-  /// null for `finished` and `cancelled`.
+  /// Backend error message for `TerminalReason.failed`. Always null for
+  /// `finished` and `cancelled` — the named factories enforce this.
   final String? errorDetail;
 
   /// Whether this tile has thinking text to display.

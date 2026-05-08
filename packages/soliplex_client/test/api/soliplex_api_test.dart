@@ -1543,7 +1543,7 @@ void main() {
         final history = await api.getThreadHistory('room-123', 'thread-456');
 
         final synthesized = history.messages.singleWhere(
-          (m) => m.id == 'no-response-run-1',
+          (m) => m.id == noResponseMessageId('run-1'),
         ) as NoResponseTile;
         expect(synthesized.reason, equals(TerminalReason.finished));
         expect(synthesized.thinkingText, equals('reasoning preserved'));

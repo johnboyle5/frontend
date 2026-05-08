@@ -367,7 +367,7 @@ void main() {
       expect(orchestrator.currentState, isA<FailedState>());
       final failed = orchestrator.currentState as FailedState;
       final synthesized = failed.conversation!.messages.last as NoResponseTile;
-      expect(synthesized.id, equals('no-response-$_runId'));
+      expect(synthesized.id, equals(noResponseMessageId(_runId)));
       expect(synthesized.reason, equals(TerminalReason.failed));
       expect(synthesized.errorDetail, equals('boom'));
       expect(synthesized.thinkingText, equals('partial reasoning'));
@@ -515,8 +515,7 @@ void main() {
 
     test(
         'cancelRun on Running with buffered thinking and no reply '
-        'synthesizes a no-response TextMessage with reason: cancelled',
-        () async {
+        'synthesizes a NoResponseTile with reason: cancelled', () async {
       stubCreateRun();
       final controller = StreamController<BaseEvent>();
       stubRunAgent(stream: controller.stream);
@@ -541,7 +540,7 @@ void main() {
       final cancelled = orchestrator.currentState as CancelledState;
       final synthesized =
           cancelled.conversation!.messages.last as NoResponseTile;
-      expect(synthesized.id, equals('no-response-$_runId'));
+      expect(synthesized.id, equals(noResponseMessageId(_runId)));
       expect(synthesized.reason, equals(TerminalReason.cancelled));
       expect(synthesized.thinkingText, equals('considering options'));
 

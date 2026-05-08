@@ -20,13 +20,24 @@ NoResponseTile _tile({
   String thinkingText = 'reasoning',
   String? errorDetail,
 }) =>
-    NoResponseTile(
-      id: 'no-response-run-1',
-      createdAt: DateTime(2026),
-      thinkingText: thinkingText,
-      reason: reason,
-      errorDetail: errorDetail,
-    );
+    switch (reason) {
+      TerminalReason.failed => NoResponseTile.failed(
+          id: 'no-response-run-1',
+          createdAt: DateTime(2026),
+          thinkingText: thinkingText,
+          errorDetail: errorDetail ?? '',
+        ),
+      TerminalReason.cancelled => NoResponseTile.cancelled(
+          id: 'no-response-run-1',
+          createdAt: DateTime(2026),
+          thinkingText: thinkingText,
+        ),
+      TerminalReason.finished => NoResponseTile.finished(
+          id: 'no-response-run-1',
+          createdAt: DateTime(2026),
+          thinkingText: thinkingText,
+        ),
+    };
 
 void main() {
   testWidgets('finished renders the info icon', (tester) async {

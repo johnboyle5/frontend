@@ -142,12 +142,12 @@ void main() {
 
   group('FailedState', () {
     test('equality with same fields', () {
-      const stateA = FailedState(
+      const stateA = FailedState.preRun(
         threadKey: _key,
         reason: FailureReason.serverError,
         error: 'something broke',
       );
-      const stateB = FailedState(
+      const stateB = FailedState.preRun(
         threadKey: _key,
         reason: FailureReason.serverError,
         error: 'something broke',
@@ -156,13 +156,13 @@ void main() {
     });
 
     test('equality with optional conversation', () {
-      final stateA = FailedState(
+      final stateA = FailedState.preRun(
         threadKey: _key,
         reason: FailureReason.networkLost,
         error: 'timeout',
         conversation: conversation,
       );
-      final stateB = FailedState(
+      final stateB = FailedState.preRun(
         threadKey: _key,
         reason: FailureReason.networkLost,
         error: 'timeout',
@@ -172,12 +172,12 @@ void main() {
     });
 
     test('inequality when conversation differs', () {
-      const stateA = FailedState(
+      const stateA = FailedState.preRun(
         threadKey: _key,
         reason: FailureReason.networkLost,
         error: 'timeout',
       );
-      final stateB = FailedState(
+      final stateB = FailedState.preRun(
         threadKey: _key,
         reason: FailureReason.networkLost,
         error: 'timeout',
@@ -187,7 +187,7 @@ void main() {
     });
 
     test('toString includes reason and error', () {
-      const state = FailedState(
+      const state = FailedState.preRun(
         threadKey: _key,
         reason: FailureReason.authExpired,
         error: 'token expired',
@@ -195,21 +195,45 @@ void main() {
       expect(state.toString(), contains('authExpired'));
       expect(state.toString(), contains('token expired'));
     });
+
+    test('duringRun preserves runId in equality and toString', () {
+      const stateA = FailedState.duringRun(
+        threadKey: _key,
+        runId: 'run-1',
+        reason: FailureReason.serverError,
+        error: 'boom',
+      );
+      const stateB = FailedState.duringRun(
+        threadKey: _key,
+        runId: 'run-1',
+        reason: FailureReason.serverError,
+        error: 'boom',
+      );
+      const stateC = FailedState.duringRun(
+        threadKey: _key,
+        runId: 'run-2',
+        reason: FailureReason.serverError,
+        error: 'boom',
+      );
+      expect(stateA, equals(stateB));
+      expect(stateA, isNot(equals(stateC)));
+      expect(stateA.toString(), contains('run-1'));
+    });
   });
 
   group('CancelledState', () {
     test('equality', () {
-      const stateA = CancelledState(threadKey: _key);
-      const stateB = CancelledState(threadKey: _key);
+      const stateA = CancelledState.preRun(threadKey: _key);
+      const stateB = CancelledState.preRun(threadKey: _key);
       expect(stateA, equals(stateB));
     });
 
     test('equality with conversation', () {
-      final stateA = CancelledState(
+      final stateA = CancelledState.preRun(
         threadKey: _key,
         conversation: conversation,
       );
-      final stateB = CancelledState(
+      final stateB = CancelledState.preRun(
         threadKey: _key,
         conversation: conversation,
       );
@@ -217,8 +241,17 @@ void main() {
     });
 
     test('toString includes threadKey', () {
-      const state = CancelledState(threadKey: _key);
+      const state = CancelledState.preRun(threadKey: _key);
       expect(state.toString(), contains('CancelledState'));
+    });
+
+    test('duringRun preserves runId in equality and toString', () {
+      const stateA = CancelledState.duringRun(threadKey: _key, runId: 'run-1');
+      const stateB = CancelledState.duringRun(threadKey: _key, runId: 'run-1');
+      const stateC = CancelledState.duringRun(threadKey: _key, runId: 'run-2');
+      expect(stateA, equals(stateB));
+      expect(stateA, isNot(equals(stateC)));
+      expect(stateA.toString(), contains('run-1'));
     });
   });
 
@@ -298,12 +331,12 @@ void main() {
           pendingToolCalls: const [],
           toolDepth: 0,
         ),
-        const FailedState(
+        const FailedState.preRun(
           threadKey: _key,
           reason: FailureReason.internalError,
           error: 'oops',
         ),
-        const CancelledState(threadKey: _key),
+        const CancelledState.preRun(threadKey: _key),
       ];
 
       for (final state in states) {

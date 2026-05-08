@@ -34,9 +34,9 @@ void main() {
   });
 
   test('ThinkingEnded without preceding ThinkingStarted is a no-op', () {
-    // Out-of-order replay: a ThinkingEnded that arrives without a
-    // matching ThinkingStarted (e.g., reasoning message bridged with no
-    // start) must clear the streaming flag without inventing a step.
+    // A ThinkingEnded that arrives without a matching ThinkingStarted
+    // (e.g., reasoning message bridged with no start) must clear the
+    // streaming flag without inventing a step.
     events.value = const ThinkingEnded();
 
     expect(tracker.steps.value, isEmpty);
@@ -155,9 +155,9 @@ void main() {
   });
 
   test('freeze called twice is a no-op (idempotent)', () {
-    // Phase-2 freeze() mutates state (clears spinner, completes steps)
-    // before flipping _isFrozen = true. A second call must not throw —
-    // _completeAllSteps asserts non-frozen, so order matters.
+    // freeze() mutates state (clears spinner, completes steps) before
+    // flipping _isFrozen = true. _completeAllSteps asserts non-frozen, so
+    // a second call must short-circuit before re-running it.
     events.value = const ThinkingStarted();
     tracker.freeze();
     expect(tracker.isFrozen, isTrue);

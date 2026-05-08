@@ -77,10 +77,20 @@ class MessageTile extends StatelessWidget {
             executionTracker: executionTracker,
             streamingActivity: streamingActivity,
           ),
-        // Phase 3 wires this up to dropped_event_message_tile.dart. Until
-        // then no production code creates a DroppedEventMessage so the arm
-        // is unreachable in practice.
-        DroppedEventMessage() => const SizedBox.shrink(),
+        // Production code does not yet synthesize DroppedEventMessage;
+        // until the dedicated tile lands, render a visible placeholder so
+        // a regression that starts producing them is observable instead
+        // of silently rendering as a blank gap.
+        DroppedEventMessage(:final reason) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+            child: Text(
+              '[Dropped event: $reason]',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+            ),
+          ),
       },
     );
   }

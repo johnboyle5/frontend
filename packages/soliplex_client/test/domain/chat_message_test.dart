@@ -188,48 +188,45 @@ void main() {
 
   group('NoResponseTile', () {
     test('synthesized tile is always an assistant message', () {
-      final tile = NoResponseTile.create(
+      final tile = NoResponseTile.finished(
         id: 'no-response-run-1',
         thinkingText: '',
-        reason: TerminalReason.finished,
       );
 
       expect(tile.user, equals(ChatUser.assistant));
     });
 
     test('hasThinkingText reflects thinking content', () {
-      final empty = NoResponseTile.create(
+      final empty = NoResponseTile.failed(
         id: 'no-response-run-1',
         thinkingText: '',
-        reason: TerminalReason.failed,
+        errorDetail: 'boom',
       );
-      final filled = NoResponseTile.create(
+      final filled = NoResponseTile.failed(
         id: 'no-response-run-2',
         thinkingText: 'reasoning',
-        reason: TerminalReason.failed,
+        errorDetail: 'boom',
       );
 
       expect(empty.hasThinkingText, isFalse);
       expect(filled.hasThinkingText, isTrue);
     });
 
-    test('errorDetail is optional and survives construction', () {
-      // Backend error must reach the persisted tile so reload still shows
-      // the cause.
-      final withDetail = NoResponseTile.create(
+    test('failed factory carries errorDetail; cancelled factory has none', () {
+      final failed = NoResponseTile.failed(
         id: 'no-response-run-1',
         thinkingText: '',
-        reason: TerminalReason.failed,
         errorDetail: 'rate limit',
       );
-      final withoutDetail = NoResponseTile.create(
+      final cancelled = NoResponseTile.cancelled(
         id: 'no-response-run-2',
         thinkingText: '',
-        reason: TerminalReason.cancelled,
       );
 
-      expect(withDetail.errorDetail, equals('rate limit'));
-      expect(withoutDetail.errorDetail, isNull);
+      expect(failed.reason, equals(TerminalReason.failed));
+      expect(failed.errorDetail, equals('rate limit'));
+      expect(cancelled.reason, equals(TerminalReason.cancelled));
+      expect(cancelled.errorDetail, isNull);
     });
   });
 
@@ -470,10 +467,9 @@ void main() {
           source: DropSource.decode,
           reason: 'malformed JSON',
         ),
-        NoResponseTile.create(
+        NoResponseTile.finished(
           id: 'no-response-run-1',
           thinkingText: '',
-          reason: TerminalReason.finished,
         ),
       ];
 

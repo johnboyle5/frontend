@@ -29,10 +29,9 @@ class _FakeSession implements AgentSession {
 Conversation _conversationWith(List<ChatMessage> messages) =>
     Conversation.empty(threadId: _threadId).copyWith(messages: messages);
 
-NoResponseTile _synthesized(String runId) => NoResponseTile.create(
+NoResponseTile _synthesized(String runId) => NoResponseTile.cancelled(
       id: noResponseMessageId(runId),
       thinkingText: 'reasoning',
-      reason: TerminalReason.cancelled,
     );
 
 void main() {
@@ -62,7 +61,7 @@ void main() {
 
     final synthesized = _synthesized(_runId);
     session.emitRunState(
-      CancelledState(
+      CancelledState.duringRun(
         threadKey: _key,
         runId: _runId,
         conversation: _conversationWith([synthesized]),
@@ -84,10 +83,10 @@ void main() {
     );
     expect(ext.trackers.containsKey(awaitingTrackerKey), isTrue);
 
-    // Synthesized message is present but runId is null — terminal state
-    // never resolved a run, so the rekey is skipped instead of crashing.
+    // Pre-run failure: runId is null and no synthesized message exists in
+    // the conversation. The rekey is skipped instead of crashing.
     session.emitRunState(
-      FailedState(
+      FailedState.preRun(
         threadKey: _key,
         reason: FailureReason.internalError,
         error: 'pre-run',

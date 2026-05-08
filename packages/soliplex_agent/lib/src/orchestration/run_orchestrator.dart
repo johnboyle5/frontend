@@ -225,13 +225,14 @@ class RunOrchestrator {
         // If the run had buffered thinking but never produced an
         // assistant text reply, synthesize a "no response" tile so the
         // model's reasoning isn't lost on cancel.
-        final withSynthesized = synthesizeNoResponseIfNeeded(
+        final synthesisResult = synthesizeNoResponseIfNeeded(
           conversation: conversation,
           streaming: streaming,
           runId: runId,
           reason: TerminalReason.cancelled,
         );
-        final withCitations = _extractCitations(withSynthesized, runId);
+        final withCitations =
+            _extractCitations(synthesisResult.conversation, runId);
         _setState(
           CancelledState.duringRun(
             threadKey: threadKey,
@@ -257,11 +258,25 @@ class RunOrchestrator {
             conversation: conversation,
           ),
         );
-      case IdleState() || CompletedState() || FailedState() || CancelledState():
-        // IdleState (after `runToCompletion` started but before the first
-        // event) is not cancellable here — no cancel token is wired in
-        // for the in-flight `createRun`. Already-terminal states are
-        // no-ops by design.
+      case IdleState():
+        // `_initializeStream` wires `_cancelToken` before awaiting
+        // `startRun`, so an Idle state with `_runToCompletionActive` and
+        // a live token is the in-flight-createRun window. Cancelling the
+        // token aborts that await; `_handleStartError` then routes to
+        // `CancelledState.preRun`. Without this, the user's Stop press
+        // during a slow createRun is silently ignored and the run
+        // continues once the response arrives.
+        if (_runToCompletionActive && _cancelToken != null) {
+          _cancelToken!.cancel();
+          return;
+        }
+        _logger.warning(
+          'cancelRun ignored: no cancellable run',
+          attributes: {'state': _currentState.runtimeType.toString()},
+        );
+        return;
+      case CompletedState() || FailedState() || CancelledState():
+        // Already-terminal states are no-ops by design.
         final threadKey = switch (_currentState) {
           CompletedState(:final threadKey) => threadKey,
           FailedState(:final threadKey) => threadKey,

@@ -1,5 +1,3 @@
-import 'dart:developer' as developer;
-
 import 'package:ag_ui/ag_ui.dart';
 import 'package:meta/meta.dart';
 import 'package:soliplex_client/src/application/json_patch.dart';
@@ -55,15 +53,8 @@ EventProcessingResult processEvent(
         conversation: conversation.withStatus(Running(runId: runId)),
         streaming: streaming,
       ),
-    RunFinishedEvent(:final runId) => EventProcessingResult(
-        conversation: synthesizeNoResponseIfNeeded(
-          conversation: conversation,
-          streaming: streaming,
-          runId: runId,
-          reason: TerminalReason.finished,
-        ).withStatus(const Completed()),
-        streaming: const AwaitingText(),
-      ),
+    RunFinishedEvent(:final runId) =>
+      _processRunFinished(conversation, streaming, runId),
     RunErrorEvent(:final message) =>
       _processRunError(conversation, streaming, message),
 
@@ -345,10 +336,9 @@ EventProcessingResult _processTextEnd(
         // Skip if a message with this ID already exists — idempotency guard
         // against duplicate events (e.g. from history replay).
         if (conversation.messages.any((m) => m.id == messageId)) {
-          developer.log(
-            'Skipped duplicate message ID: $messageId',
-            name: 'soliplex_client.event_processor',
-            level: 800,
+          _logger.info(
+            'Skipped duplicate message ID',
+            attributes: {'messageId': messageId},
           );
           return EventProcessingResult(
             conversation: conversation,
@@ -500,11 +490,9 @@ EventProcessingResult _processActivitySnapshot(
     // Pass through if tool_name is missing or not a String — the backend
     // contract requires it, so this guards against schema drift.
     if (toolName is! String) {
-      developer.log(
-        'ActivitySnapshotEvent "skill_tool_call" missing or invalid '
-        'tool_name: ${toolName.runtimeType}',
-        name: 'soliplex_client.event_processor',
-        level: 900,
+      _logger.warning(
+        'ActivitySnapshotEvent "skill_tool_call" missing or invalid tool_name',
+        attributes: {'toolNameType': toolName.runtimeType.toString()},
       );
       return EventProcessingResult(
         conversation: updatedConversation,
@@ -521,10 +509,9 @@ EventProcessingResult _processActivitySnapshot(
     );
   }
   // Unknown activity types pass through unchanged.
-  developer.log(
-    'Unhandled activityType: $activityType',
-    name: 'soliplex_client.event_processor',
-    level: 800,
+  _logger.info(
+    'Unhandled activityType',
+    attributes: {'activityType': activityType},
   );
   return EventProcessingResult(
     conversation: updatedConversation,
@@ -566,15 +553,16 @@ StreamingState _withToolCallActivity(
 }
 
 /// Commits an in-flight `TextStreaming` reply as a finalized `TextMessage`
-/// when a `RunErrorEvent` arrives mid-stream. Without this, the partial
-/// reply the user was already watching vanishes when streaming is reset
-/// to `AwaitingText`. No-op for `AwaitingText` or when the message id is
-/// already in the conversation (idempotency, mirroring `_processTextEnd`).
-Conversation _commitPartialTextOnError({
+/// when a terminal event (`RunFinishedEvent` or `RunErrorEvent`) arrives
+/// mid-stream. Without this, the partial reply the user was already
+/// watching vanishes when streaming is reset to `AwaitingText`. No-op for
+/// `AwaitingText` or when the message id is already in the conversation
+/// (idempotency, mirroring `_processTextEnd`).
+Conversation _commitPartialTextOnTerminal({
   required Conversation conversation,
   required StreamingState streaming,
   required String runId,
-  required String errorMessage,
+  required String terminalEvent,
 }) {
   if (streaming is! TextStreaming) return conversation;
   final messageId = streaming.messageId;
@@ -582,13 +570,13 @@ Conversation _commitPartialTextOnError({
     return conversation;
   }
   _logger.info(
-    'RunErrorEvent: committing partial reply text before failing run',
+    'Committing partial reply text before terminal status',
     attributes: {
       'runId': runId,
       'messageId': messageId,
       'committedTextChars': streaming.text.length,
       'committedThinkingChars': streaming.thinkingText.length,
-      'errorMessage': errorMessage,
+      'terminalEvent': terminalEvent,
     },
   );
   return conversation.withAppendedMessage(
@@ -598,6 +586,36 @@ Conversation _commitPartialTextOnError({
       text: streaming.text,
       thinkingText: streaming.thinkingText,
     ),
+  );
+}
+
+/// Handles `RunFinishedEvent` for the `Running` status path.
+///
+/// When `streaming is TextStreaming` (the backend never sent a
+/// `TextMessageEnd` before finishing), commits the partial reply text as
+/// a finalized `TextMessage` so the user keeps what was already on screen.
+/// Otherwise routes through `synthesizeNoResponseIfNeeded` to surface the
+/// run's buffered thinking, if any, as a [NoResponseTile].
+EventProcessingResult _processRunFinished(
+  Conversation conversation,
+  StreamingState streaming,
+  String runId,
+) {
+  final withPartial = _commitPartialTextOnTerminal(
+    conversation: conversation,
+    streaming: streaming,
+    runId: runId,
+    terminalEvent: 'RunFinishedEvent',
+  );
+  final result = synthesizeNoResponseIfNeeded(
+    conversation: withPartial,
+    streaming: streaming,
+    runId: runId,
+    reason: TerminalReason.finished,
+  );
+  return EventProcessingResult(
+    conversation: result.conversation.withStatus(const Completed()),
+    streaming: const AwaitingText(),
   );
 }
 
@@ -621,29 +639,24 @@ EventProcessingResult _processRunError(
   String message,
 ) {
   if (conversation.status case Running(:final runId)) {
-    // Commit any in-flight reply text first so the user keeps what was
-    // already streaming. Without this the partial reply vanishes.
-    final withPartial = _commitPartialTextOnError(
+    final withPartial = _commitPartialTextOnTerminal(
       conversation: conversation,
       streaming: streaming,
       runId: runId,
-      errorMessage: message,
+      terminalEvent: 'RunErrorEvent',
     );
-    final synthesized = synthesizeNoResponseIfNeeded(
+    final result = synthesizeNoResponseIfNeeded(
       conversation: withPartial,
       streaming: streaming,
       runId: runId,
       reason: TerminalReason.failed,
       terminalErrorDetail: message,
     );
-    // Synthesis declines when there's no buffered thinking to preserve,
-    // a tool call is unresolved, or a reply was already streaming (the
-    // partial text we just committed IS the visible thread state). The
-    // run still failed; surface an ErrorMessage so the user has a
-    // visible failure signal — status alone doesn't render in the
-    // messages list.
-    final declined = identical(synthesized, withPartial);
-    if (declined) {
+    // The partial-text commit already produces a user-visible signal in
+    // the messages list — synthesis declines on TextStreaming by design,
+    // so don't log the decline path as anomalous.
+    final committedPartial = streaming is TextStreaming;
+    if (!result.synthesized && !committedPartial) {
       _logger.info(
         'RunErrorEvent: NoResponseTile synthesis declined; falling back '
         'to ErrorMessage',
@@ -665,14 +678,17 @@ EventProcessingResult _processRunError(
         },
       );
     }
-    final surfaced = declined
-        ? withPartial.withAppendedMessage(
+    // Append an ErrorMessage when synthesis declined so the run failure
+    // has a visible status row in the messages list. With a partial
+    // commit it sits alongside the half-streamed reply.
+    final surfaced = result.synthesized
+        ? result.conversation
+        : withPartial.withAppendedMessage(
             ErrorMessage.create(
               id: runErrorMessageId(runId),
               message: message,
             ),
-          )
-        : synthesized;
+          );
     return EventProcessingResult(
       conversation: surfaced.withStatus(Failed(error: message)),
       streaming: const AwaitingText(),
@@ -680,21 +696,32 @@ EventProcessingResult _processRunError(
   }
   final droppedThinkingChars =
       streaming is AwaitingText ? streaming.bufferedThinkingText.length : 0;
-  _logger.warning(
-    'RunErrorEvent received while status is non-Running; cannot synthesize '
-    'without a runId. Possible cases: pre-run error, duplicate after '
-    'terminal, or out-of-order event.',
-    attributes: {
-      'status': conversation.status.runtimeType.toString(),
-      'streaming': streaming.runtimeType.toString(),
-      'message': message,
-      'droppedThinkingChars': droppedThinkingChars,
-    },
-  );
-  // Preserve terminal status; only Idle transitions to Failed.
+  // Idle is the normal pre-run-error path; warn only on duplicates after
+  // a terminal status, where the event is genuinely unexpected.
+  final logAttributes = {
+    'status': conversation.status.runtimeType.toString(),
+    'streaming': streaming.runtimeType.toString(),
+    'message': message,
+    'droppedThinkingChars': droppedThinkingChars,
+  };
+  if (conversation.status is Idle) {
+    _logger.info(
+      'RunErrorEvent on Idle: pre-run failure',
+      attributes: logAttributes,
+    );
+  } else {
+    _logger.warning(
+      'RunErrorEvent on terminal status; preserving prior status. '
+      'Possible cases: duplicate after terminal, or out-of-order event.',
+      attributes: logAttributes,
+    );
+  }
   final nextStatus = switch (conversation.status) {
     Idle() => Failed(error: message),
-    _ => conversation.status,
+    Completed() || Failed() || Cancelled() => conversation.status,
+    Running() =>
+      // Unreachable: handled above.
+      throw StateError('Running unreachable in non-Running branch'),
   };
   return EventProcessingResult(
     conversation: conversation.withStatus(nextStatus),
@@ -710,11 +737,9 @@ EventProcessingResult _processStateSnapshot(
   dynamic snapshot,
 ) {
   if (snapshot is! Map<String, dynamic>) {
-    developer.log(
-      'StateSnapshotEvent: skipping non-Map snapshot '
-      '(runtimeType=${snapshot.runtimeType}); state unchanged.',
-      name: 'soliplex_client.event_processor',
-      level: 900,
+    _logger.warning(
+      'StateSnapshotEvent: skipping non-Map snapshot; state unchanged.',
+      attributes: {'snapshotType': snapshot.runtimeType.toString()},
     );
     return EventProcessingResult(
       conversation: conversation,
@@ -746,12 +771,11 @@ EventProcessingResult _processReasoningEncryptedValue(
   StreamingState streaming,
   String entityId,
 ) {
-  developer.log(
-    'ReasoningEncryptedValueEvent dropped (entityId=$entityId): '
-    'round-trip preservation requires encryptedValue on TextMessage '
-    '— see github.com/soliplex/frontend/issues/117',
-    name: 'soliplex_client.event_processor',
-    level: 900,
+  _logger.warning(
+    'ReasoningEncryptedValueEvent dropped: round-trip preservation '
+    'requires encryptedValue on TextMessage — see '
+    'github.com/soliplex/frontend/issues/117',
+    attributes: {'entityId': entityId},
   );
   return EventProcessingResult(
     conversation: conversation,
@@ -765,12 +789,9 @@ EventProcessingResult _processActivityDelta(
   String messageId,
   String activityType,
 ) {
-  developer.log(
-    'ActivityDeltaEvent dropped '
-    '(messageId=$messageId, activityType=$activityType): '
-    'no per-message activity store in the domain',
-    name: 'soliplex_client.event_processor',
-    level: 800,
+  _logger.info(
+    'ActivityDeltaEvent dropped: no per-message activity store in the domain',
+    attributes: {'messageId': messageId, 'activityType': activityType},
   );
   return EventProcessingResult(
     conversation: conversation,

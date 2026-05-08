@@ -1,5 +1,6 @@
 import 'package:ag_ui/ag_ui.dart';
 import 'package:soliplex_client/src/application/agui_event_processor.dart';
+import 'package:soliplex_client/src/application/no_response_synthesis.dart';
 import 'package:soliplex_client/src/application/streaming_state.dart'
     as app_streaming;
 import 'package:soliplex_client/src/domain/chat_message.dart';
@@ -75,7 +76,7 @@ void main() {
             processEvent(runningConversation, streamingWithThinking, event);
 
         final synthesized = result.conversation.messages.last as NoResponseTile;
-        expect(synthesized.id, equals('no-response-run-1'));
+        expect(synthesized.id, equals(noResponseMessageId('run-1')));
         expect(synthesized.user, equals(ChatUser.assistant));
         expect(
           synthesized.thinkingText,

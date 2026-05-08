@@ -903,7 +903,7 @@ void main() {
         state.attachSession(session);
 
         session.emit(
-          FailedState(
+          FailedState.preRun(
             threadKey: (
               serverId: 'test-server',
               roomId: 'room-1',
@@ -941,7 +941,7 @@ void main() {
         state.attachSession(session);
 
         session.emit(
-          FailedState(
+          FailedState.preRun(
             threadKey: (
               serverId: 'test-server',
               roomId: 'room-1',
@@ -979,7 +979,7 @@ void main() {
         state.attachSession(session);
 
         session.emit(
-          FailedState(
+          FailedState.preRun(
             threadKey: (
               serverId: 'test-server',
               roomId: 'room-1',

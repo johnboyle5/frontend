@@ -2,6 +2,14 @@ import 'package:soliplex_client/src/application/streaming_state.dart';
 import 'package:soliplex_client/src/domain/chat_message.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
 
+/// Outcome of [synthesizeNoResponseIfNeeded]. The explicit `synthesized`
+/// flag removes the by-reference `identical(...)` check callers used to
+/// need to distinguish "appended a tile" from "declined".
+typedef NoResponseSynthesisResult = ({
+  Conversation conversation,
+  bool synthesized,
+});
+
 /// Single source of truth for synthesized no-response message ids;
 /// synthesis, tracker rekeying, and historical replay must derive ids
 /// through this helper so they agree for the same run.
@@ -19,7 +27,7 @@ const _runErrorIdPrefix = 'run-error-';
 /// reached a terminal state with buffered thinking but no assistant
 /// `TextMessageStart` / `Content` / `End` for an actual reply.
 ///
-/// Returns [conversation] unchanged when:
+/// Declines (returning the input conversation and `synthesized: false`) when:
 /// - [streaming] is not [AwaitingText] (a reply was in progress).
 /// - The buffered thinking text is empty (no model output to preserve).
 /// - The conversation has any tool call with status `pending`, `streaming`,
@@ -30,24 +38,41 @@ const _runErrorIdPrefix = 'run-error-';
 /// thinking so downstream UI can render the muted "Run
 /// finished/failed/cancelled without a response" tile, optionally with the
 /// backend error message for the `failed` case.
-Conversation synthesizeNoResponseIfNeeded({
+NoResponseSynthesisResult synthesizeNoResponseIfNeeded({
   required Conversation conversation,
   required StreamingState streaming,
   required String runId,
   required TerminalReason reason,
   String? terminalErrorDetail,
 }) {
-  if (streaming is! AwaitingText) return conversation;
-  if (streaming.bufferedThinkingText.isEmpty) return conversation;
-  if (_hasUnresolvedToolCalls(conversation)) return conversation;
+  assert(
+    (reason == TerminalReason.failed) == (terminalErrorDetail != null),
+    'terminalErrorDetail is required iff reason is TerminalReason.failed',
+  );
+  if (streaming is! AwaitingText ||
+      streaming.bufferedThinkingText.isEmpty ||
+      _hasUnresolvedToolCalls(conversation)) {
+    return (conversation: conversation, synthesized: false);
+  }
 
-  return conversation.withAppendedMessage(
-    NoResponseTile.create(
-      id: noResponseMessageId(runId),
-      thinkingText: streaming.bufferedThinkingText,
-      reason: reason,
-      errorDetail: terminalErrorDetail,
-    ),
+  final tile = switch (reason) {
+    TerminalReason.failed => NoResponseTile.failed(
+        id: noResponseMessageId(runId),
+        thinkingText: streaming.bufferedThinkingText,
+        errorDetail: terminalErrorDetail!,
+      ),
+    TerminalReason.cancelled => NoResponseTile.cancelled(
+        id: noResponseMessageId(runId),
+        thinkingText: streaming.bufferedThinkingText,
+      ),
+    TerminalReason.finished => NoResponseTile.finished(
+        id: noResponseMessageId(runId),
+        thinkingText: streaming.bufferedThinkingText,
+      ),
+  };
+  return (
+    conversation: conversation.withAppendedMessage(tile),
+    synthesized: true,
   );
 }
 

@@ -65,19 +65,16 @@ class TrackerRegistry {
   /// terminal `RunState` transitions for runs that ended with buffered
   /// thinking but no assistant text.
   ///
-  /// The "synthesized message exists but no awaiting tracker present"
-  /// case is a state divergence — the tile will still render the
-  /// thinking text from `TextMessage.thinkingText` (set at synthesis
-  /// time), but it won't have the tracker-attached execution-step
-  /// timeline. Logs a warning so the divergence is observable.
+  /// When no awaiting tracker is present the synthesized [NoResponseTile]
+  /// still renders its `thinkingText` field, but no execution-step
+  /// timeline attaches; the warning makes that divergence observable.
   void renameAwaitingTo(String key) {
     if (key == awaitingTrackerKey) return;
     final tracker = _trackers.remove(awaitingTrackerKey);
     if (tracker == null) {
       _logger.warning(
-        'No awaiting tracker for renameAwaitingTo; the synthesized '
-        'no-response tile will still show its thinking text but will lack '
-        'the tracker-attached execution-step timeline.',
+        'No awaiting tracker for renameAwaitingTo; NoResponseTile will '
+        'render thinking but lack the execution-step timeline.',
         attributes: {'targetKey': key},
       );
       return;

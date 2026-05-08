@@ -97,8 +97,10 @@ class ExecutionTracker {
           ];
         }
       case ThinkingEnded():
-        // Active step is left for the next tool call or run terminal
-        // event to complete.
+        // Don't complete the active step here: backends emit
+        // ThinkingEnded between thinking and an immediately-following
+        // tool call, and completing the step now would split a single
+        // logical step into two timeline entries.
         _isThinkingStreaming.value = false;
       case ServerToolCallStarted(:final toolName):
         _completeActiveStep();
@@ -116,7 +118,14 @@ class ExecutionTracker {
         _completeAllSteps(StepStatus.completed);
         _isThinkingStreaming.value = false;
       case RunFailed(:final error):
-        _logger.error('Run failed', error: error);
+        // RunOrchestrator._onStreamError already logs the canonical Sentry
+        // event with the original Object/StackTrace. This is the
+        // tracker-side observation; warning avoids a duplicate Sentry
+        // entry without a stack trace.
+        _logger.warning(
+          'Tracker observed run failure',
+          attributes: {'error': error},
+        );
         _completeAllSteps(StepStatus.failed);
         _isThinkingStreaming.value = false;
       case RunCancelled():

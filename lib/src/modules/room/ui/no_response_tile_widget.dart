@@ -81,7 +81,7 @@ class _TerminalReasonBubble extends StatelessWidget {
         ),
       TerminalReason.failed => (
           Icons.error_outline,
-          errorDetail != null
+          (errorDetail != null && errorDetail!.isNotEmpty)
               ? 'Run failed: $errorDetail'
               : 'Run failed without a response',
         ),
