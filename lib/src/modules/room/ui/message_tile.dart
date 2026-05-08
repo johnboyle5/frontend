@@ -77,10 +77,9 @@ class MessageTile extends StatelessWidget {
             executionTracker: executionTracker,
             streamingActivity: streamingActivity,
           ),
-        // Production code does not yet synthesize DroppedEventMessage;
-        // until the dedicated tile lands, render a visible placeholder so
-        // a regression that starts producing them is observable instead
-        // of silently rendering as a blank gap.
+        // No production path currently synthesizes DroppedEventMessage.
+        // Render a visible placeholder so a regression that starts
+        // producing them is observable instead of an invisible gap.
         DroppedEventMessage(:final reason) => Padding(
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
             child: Text(

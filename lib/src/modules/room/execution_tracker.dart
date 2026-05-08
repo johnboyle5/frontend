@@ -7,7 +7,8 @@ class ExecutionTracker {
   ExecutionTracker({
     required ReadonlySignal<ExecutionEvent?> executionEvents,
     required Logger logger,
-  }) : _logger = logger {
+  })  : _logger = logger,
+        _historical = false {
     _stopwatch.start();
     _unsub = executionEvents.subscribe(_onEvent);
   }
@@ -22,7 +23,8 @@ class ExecutionTracker {
   ExecutionTracker.historical({
     required List<ExecutionEvent> events,
     required Logger logger,
-  }) : _logger = logger {
+  })  : _logger = logger,
+        _historical = true {
     _stopwatch.start();
     for (final event in events) {
       _onEvent(event);
@@ -31,6 +33,12 @@ class ExecutionTracker {
   }
 
   final Logger _logger;
+
+  /// True when this tracker is replaying stored events on the reload
+  /// path. Live-only side-effects (e.g. warning-level logs that mirror a
+  /// canonical Sentry event) are gated so they don't fire N times for
+  /// every thread reload.
+  final bool _historical;
 
   final Stopwatch _stopwatch = Stopwatch();
   void Function()? _unsub;
@@ -66,9 +74,7 @@ class ExecutionTracker {
   ReadonlySignal<List<TimelineEntry>> get timeline => _timeline;
 
   /// Marks the tracker terminal: clears the spinner, completes any
-  /// still-active steps, and releases the subscription. `_completeAllSteps`
-  /// asserts non-frozen, so it must run before `_isFrozen = true`.
-  /// Idempotent — a second call is a no-op.
+  /// still-active steps, and releases the subscription. Idempotent.
   void freeze() {
     if (_isFrozen) return;
     _isThinkingStreaming.value = false;
@@ -118,14 +124,18 @@ class ExecutionTracker {
         _completeAllSteps(StepStatus.completed);
         _isThinkingStreaming.value = false;
       case RunFailed(:final error):
-        // RunOrchestrator._onStreamError already logs the canonical Sentry
-        // event with the original Object/StackTrace. This is the
-        // tracker-side observation; warning avoids a duplicate Sentry
-        // entry without a stack trace.
-        _logger.warning(
-          'Tracker observed run failure',
-          attributes: {'error': error},
-        );
+        // Backend RunErrorEvent surfaces here as `RunFailed`. The
+        // application layer (`agui_event_processor._processRunError`) only
+        // logs at info on the synthesis-decline path, and
+        // `RunOrchestrator._onStreamError` only fires for stream-level
+        // failures — so this is the canonical warning-level signal.
+        // Skip on historical replay so reloads don't multiply the entry.
+        if (!_historical) {
+          _logger.warning(
+            'Tracker observed run failure',
+            attributes: {'error': error},
+          );
+        }
         _completeAllSteps(StepStatus.failed);
         _isThinkingStreaming.value = false;
       case RunCancelled():
@@ -176,6 +186,14 @@ class ExecutionTracker {
     );
     final decoded = SkillToolCallActivity.fromRecord(record);
     if (decoded == null) {
+      _logger.warning(
+        'SkillToolCallActivity.fromRecord returned null; activity dropped',
+        attributes: {
+          'messageId': messageId,
+          'activityType': activityType,
+          'contentKeys': content.keys.toList().toString(),
+        },
+      );
       return;
     }
 

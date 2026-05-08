@@ -381,6 +381,12 @@ EventProcessingResult _processToolCallArgs(
   // Only accumulate args while the tool call is still streaming.
   // Late deltas after ToolCallEnd are ignored to prevent mutation of
   // finalized arguments.
+  if (!conversation.toolCalls.any((tc) => tc.id == toolCallId)) {
+    _logger.warning(
+      'ToolCallArgsEvent for unknown toolCallId; delta dropped',
+      attributes: {'toolCallId': toolCallId, 'deltaChars': delta.length},
+    );
+  }
   final updatedToolCalls = conversation.toolCalls.map((tc) {
     if (tc.id == toolCallId && tc.status == ToolCallStatus.streaming) {
       return tc.copyWith(arguments: tc.arguments + delta);
@@ -401,8 +407,13 @@ EventProcessingResult _processToolCallEnd(
 ) {
   // Only transition streaming → pending. Guard prevents downgrading tools
   // that are already executing/completed/failed (e.g. duplicate ToolCallEnd).
-  // Keep the tool in conversation.toolCalls (execution happens in Slice 3).
   // Activity persists until the next activity starts — don't change it here.
+  if (!conversation.toolCalls.any((tc) => tc.id == toolCallId)) {
+    _logger.warning(
+      'ToolCallEndEvent for unknown toolCallId; ignored',
+      attributes: {'toolCallId': toolCallId},
+    );
+  }
   final updatedToolCalls = conversation.toolCalls.map((tc) {
     if (tc.id == toolCallId && tc.status == ToolCallStatus.streaming) {
       return tc.copyWith(status: ToolCallStatus.pending);
@@ -736,7 +747,6 @@ EventProcessingResult _processRunError(
     Completed() || Failed() || Cancelled() => conversation.status,
     Idle() ||
     Running() =>
-      // Unreachable: Idle handled above; Running handled at the top.
       throw StateError('Idle/Running unreachable in terminal-preserve branch'),
   };
   return EventProcessingResult(

@@ -26,8 +26,9 @@ String runErrorMessageId(String runId) => '$_runErrorIdPrefix$runId';
 
 /// Id for an `ErrorMessage` synthesized when `RunErrorEvent` arrives on
 /// `Idle` status (no preceding `RunStartedEvent` — backend protocol
-/// violation). Hashed from [threadId] + [message] so a duplicate event
-/// produces the same id and downstream dedup keeps one message.
+/// violation). Hashed from [threadId] + [message] so a repeated event
+/// produces a stable id, leaving id-based deduplication possible if a
+/// future caller appends without first checking the conversation status.
 String preRunErrorMessageId(String threadId, String message) =>
     '$_preRunErrorIdPrefix$threadId-${message.hashCode}';
 
@@ -140,6 +141,14 @@ Conversation commitPartialTextOnTerminal({
   if (streaming is! TextStreaming) return conversation;
   final messageId = streaming.messageId;
   if (conversation.messages.any((m) => m.id == messageId)) {
+    _logger.info(
+      'Skipped duplicate message ID on partial-text commit',
+      attributes: {
+        'runId': runId,
+        'messageId': messageId,
+        'terminalEvent': terminalEvent,
+      },
+    );
     return conversation;
   }
   _logger.info(

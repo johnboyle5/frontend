@@ -459,8 +459,9 @@ class RunOrchestrator {
 
   /// Drives the tool yield/resume loop for [runToCompletion].
   ///
-  /// **R4:** Every operation inside the loop is wrapped in try/catch
-  /// that returns a terminal [RunState].
+  /// Every operation inside the loop is wrapped in try/catch that returns
+  /// a terminal [RunState], so a thrown exception cannot leave the
+  /// orchestrator in a non-terminal state with the future still hanging.
   Future<RunState> _driveToolLoop(
     ThreadKey key,
     ToolExecutorCallback toolExecutor,
@@ -619,8 +620,8 @@ class RunOrchestrator {
 
   /// Whether [state] is terminal for the SSE subscription completer.
   ///
-  /// **R1:** Exhaustive switch expression — adding a new [RunState]
-  /// variant without updating this method causes a compile error.
+  /// Exhaustive switch expression — adding a new [RunState] variant
+  /// without updating this method causes a compile error.
   bool _isTerminal(RunState state) => switch (state) {
         CompletedState() => true,
         FailedState() => true,
@@ -630,41 +631,45 @@ class RunOrchestrator {
         IdleState() => false,
       };
 
-  /// Defensively completes [_terminalCompleter] during [dispose] (R4).
+  /// Completes [_terminalCompleter] when [dispose] runs while a backend
+  /// run is in flight, so `runToCompletion`'s await of the completer
+  /// future doesn't hang.
   ///
-  /// Routes through `.duringRun(runId:)` for `RunningState`/`ToolYieldingState`
-  /// so the documented `runId != null iff a backend run was in flight`
-  /// invariant holds for downstream consumers (`AgentSession._completeWith`,
-  /// `RunRegistry._outcomeFrom`).
+  /// The early return covers two of the three reachable states:
+  ///   - `IdleState` (and pre-run paths): completer is null because
+  ///     [_subscribeToStream] hasn't run yet; `?.isCompleted ?? true`
+  ///     evaluates to true.
+  ///   - Terminal states (`Completed`/`Failed`/`Cancelled`) and
+  ///     `ToolYieldingState`: [_setState] already completed the completer
+  ///     because [_isTerminal] returns true for all four.
+  ///
+  /// That leaves only `RunningState` reachable past the early return —
+  /// the synchronous window between [_subscribeToStream]'s completer
+  /// assignment and the next event-driven transition. There is no
+  /// microtask boundary where dispose could fall on any other state with
+  /// an uncompleted completer, so the other arms throw `StateError` to
+  /// surface invariant breakage instead of fabricating data.
   void _completeTerminalOnDispose() {
     if (_terminalCompleter?.isCompleted ?? true) return;
-    final terminal = switch (_currentState) {
-      RunningState(:final threadKey, :final runId, :final conversation) =>
+    if (_currentState
+        case RunningState(
+          :final threadKey,
+          :final runId,
+          :final conversation,
+        )) {
+      _terminalCompleter!.complete(
         CancelledState.duringRun(
           threadKey: threadKey,
           runId: runId,
           conversation: conversation,
         ),
-      ToolYieldingState(:final threadKey, :final runId, :final conversation) =>
-        CancelledState.duringRun(
-          threadKey: threadKey,
-          runId: runId,
-          conversation: conversation,
-        ),
-      IdleState() ||
-      CompletedState() ||
-      FailedState() ||
-      CancelledState() =>
-        CancelledState.preRun(
-          threadKey: switch (_currentState) {
-            CompletedState(:final threadKey) => threadKey,
-            FailedState(:final threadKey) => threadKey,
-            CancelledState(:final threadKey) => threadKey,
-            _ => const (serverId: '', roomId: '', threadId: ''),
-          },
-        ),
-    };
-    _terminalCompleter!.complete(terminal);
+      );
+      return;
+    }
+    throw StateError(
+      '_completeTerminalOnDispose: unexpected state '
+      '${_currentState.runtimeType} with uncompleted terminalCompleter',
+    );
   }
 
   void _guardRunToCompletion() {
@@ -881,7 +886,11 @@ class RunOrchestrator {
 
   void _handleRunFinished(RunningState previous, Conversation conversation) {
     _receivedTerminalEvent = true;
-    _subscription = null;
+    // Leave `_subscription` set so `_subscribeToStream` cancels it on
+    // resume. Nulling here would silently leak the prior subscription on
+    // a resume, since `_subscribeToStream`'s cancel-and-replace would
+    // skip its `?.cancel()` call. `onDone` (the natural SSE close) is
+    // also handled by `_onStreamDone`, which nulls the field.
     _cancelToken = null;
     final withCitations = _extractCitations(conversation, previous.runId);
     final pendingTools = _extractPendingTools(withCitations);

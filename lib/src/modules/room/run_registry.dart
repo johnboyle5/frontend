@@ -56,8 +56,8 @@ class RunRegistry {
     if (_isDisposed) {
       // Caller bug: a disposed registry can no longer manage the
       // session. Cancel first so the session is never leaked even
-      // if the assert fires, log so the bug reaches BackendLogSink in
-      // release, then assert so it's loud in debug.
+      // if the assert fires, log so the bug is observable in release,
+      // then assert so it's loud in debug.
       session.cancel();
       _logger.error(
         'register called on disposed RunRegistry; cancelling session',
