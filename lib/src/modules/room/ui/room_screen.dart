@@ -7,8 +7,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_client/soliplex_client.dart'
-    show RagDocument, Room, SourceReferenceFormatting, buildDocumentFilter;
-
+    show
+        RagDocument,
+        ReconnectFailed,
+        ReconnectStatus,
+        Reconnected,
+        Reconnecting,
+        Room,
+        SourceReferenceFormatting,
+        buildDocumentFilter;
 import '../../../../soliplex_frontend.dart';
 import '../../../core/routes.dart';
 import '../../auth/server_entry.dart';
@@ -24,6 +31,7 @@ import '../run_registry.dart';
 import '../thread_list_state.dart';
 import '../thread_view_state.dart';
 import '../compute_display_messages.dart';
+import '../workdir_controller.dart';
 import 'approval_handler.dart';
 import 'chat_input.dart';
 import 'chunk_visualization_page.dart';
@@ -81,6 +89,7 @@ class RoomScreen extends StatefulWidget {
 
 class _RoomScreenState extends State<RoomScreen> {
   late RoomState _state;
+  late WorkdirController _workdirs;
   void Function()? _autoSelectUnsub;
   final _chatController = TextEditingController();
   final _chatFocusNode = FocusNode();
@@ -135,6 +144,7 @@ class _RoomScreenState extends State<RoomScreen> {
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleKey);
     _state = _createRoomState();
+    _workdirs = _createWorkdirController();
     if (widget.threadId != null) {
       _state.selectThread(widget.threadId!);
     } else {
@@ -151,6 +161,7 @@ class _RoomScreenState extends State<RoomScreen> {
       _state.dispose();
       _chatController.clear();
       _state = _createRoomState();
+      _workdirs = _createWorkdirController();
       if (widget.threadId != null) {
         _state.selectThread(widget.threadId!);
       } else {
@@ -160,6 +171,7 @@ class _RoomScreenState extends State<RoomScreen> {
       if (widget.threadId != null) {
         _cancelAutoSelect();
         _chatController.clear();
+        _workdirs.clearCache();
         if (_filterEnabled && oldWidget.threadId == null) {
           _documentSelections.migrateToThread(widget.roomId, widget.threadId!);
         }
@@ -195,6 +207,11 @@ class _RoomScreenState extends State<RoomScreen> {
         registry: widget.registry,
         uploadRegistry: widget.uploadRegistry,
         onNavigateToThread: (id) => _navigateToThread(id),
+      );
+
+  WorkdirController _createWorkdirController() => WorkdirController(
+        api: widget.serverEntry.connection.api,
+        roomId: widget.roomId,
       );
 
   void _navigateToThread(String? threadId, {bool replace = false}) {
@@ -861,6 +878,7 @@ class _RoomScreenState extends State<RoomScreen> {
     final status = threadView.messages.watch(context);
     final streaming = threadView.streamingState.watch(context);
     final sendError = threadView.lastSendError.watch(context);
+    final reconnectStatus = threadView.reconnectStatus.watch(context);
     final attachEnabled = room?.enableAttachments ?? false;
 
     _restoreUnsentText(sendError?.unsentText);
@@ -873,6 +891,12 @@ class _RoomScreenState extends State<RoomScreen> {
         ),
         Column(
           children: [
+            if (reconnectStatus is Reconnecting ||
+                reconnectStatus is Reconnected)
+              _ReconnectBanner(
+                status: reconnectStatus!,
+                onDismiss: threadView.dismissReconnectStatus,
+              ),
             Expanded(
               child: switch (status) {
                 MessagesLoading() => const Center(
@@ -928,6 +952,14 @@ class _RoomScreenState extends State<RoomScreen> {
                             documentTitle: ref.displayTitle,
                             pageNumbers: ref.pageNumbers,
                           ),
+                          onFetchWorkdirFiles: (runId) =>
+                              _workdirs.fetchFiles(threadView.threadId, runId),
+                          onDownloadWorkdirFile: (runId, file) =>
+                              _workdirs.download(
+                            threadView.threadId,
+                            runId,
+                            file,
+                          ),
                         ),
               },
             ),
@@ -950,6 +982,7 @@ class _RoomScreenState extends State<RoomScreen> {
               ),
               onCancel: threadView.cancelRun,
               sessionState: threadView.sessionState,
+              cancelEnabled: threadView.isCancellable,
               controller: _chatController,
               focusNode: _chatFocusNode,
               enabled: status is MessagesLoaded,
@@ -1027,6 +1060,122 @@ class _SendErrorBanner extends StatelessWidget {
             constraints: const BoxConstraints(),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Banner for in-flight SSE reconnect lifecycle states.
+///
+/// Renders [Reconnecting] and [Reconnected] only. Callers must filter
+/// out [ReconnectFailed] (which surfaces through the send-error
+/// banner) before passing a status to this widget.
+class _ReconnectBanner extends StatefulWidget {
+  const _ReconnectBanner({required this.status, required this.onDismiss});
+
+  final ReconnectStatus status;
+  final VoidCallback onDismiss;
+
+  @override
+  State<_ReconnectBanner> createState() => _ReconnectBannerState();
+}
+
+class _ReconnectBannerState extends State<_ReconnectBanner> {
+  Timer? _autoDismiss;
+
+  @override
+  void didUpdateWidget(covariant _ReconnectBanner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.status.runtimeType != widget.status.runtimeType) {
+      _autoDismiss?.cancel();
+      _autoDismiss = null;
+      _scheduleAutoDismissIfNeeded();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleAutoDismissIfNeeded();
+  }
+
+  void _scheduleAutoDismissIfNeeded() {
+    if (widget.status is Reconnected) {
+      _autoDismiss = Timer(
+        const Duration(seconds: 4),
+        () {
+          if (!mounted) return;
+          widget.onDismiss();
+        },
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _autoDismiss?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final (icon, label) = switch (widget.status) {
+      Reconnecting(:final attempt) => (
+          const _SpinnerIcon(),
+          'Reconnecting… (attempt $attempt)',
+        ),
+      Reconnected() => (
+          Icon(Icons.check_circle_outline, size: 16, color: scheme.primary),
+          'Reconnected.',
+        ),
+      // Filtered at call site, but exhaustive here so a future
+      // ReconnectStatus subclass forces a build break instead of
+      // silently rendering an empty banner.
+      ReconnectFailed() => (const SizedBox.shrink(), ''),
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+          horizontal: SoliplexSpacing.s3, vertical: SoliplexSpacing.s2),
+      color: scheme.secondaryContainer,
+      child: Row(
+        children: [
+          icon,
+          const SizedBox(width: SoliplexSpacing.s2),
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSecondaryContainer,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16),
+            onPressed: widget.onDismiss,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SpinnerIcon extends StatelessWidget {
+  const _SpinnerIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: SoliplexSpacing.s4,
+      width: SoliplexSpacing.s4,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
       ),
     );
   }

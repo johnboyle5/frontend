@@ -12,6 +12,7 @@ import 'execution/thinking_block.dart';
 import 'copy_button.dart';
 import 'feedback_buttons.dart';
 import 'markdown/flutter_markdown_plus_renderer.dart';
+import 'workdir_files_section.dart';
 
 class TextMessageTile extends StatelessWidget {
   const TextMessageTile({
@@ -23,6 +24,8 @@ class TextMessageTile extends StatelessWidget {
     this.onFeedbackSubmit,
     this.onInspect,
     this.onShowChunkVisualization,
+    this.onFetchWorkdirFiles,
+    this.onDownloadWorkdirFile,
     this.executionTracker,
     this.streamingActivity,
   });
@@ -34,6 +37,8 @@ class TextMessageTile extends StatelessWidget {
   final void Function(FeedbackType feedback, String? reason)? onFeedbackSubmit;
   final VoidCallback? onInspect;
   final void Function(SourceReference)? onShowChunkVisualization;
+  final FetchWorkdirFiles? onFetchWorkdirFiles;
+  final DownloadWorkdirFile? onDownloadWorkdirFile;
   final ExecutionTracker? executionTracker;
   final ActivityType? streamingActivity;
 
@@ -125,6 +130,18 @@ class TextMessageTile extends StatelessWidget {
           CitationsSection(
             sourceReferences: sourceReferences!,
             onShowChunkVisualization: onShowChunkVisualization,
+          ),
+        if (!isUser &&
+            runId != null &&
+            onFetchWorkdirFiles != null &&
+            onDownloadWorkdirFile != null)
+          WorkdirFilesSection(
+            // Force re-mount (and re-fetch) if the assistant message is
+            // ever rebuilt with a different runId.
+            key: ValueKey(runId),
+            runId: runId!,
+            fetchFiles: onFetchWorkdirFiles!,
+            onDownload: onDownloadWorkdirFile!,
           ),
       ],
     );
