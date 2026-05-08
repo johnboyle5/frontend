@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:meta/meta.dart';
 import 'package:soliplex_agent/src/models/failure_reason.dart';
 import 'package:soliplex_agent/src/models/thread_key.dart';
 import 'package:soliplex_agent/src/orchestration/agent_llm_provider.dart';
@@ -64,15 +65,21 @@ typedef ToolExecutorCallback = Future<List<ToolCallInfo>> Function(
 /// (JSON Schema). The backend rejects tool definitions without it.
 class RunOrchestrator {
   /// Creates a [RunOrchestrator] with the given dependencies.
+  ///
+  /// [citationExtractor] is an injection point for tests that need to
+  /// observe failure paths inside [_extractCitations]. Production callers
+  /// leave it null and get the default [CitationExtractor].
   RunOrchestrator({
     required AgentLlmProvider llmProvider,
     required ToolRegistry toolRegistry,
     required Logger logger,
     int maxToolDepth = defaultMaxToolDepth,
+    @visibleForTesting CitationExtractor? citationExtractor,
   })  : _llmProvider = llmProvider,
         _toolRegistry = toolRegistry,
         _logger = logger,
-        _maxToolDepth = maxToolDepth;
+        _maxToolDepth = maxToolDepth,
+        _citationExtractor = citationExtractor ?? CitationExtractor();
 
   /// Default maximum tool-call depth before the orchestrator aborts.
   static const defaultMaxToolDepth = 10;
@@ -82,7 +89,7 @@ class RunOrchestrator {
   final Logger _logger;
   final int _maxToolDepth;
 
-  final CitationExtractor _citationExtractor = CitationExtractor();
+  final CitationExtractor _citationExtractor;
 
   Map<String, dynamic> _preRunAguiState = const {};
   String? _userMessageId;
@@ -1000,34 +1007,49 @@ class RunOrchestrator {
   /// In multi-segment tool loops, [runId] is overwritten each segment so the
   /// final [MessageState] carries the last segment's run ID — the one whose
   /// output the user sees and may submit feedback on.
+  ///
+  /// Wraps the body in a Tier-1 catch: any throw downstream (extractor
+  /// schema drift, malformed citations) returns the conversation unchanged
+  /// so the run completes. Citation index drifts until the next run
+  /// updates it; messages still render. No drop tile — citations are a
+  /// derived projection, not user-facing content.
   Conversation _extractCitations(Conversation conversation, String runId) {
-    final userMessageId = _userMessageId;
-    if (userMessageId == null) return conversation;
+    try {
+      final userMessageId = _userMessageId;
+      if (userMessageId == null) return conversation;
 
-    final citations = _citationExtractor.extractNew(
-      _preRunAguiState,
-      conversation.aguiState,
-    );
-    _preRunAguiState = conversation.aguiState;
+      final citations = _citationExtractor.extractNew(
+        _preRunAguiState,
+        conversation.aguiState,
+      );
+      _preRunAguiState = conversation.aguiState;
 
-    final existing = conversation.messageStates[userMessageId];
-    final seenChunkIds = <String>{};
-    final mergedCitations = <SourceReference>[];
-    for (final ref in [
-      if (existing != null) ...existing.sourceReferences,
-      ...citations,
-    ]) {
-      if (seenChunkIds.add(ref.chunkId)) {
-        mergedCitations.add(ref);
+      final existing = conversation.messageStates[userMessageId];
+      final seenChunkIds = <String>{};
+      final mergedCitations = <SourceReference>[];
+      for (final ref in [
+        if (existing != null) ...existing.sourceReferences,
+        ...citations,
+      ]) {
+        if (seenChunkIds.add(ref.chunkId)) {
+          mergedCitations.add(ref);
+        }
       }
-    }
 
-    final messageState = MessageState(
-      userMessageId: userMessageId,
-      sourceReferences: mergedCitations,
-      runId: runId,
-    );
-    return conversation.withMessageState(userMessageId, messageState);
+      final messageState = MessageState(
+        userMessageId: userMessageId,
+        sourceReferences: mergedCitations,
+        runId: runId,
+      );
+      return conversation.withMessageState(userMessageId, messageState);
+    } on Object catch (e, st) {
+      _logger.warning(
+        'Citation extraction failed for run $runId',
+        error: e,
+        stackTrace: st,
+      );
+      return conversation;
+    }
   }
 
   void _onStreamDone() {
