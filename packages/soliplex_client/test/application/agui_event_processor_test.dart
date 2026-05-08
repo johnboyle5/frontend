@@ -1584,29 +1584,26 @@ void main() {
         expect(result.streaming, equals(streaming));
       });
 
-      test('StateSnapshotEvent with non-Map snapshot is a no-op', () {
+      test('StateSnapshotEvent with non-Map snapshot throws', () {
         // ag_ui's `State = dynamic` lets a backend send any shape. The
-        // frontend must not crash on cast — it must keep the prior state
-        // and continue processing.
-        final priorState = {'kept': 'as-is'};
-        final conversationWithState = conversation.copyWith(
-          aguiState: priorState,
-        );
+        // cast inside `_processStateSnapshot` throws on non-Map values;
+        // the caller (replay loop / orchestrator) catches the throw and
+        // appends a `DroppedEventMessage` at the failure position.
         const event = StateSnapshotEvent(snapshot: ['unexpected', 'list']);
 
-        final result = processEvent(conversationWithState, streaming, event);
-
-        expect(result.conversation.aguiState, equals(priorState));
-        expect(result.streaming, equals(streaming));
+        expect(
+          () => processEvent(conversation, streaming, event),
+          throwsA(isA<TypeError>()),
+        );
       });
 
-      test('StateSnapshotEvent with null snapshot is a no-op', () {
+      test('StateSnapshotEvent with null snapshot throws', () {
         const event = StateSnapshotEvent(snapshot: null);
 
-        final result = processEvent(conversation, streaming, event);
-
-        expect(result.conversation.aguiState, equals(conversation.aguiState));
-        expect(result.streaming, equals(streaming));
+        expect(
+          () => processEvent(conversation, streaming, event),
+          throwsA(isA<TypeError>()),
+        );
       });
 
       test('StateDeltaEvent applies JSON Patch to aguiState', () {

@@ -2080,14 +2080,8 @@ void main() {
         },
       );
 
-      test('skips undecodable events and warns', () async {
-        final warnings = <String>[];
-        final apiWithWarning = SoliplexApi(
-          transport: mockTransport,
-          urlBuilder: urlBuilder,
-          onWarning: warnings.add,
-        );
-
+      test('yields a DroppedEventMessage for undecodable replay events',
+          () async {
         when(
           () => mockTransport.request<Map<String, dynamic>>(
             'GET',
@@ -2146,26 +2140,103 @@ void main() {
           },
         );
 
-        final history =
-            await apiWithWarning.getThreadHistory('room-123', 'thread-456');
+        final history = await api.getThreadHistory('room-123', 'thread-456');
 
-        expect(history.messages, hasLength(1));
-        expect(
-          (history.messages[0] as TextMessage).text,
-          equals('Hello'),
+        // A drop tile sits at the unknown event's position; the
+        // surrounding text message still renders.
+        expect(history.messages, hasLength(2));
+        expect(history.messages[0], isA<DroppedEventMessage>());
+        final drop = history.messages[0] as DroppedEventMessage;
+        expect(drop.source, equals(DropSource.decode));
+        expect(drop.runId, equals('run-1'));
+        expect(drop.id, equals('dropped-run-1-0'));
+        expect(drop.rawPayload, containsPair('type', 'TOTALLY_UNKNOWN_EVENT'));
+        expect((history.messages[1] as TextMessage).text, equals('Hello'));
+      });
+
+      test('replay drop tile ids are deterministic across reloads', () async {
+        // Same raw events on two replays produce drop tiles with the
+        // same ids — the live conversation rebuilds deterministically
+        // from backend events on reload (see Step 3.8 id scheme).
+        final eventsResponse = {
+          'run_id': 'run-1',
+          'events': [
+            {'type': 'TOTALLY_UNKNOWN_EVENT', 'foo': 'bar'},
+            {
+              'type': 'TEXT_MESSAGE_START',
+              'messageId': 'msg-1',
+              'role': 'assistant',
+            },
+            {
+              'type': 'TEXT_MESSAGE_CONTENT',
+              'messageId': 'msg-1',
+              'delta': 'Hello',
+            },
+            {'type': 'TEXT_MESSAGE_END', 'messageId': 'msg-1'},
+          ],
+        };
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            Uri.parse(
+              'https://api.example.com/api/v1/rooms/room-123/agui/thread-456',
+            ),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'room_id': 'room-123',
+            'thread_id': 'thread-456',
+            'runs': {
+              'run-1': {
+                'run_id': 'run-1',
+                'created': '2026-01-07T01:00:00.000Z',
+                'finished': '2026-01-07T01:01:00.000Z',
+              },
+            },
+          },
         );
-        expect(warnings, hasLength(1));
-        expect(warnings[0], contains('Skipped 1 malformed event'));
+        when(
+          () => mockTransport.request<Map<String, dynamic>>(
+            'GET',
+            Uri.parse(
+              'https://api.example.com/api/v1/rooms/room-123/agui/thread-456/run-1',
+            ),
+            cancelToken: any(named: 'cancelToken'),
+            fromJson: any(named: 'fromJson'),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            timeout: any(named: 'timeout'),
+          ),
+        ).thenAnswer((_) async => eventsResponse);
 
-        apiWithWarning.close();
+        final first = await api.getThreadHistory('room-123', 'thread-456');
+        // Build a second SoliplexApi so the run-events cache doesn't
+        // shortcut the second replay.
+        final api2 = SoliplexApi(
+          transport: mockTransport,
+          urlBuilder: urlBuilder,
+        );
+        final second = await api2.getThreadHistory('room-123', 'thread-456');
+        api2.close();
+
+        final firstId =
+            first.messages.whereType<DroppedEventMessage>().single.id;
+        final secondId =
+            second.messages.whereType<DroppedEventMessage>().single.id;
+        expect(firstId, equals(secondId));
       });
 
       test('replay survives a STATE_SNAPSHOT with a non-Map snapshot',
           () async {
         // Backend shape drift used to throw an unguarded cast inside
-        // processEvent, abort the replay, and reject getThreadHistory —
-        // leaving the user with no messages at all. After Phase 1 the bad
-        // event is a no-op and surrounding messages still appear.
+        // processEvent and abort the replay. The per-event wrapper now
+        // catches that throw, mints a `DroppedEventMessage` at the
+        // failure position, and lets surrounding messages render.
         when(
           () => mockTransport.request<Map<String, dynamic>>(
             'GET',
@@ -2240,9 +2311,16 @@ void main() {
 
         final history = await api.getThreadHistory('room-123', 'thread-456');
 
-        expect(history.messages, hasLength(2));
+        // The two text messages bracket a drop tile at the bad
+        // STATE_SNAPSHOT's position.
+        expect(history.messages, hasLength(3));
         expect((history.messages[0] as TextMessage).text, equals('before'));
-        expect((history.messages[1] as TextMessage).text, equals('after'));
+        expect(history.messages[1], isA<DroppedEventMessage>());
+        expect(
+          (history.messages[1] as DroppedEventMessage).source,
+          equals(DropSource.eventProcessing),
+        );
+        expect((history.messages[2] as TextMessage).text, equals('after'));
       });
 
       test('calls onWarning callback on partial failure', () async {

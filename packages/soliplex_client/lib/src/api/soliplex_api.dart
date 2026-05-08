@@ -5,8 +5,10 @@ import 'package:ag_ui/ag_ui.dart' hide CancelToken;
 import 'package:soliplex_client/src/api/mappers.dart';
 import 'package:soliplex_client/src/application/agui_event_processor.dart';
 import 'package:soliplex_client/src/application/citation_extractor.dart';
+import 'package:soliplex_client/src/application/decode_outcome.dart';
 import 'package:soliplex_client/src/application/streaming_state.dart';
 import 'package:soliplex_client/src/domain/backend_version_info.dart';
+import 'package:soliplex_client/src/domain/chat_message.dart';
 import 'package:soliplex_client/src/domain/chunk_visualization.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
 import 'package:soliplex_client/src/domain/feedback_type.dart';
@@ -734,11 +736,9 @@ class SoliplexApi {
 
     var conversation = Conversation.empty(threadId: threadId);
     var streaming = const AwaitingText() as StreamingState;
-    const decoder = EventDecoder();
     final extractor = CitationExtractor();
     final messageStates = <String, MessageState>{};
     final runs = <RunEventBundle>[];
-    var skippedEventCount = 0;
 
     for (final (:runId, :events) in eventsPerRun) {
       // Capture AG-UI state before processing this run
@@ -759,32 +759,59 @@ class SoliplexApi {
         }
       }
 
-      // Process all events in this run.
-      //
-      // Catches any error so that one malformed event (decode failure,
-      // unexpected shape, cast failure inside processEvent) cannot abort
-      // replay and leave the user with a half-loaded thread. Bad events
-      // are skipped, surrounding messages still appear, and the
-      // skippedEventCount surfaces as a non-blocking warning below.
+      // Process all events in this run. The two boundaries that can lose
+      // user-facing content are the decode boundary (`decodeMapSafely`)
+      // and `processEvent` itself; both append a `DroppedEventMessage`
+      // at the failure position so a malformed event can't abort replay
+      // and leave the user with a half-loaded thread.
       final decodedEvents = <BaseEvent>[];
       for (var i = 0; i < events.length; i++) {
         final eventJson = events[i];
-        try {
-          final event = decoder.decodeJson(eventJson);
-          decodedEvents.add(event);
-          final result = processEvent(conversation, streaming, event);
-          conversation = result.conversation;
-          streaming = result.streaming;
-        } on Object catch (error, stackTrace) {
-          skippedEventCount++;
-          developer.log(
-            'replay: skipping events[$i] (type=${eventJson['type']}) '
-            'in run $runId of thread $threadId.',
-            name: 'soliplex_client.replay',
-            level: 900,
-            error: error,
-            stackTrace: stackTrace,
-          );
+        final outcome = decodeMapSafely(eventJson);
+        switch (outcome) {
+          case DecodeFailed(:final error):
+            developer.log(
+              'replay: decode failed at events[$i] '
+              '(type=${eventJson['type']}) in run $runId of thread $threadId.',
+              name: 'soliplex_client.replay',
+              level: 900,
+              error: error,
+            );
+            conversation = conversation.withAppendedMessage(
+              DroppedEventMessage.create(
+                id: 'dropped-$runId-$i',
+                source: DropSource.decode,
+                reason: error.toString(),
+                runId: runId,
+                rawPayload: eventJson,
+              ),
+            );
+          case DecodedEvent(:final event):
+            decodedEvents.add(event);
+            try {
+              final result = processEvent(conversation, streaming, event);
+              conversation = result.conversation;
+              streaming = result.streaming;
+            } on Object catch (error, stackTrace) {
+              developer.log(
+                'replay: processEvent threw on events[$i] '
+                '(type=${eventJson['type']}) in run $runId of '
+                'thread $threadId.',
+                name: 'soliplex_client.replay',
+                level: 900,
+                error: error,
+                stackTrace: stackTrace,
+              );
+              conversation = conversation.withAppendedMessage(
+                DroppedEventMessage.create(
+                  id: 'dropped-$runId-$i',
+                  source: DropSource.eventProcessing,
+                  reason: error.toString(),
+                  runId: runId,
+                  rawPayload: eventJson,
+                ),
+              );
+            }
         }
       }
       runs.add(RunEventBundle(runId: runId, events: decodedEvents));
@@ -801,13 +828,6 @@ class SoliplexApi {
           runId: runId,
         );
       }
-    }
-
-    if (skippedEventCount > 0) {
-      _onWarning?.call(
-        'Skipped $skippedEventCount malformed event(s) '
-        'while loading thread $threadId',
-      );
     }
 
     return ThreadHistory(
