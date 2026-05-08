@@ -8,6 +8,10 @@ import 'package:soliplex_client/src/application/streaming_state.dart';
 import 'package:soliplex_client/src/domain/activity_record.dart';
 import 'package:soliplex_client/src/domain/chat_message.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
+import 'package:soliplex_logging/soliplex_logging.dart';
+
+final Logger _logger =
+    LogManager.instance.getLogger('soliplex_client.event_processor');
 
 /// Result of processing an AG-UI event.
 ///
@@ -599,17 +603,16 @@ EventProcessingResult _processRunError(
   }
   final droppedThinkingChars =
       streaming is AwaitingText ? streaming.bufferedThinkingText.length : 0;
-  final thinkingNote = droppedThinkingChars > 0
-      ? ' Discarding $droppedThinkingChars chars of buffered thinking.'
-      : '';
-  developer.log(
-    'RunErrorEvent received while status is non-Running '
-    '(status=${conversation.status.runtimeType}, '
-    'streaming=${streaming.runtimeType}, message="$message"); '
-    'cannot synthesize without a runId. Possible cases: pre-run error, '
-    'duplicate after terminal, or out-of-order event.$thinkingNote',
-    name: 'soliplex_client.event_processor',
-    level: 900,
+  _logger.warning(
+    'RunErrorEvent received while status is non-Running; cannot synthesize '
+    'without a runId. Possible cases: pre-run error, duplicate after '
+    'terminal, or out-of-order event.',
+    attributes: {
+      'status': conversation.status.runtimeType.toString(),
+      'streaming': streaming.runtimeType.toString(),
+      'message': message,
+      'droppedThinkingChars': droppedThinkingChars,
+    },
   );
   // Preserve terminal status; only Idle transitions to Failed.
   final nextStatus = switch (conversation.status) {

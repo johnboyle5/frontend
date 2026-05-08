@@ -1,6 +1,5 @@
-import 'dart:developer' as developer;
-
 import 'package:soliplex_agent/soliplex_agent.dart';
+import 'package:soliplex_logging/soliplex_logging.dart';
 
 import 'execution_step.dart';
 import 'ui/execution/timeline_entry.dart';
@@ -8,7 +7,10 @@ import 'ui/execution/timeline_entry.dart';
 class ExecutionTracker {
   ExecutionTracker({
     required ReadonlySignal<ExecutionEvent?> executionEvents,
-  }) {
+    Logger? logger,
+  }) : _logger = logger ??
+            LogManager.instance
+                .getLogger('soliplex_frontend.execution_tracker') {
     _stopwatch.start();
     _unsub = executionEvents.subscribe(_onEvent);
   }
@@ -20,13 +22,17 @@ class ExecutionTracker {
   /// The tracker opens no subscription; callers should not pass the
   /// returned instance to any signal. It is immutable from construction
   /// ([isFrozen] returns `true`).
-  ExecutionTracker.historical({required List<ExecutionEvent> events}) {
+  ExecutionTracker.historical({required List<ExecutionEvent> events})
+      : _logger = LogManager.instance
+            .getLogger('soliplex_frontend.execution_tracker') {
     _stopwatch.start();
     for (final event in events) {
       _onEvent(event);
     }
     freeze();
   }
+
+  final Logger _logger;
 
   final Stopwatch _stopwatch = Stopwatch();
   void Function()? _unsub;
@@ -110,11 +116,7 @@ class ExecutionTracker {
         _completeAllSteps(StepStatus.completed);
         _isThinkingStreaming.value = false;
       case RunFailed(:final error):
-        developer.log(
-          'Run failed: $error',
-          name: 'soliplex_frontend.execution_tracker',
-          level: 900,
-        );
+        _logger.error('Run failed', error: error);
         _completeAllSteps(StepStatus.failed);
         _isThinkingStreaming.value = false;
       case RunCancelled():

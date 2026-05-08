@@ -1,8 +1,10 @@
-import 'dart:developer' as developer;
-
 import 'package:soliplex_agent/soliplex_agent.dart';
+import 'package:soliplex_logging/soliplex_logging.dart';
 
 import 'execution_tracker.dart';
+
+final Logger _logger =
+    LogManager.instance.getLogger('soliplex_frontend.historical_replay');
 
 /// Replays stored AG-UI event bundles into one frozen [ExecutionTracker]
 /// per assistant message, keyed by that message's id.
@@ -79,12 +81,10 @@ Map<String, ExecutionTracker> replayToTrackers(List<RunEventBundle> runs) {
   // assistant message to absorb them; logged here so the case is at
   // least observable.
   if (pending.isNotEmpty) {
-    developer.log(
-      'replayToTrackers: dropping ${pending.length} unattached events from '
-      'a trailing tool-yield bundle (no follow-up bundle). See '
-      'github.com/soliplex/frontend/issues/221.',
-      name: 'soliplex_frontend.historical_replay',
-      level: 900,
+    _logger.warning(
+      'Dropping unattached events from a trailing tool-yield bundle '
+      '(no follow-up bundle). See github.com/soliplex/frontend/issues/221.',
+      attributes: {'pendingCount': pending.length},
     );
   }
 

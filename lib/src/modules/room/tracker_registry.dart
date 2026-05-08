@@ -1,6 +1,5 @@
-import 'dart:developer' as developer;
-
 import 'package:soliplex_agent/soliplex_agent.dart';
+import 'package:soliplex_logging/soliplex_logging.dart';
 
 import 'execution_tracker.dart';
 
@@ -13,8 +12,13 @@ const awaitingTrackerKey = '_awaiting';
 /// re-keying when a message ID becomes available, and freezing when
 /// a run terminates.
 class TrackerRegistry {
+  TrackerRegistry({Logger? logger})
+      : _logger = logger ??
+            LogManager.instance.getLogger('soliplex_frontend.tracker_registry');
+
   final Map<String, ExecutionTracker> _trackers = {};
   String? _activeId;
+  final Logger _logger;
 
   Map<String, ExecutionTracker> get trackers => Map.unmodifiable(_trackers);
 
@@ -71,12 +75,11 @@ class TrackerRegistry {
     if (key == awaitingTrackerKey) return;
     final tracker = _trackers.remove(awaitingTrackerKey);
     if (tracker == null) {
-      developer.log(
-        'renameAwaitingTo($key) called but no awaiting tracker exists; '
-        'the synthesized no-response tile will still show its thinking '
-        'text but will lack the tracker-attached execution-step timeline.',
-        name: 'soliplex_frontend.tracker_registry',
-        level: 900,
+      _logger.warning(
+        'No awaiting tracker for renameAwaitingTo; the synthesized '
+        'no-response tile will still show its thinking text but will lack '
+        'the tracker-attached execution-step timeline.',
+        attributes: {'targetKey': key},
       );
       return;
     }
