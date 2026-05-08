@@ -21,7 +21,7 @@ class _FakeSimpleRunAgentInput extends Fake implements SimpleRunAgentInput {}
 
 class _FakeCancelToken extends Fake implements CancelToken {}
 
-/// Throws on every `extractNew` call. Used to drive the Tier-1 catch in
+/// Throws on every `extractNew` call. Used to drive the catch in
 /// `RunOrchestrator._extractCitations`.
 class _ThrowingCitationExtractor extends CitationExtractor {
   @override
@@ -2600,7 +2600,7 @@ void main() {
     });
   });
 
-  group('citation extraction Tier-1 wrap', () {
+  group('citation extraction error handling', () {
     test(
       'throw inside _extractCitations does not abort the run or surface a '
       'tile; warning is logged',
@@ -2628,7 +2628,7 @@ void main() {
         // Run completes despite the citation extraction throw.
         expect(orchestrator.currentState, isA<CompletedState>());
         final completed = orchestrator.currentState as CompletedState;
-        // No DroppedEventMessage — Tier-1 stays log-only.
+        // No DroppedEventMessage — citation failures are log-only.
         expect(
           completed.conversation.messages
               .whereType<DroppedEventMessage>()

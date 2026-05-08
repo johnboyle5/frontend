@@ -341,7 +341,7 @@ enum DropSource {
 
   /// The per-event-loop wrapper caught a throw from `processEvent` itself.
   /// Citation extraction, historical replay bridging, and tracker projection
-  /// failures stay log-only (Tier-1) and do not synthesize a tile.
+  /// failures stay log-only and do not synthesize a tile.
   eventProcessing,
 }
 
@@ -349,13 +349,13 @@ enum DropSource {
 /// a tile in the timeline so the user sees something happened and devs can
 /// inspect the raw payload.
 ///
-/// Synthesized at the two content-bearing boundaries: the decode boundary
+/// Synthesized at two content-bearing boundaries: the decode boundary
 /// (`decodeMapSafely` returns `DecodeFailed`) and the per-event-loop body
 /// in `RunOrchestrator._onEvent` / `SoliplexApi._replayEventsToHistory`
-/// (`processEvent` threw). Tier-1 boundaries (citation extraction,
-/// historical replay bridging, tracker projection) log only without
-/// minting a tile — failures there don't lose user-facing content. Never
-/// sent over the wire (filtered in `agui_message_mapper.dart`).
+/// (`processEvent` threw). Citation extraction, historical replay
+/// bridging, and tracker projection log only without minting a tile —
+/// failures there don't lose user-facing content. Never sent over the
+/// wire (filtered in `agui_message_mapper.dart`).
 @immutable
 class DroppedEventMessage extends ChatMessage {
   /// Creates a dropped-event message with all properties.

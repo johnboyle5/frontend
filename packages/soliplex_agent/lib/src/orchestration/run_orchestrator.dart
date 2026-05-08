@@ -1008,11 +1008,11 @@ class RunOrchestrator {
   /// final [MessageState] carries the last segment's run ID — the one whose
   /// output the user sees and may submit feedback on.
   ///
-  /// Wraps the body in a Tier-1 catch: any throw downstream (extractor
-  /// schema drift, malformed citations) returns the conversation unchanged
-  /// so the run completes. Citation index drifts until the next run
-  /// updates it; messages still render. No drop tile — citations are a
-  /// derived projection, not user-facing content.
+  /// Catches any throw downstream (extractor schema drift, malformed
+  /// citations) and returns the conversation unchanged so the run
+  /// completes. Citation index drifts until the next run updates it;
+  /// messages still render. No drop tile — citations are a derived
+  /// projection, not user-facing content.
   Conversation _extractCitations(Conversation conversation, String runId) {
     try {
       final userMessageId = _userMessageId;
