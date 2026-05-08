@@ -375,7 +375,7 @@ class DroppedEventMessage extends ChatMessage {
     required DropSource source,
     required String reason,
     String? runId,
-    Map<String, dynamic>? rawPayload,
+    Object? rawPayload,
   }) {
     return DroppedEventMessage(
       id: id,
@@ -397,9 +397,12 @@ class DroppedEventMessage extends ChatMessage {
   /// Short human-readable reason. Shown as the collapsed-state subtitle.
   final String reason;
 
-  /// Original payload for inspection. Null when serialization itself
-  /// failed; the tile renders "(payload unavailable)" in that case.
-  final Map<String, dynamic>? rawPayload;
+  /// Original payload for inspection. Shape mirrors `DecodeFailed.rawData`:
+  /// `Map` for per-event decoder failures, `String` for top-level JSON
+  /// parse failures, or any non-Map JSON value (list/scalar). Null when
+  /// the surrounding boundary couldn't carry the payload at all; the
+  /// tile renders "(payload unavailable)" in that case.
+  final Object? rawPayload;
 
   @override
   String toString() =>

@@ -110,6 +110,11 @@ class _DroppedEventMessageTileState extends State<DroppedEventMessageTile> {
         style: mono?.copyWith(fontStyle: FontStyle.italic),
       );
     }
+    if (raw is String) {
+      // Top-level JSON parse failure: show the raw bytes the parser
+      // rejected, so a developer can see the malformed wire content.
+      return SelectableText(raw, style: mono);
+    }
     return JsonTreeView(nodes: buildJsonTree(raw));
   }
 

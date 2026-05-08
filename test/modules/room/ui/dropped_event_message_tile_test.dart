@@ -104,4 +104,26 @@ void main() {
     // Subtitle is just the reason, no "run …" prefix.
     expect(find.text('top-level parse failure'), findsOneWidget);
   });
+
+  testWidgets('String rawPayload renders the raw bytes verbatim', (
+    tester,
+  ) async {
+    // Top-level JSON parse failures arrive with a String rawPayload —
+    // the wire content the parser rejected. A user expanding the tile
+    // should see exactly those bytes, not "(payload unavailable)".
+    final msg = DroppedEventMessage.create(
+      id: 'dropped-pre-run-456',
+      source: DropSource.decode,
+      reason: 'FormatException: Unexpected character',
+      rawPayload: 'not valid json at all',
+    );
+
+    await _pump(tester, msg);
+    await tester.tap(find.byType(InkWell));
+    await tester.pump();
+
+    expect(find.text('not valid json at all'), findsOneWidget);
+    // Belt-and-suspenders: not the unavailable fallback.
+    expect(find.text('(payload unavailable)'), findsNothing);
+  });
 }

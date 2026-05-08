@@ -929,7 +929,7 @@ class RunOrchestrator {
       source: source,
       reason: error.toString(),
       runId: running.runId,
-      rawPayload: rawData is Map<String, dynamic> ? rawData : null,
+      rawPayload: rawData,
     );
     _setState(
       running.copyWith(
