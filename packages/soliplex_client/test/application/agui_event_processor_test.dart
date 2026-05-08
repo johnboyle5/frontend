@@ -199,6 +199,52 @@ void main() {
         // survives reload — not just the transient send-error banner.
         expect(synthesized.errorDetail, equals('boom'));
       });
+
+      test(
+          'RunErrorEvent with empty buffered thinking surfaces the '
+          'failure as an ErrorMessage', () {
+        // Synthesis declines when there's nothing to preserve; without a
+        // surfaced tile the user would have no signal that the run
+        // failed (status alone doesn't render in the messages list).
+        final runningConversation = conversation.withStatus(
+          const Running(runId: 'run-1'),
+        );
+        const event = RunErrorEvent(message: 'boom');
+
+        final result = processEvent(runningConversation, streaming, event);
+
+        final surfaced = result.conversation.messages.last as ErrorMessage;
+        expect(surfaced.errorText, equals('boom'));
+        expect(
+          result.conversation.messages.whereType<NoResponseTile>(),
+          isEmpty,
+          reason: 'no thinking to preserve — ErrorMessage carries the signal',
+        );
+      });
+
+      test(
+          'RunErrorEvent with unresolved tool call surfaces the '
+          'failure as an ErrorMessage', () {
+        // Tool-call synthesis declines (the tool call IS the response);
+        // a real failure still needs to be visible to the user.
+        final runningConversation =
+            conversation.withStatus(const Running(runId: 'run-1')).withToolCall(
+                  const ToolCallInfo(id: 'tc1', name: 'search'),
+                );
+        const streamingWithThinking = app_streaming.AwaitingText(
+          bufferedThinkingText: 'planning the call',
+        );
+        const event = RunErrorEvent(message: 'tool failure');
+
+        final result = processEvent(
+          runningConversation,
+          streamingWithThinking,
+          event,
+        );
+
+        final surfaced = result.conversation.messages.last as ErrorMessage;
+        expect(surfaced.errorText, equals('tool failure'));
+      });
     });
 
     group('text message streaming', () {

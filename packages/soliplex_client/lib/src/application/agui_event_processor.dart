@@ -576,14 +576,24 @@ EventProcessingResult _processRunError(
   String message,
 ) {
   if (conversation.status case Running(:final runId)) {
+    final synthesized = synthesizeNoResponseIfNeeded(
+      conversation: conversation,
+      streaming: streaming,
+      runId: runId,
+      reason: TerminalReason.failed,
+      terminalErrorDetail: message,
+    );
+    // Synthesis declines when there's no buffered thinking to preserve
+    // or a tool call is unresolved. Either way the run still failed; fall
+    // back to ErrorMessage so the user has a visible signal (status alone
+    // doesn't render in the messages list).
+    final surfaced = identical(synthesized, conversation)
+        ? conversation.withAppendedMessage(
+            ErrorMessage.create(id: 'run-error-$runId', message: message),
+          )
+        : synthesized;
     return EventProcessingResult(
-      conversation: synthesizeNoResponseIfNeeded(
-        conversation: conversation,
-        streaming: streaming,
-        runId: runId,
-        reason: TerminalReason.failed,
-        terminalErrorDetail: message,
-      ).withStatus(Failed(error: message)),
+      conversation: surfaced.withStatus(Failed(error: message)),
       streaming: const AwaitingText(),
     );
   }
