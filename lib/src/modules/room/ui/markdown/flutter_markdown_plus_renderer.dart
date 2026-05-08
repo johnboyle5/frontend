@@ -4,7 +4,6 @@ import 'package:flutter_markdown_plus_latex/flutter_markdown_plus_latex.dart';
 
 import '../../../../design/theme/theme_extensions.dart';
 import 'code_block_builder.dart';
-import 'inline_code_builder.dart';
 import 'markdown_renderer.dart';
 import 'markdown_theme_extension.dart';
 
@@ -39,7 +38,6 @@ class FlutterMarkdownPlusRenderer extends MarkdownRenderer {
               if (href != null) onLinkTap!(href, title);
             },
       builders: {
-        'code': InlineCodeBuilder(),
         'pre': CodeBlockBuilder(
           preferredStyle: monoStyle.copyWith(fontSize: 14),
         ),

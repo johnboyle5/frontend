@@ -289,7 +289,10 @@ MarkdownThemeExtension _markdownThemeExtension(
     h3: textTheme.titleSmall,
     body: textTheme.bodyLarge,
     code: textTheme.bodyMedium?.copyWith(
-      backgroundColor: colorScheme.surfaceContainerHigh,
+      backgroundColor: Color.alphaBlend(
+        colorScheme.onSurface.withAlpha(25),
+        colorScheme.surface,
+      ),
     ),
     link: TextStyle(
       color: colorScheme.primary,
