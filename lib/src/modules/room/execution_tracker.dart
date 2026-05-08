@@ -88,6 +88,22 @@ class ExecutionTracker {
   void _onEvent(ExecutionEvent? event) {
     assert(!_isFrozen, 'Cannot process events on a frozen ExecutionTracker');
     if (event == null) return;
+    try {
+      _dispatch(event);
+    } on Object catch (e, st) {
+      // The tracker is a derived projection of the event stream; a throw
+      // here would propagate up through the signals subscription that
+      // pushed the event, destabilising any downstream observers. Log
+      // and skip the mutation instead — surrounding events keep flowing.
+      _logger.warning(
+        'ExecutionTracker dropped ${event.runtimeType}',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
+  void _dispatch(ExecutionEvent event) {
     switch (event) {
       case ThinkingStarted():
         _completeActiveStep();
