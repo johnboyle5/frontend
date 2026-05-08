@@ -2323,6 +2323,80 @@ void main() {
         expect((history.messages[2] as TextMessage).text, equals('after'));
       });
 
+      test(
+        'processEvent-throw drop tile preserves the original wire JSON, '
+        'not a reconstruction from the decoded event',
+        () async {
+          // The drop tile's `rawPayload` must be the JSON the decoder
+          // saw — not a re-serialization of the `BaseEvent`. Marker
+          // field `_wireOnlyField` is on the wire but not on the
+          // `StateSnapshotEvent` shape; if a future refactor "helpfully"
+          // reconstructs `rawJson` from the decoded event, the marker
+          // would disappear and this test would fail.
+          when(
+            () => mockTransport.request<Map<String, dynamic>>(
+              'GET',
+              Uri.parse(
+                'https://api.example.com/api/v1/rooms/room-123/agui/thread-456',
+              ),
+              cancelToken: any(named: 'cancelToken'),
+              fromJson: any(named: 'fromJson'),
+              body: any(named: 'body'),
+              headers: any(named: 'headers'),
+              timeout: any(named: 'timeout'),
+            ),
+          ).thenAnswer(
+            (_) async => {
+              'room_id': 'room-123',
+              'thread_id': 'thread-456',
+              'runs': {
+                'run-1': {
+                  'run_id': 'run-1',
+                  'created': '2026-01-07T01:00:00.000Z',
+                  'finished': '2026-01-07T01:01:00.000Z',
+                },
+              },
+            },
+          );
+
+          when(
+            () => mockTransport.request<Map<String, dynamic>>(
+              'GET',
+              Uri.parse(
+                'https://api.example.com/api/v1/rooms/room-123/agui/thread-456/run-1',
+              ),
+              cancelToken: any(named: 'cancelToken'),
+              fromJson: any(named: 'fromJson'),
+              body: any(named: 'body'),
+              headers: any(named: 'headers'),
+              timeout: any(named: 'timeout'),
+            ),
+          ).thenAnswer(
+            (_) async => {
+              'run_id': 'run-1',
+              'events': [
+                {
+                  'type': 'STATE_SNAPSHOT',
+                  'snapshot': ['not', 'a', 'map'],
+                  '_wireOnlyField': 'survives-because-rawJson-is-the-wire',
+                },
+              ],
+            },
+          );
+
+          final history = await api.getThreadHistory('room-123', 'thread-456');
+
+          final drop = history.messages.whereType<DroppedEventMessage>().single;
+          expect(
+            drop.rawPayload,
+            containsPair(
+              '_wireOnlyField',
+              'survives-because-rawJson-is-the-wire',
+            ),
+          );
+        },
+      );
+
       test('calls onWarning callback on partial failure', () async {
         final warnings = <String>[];
         final apiWithWarning = SoliplexApi(
