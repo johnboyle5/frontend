@@ -1442,9 +1442,11 @@ void main() {
 
         final messages = await api.getThreadHistory('room-123', 'thread-456');
 
-        // Should still return messages from successful run
-        expect(messages.messages.length, equals(1));
-        expect((messages.messages[0] as TextMessage).text, equals('First'));
+        // Successful run renders normally; failed run mints a drop tile
+        // so it's visibly missing rather than silently absent.
+        expect(messages.messages.whereType<TextMessage>().single.text, 'First');
+        final drop = messages.messages.whereType<DroppedEventMessage>().single;
+        expect(drop.runId, 'run-2');
       });
 
       test('returns empty list when no runs', () async {
@@ -1572,6 +1574,38 @@ void main() {
 
         expect(history.messages, isEmpty);
       });
+
+      test(
+        'throws MalformedResponseException when runs envelope is non-Map',
+        () async {
+          // 200 OK response whose `runs` field has the wrong shape — retry
+          // won't help; the UI must surface a non-retryable error rather
+          // than rendering an empty thread (which would be
+          // indistinguishable from a fresh thread).
+          when(
+            () => mockTransport.request<Map<String, dynamic>>(
+              'GET',
+              any(),
+              cancelToken: any(named: 'cancelToken'),
+              fromJson: any(named: 'fromJson'),
+              body: any(named: 'body'),
+              headers: any(named: 'headers'),
+              timeout: any(named: 'timeout'),
+            ),
+          ).thenAnswer(
+            (_) async => {
+              'room_id': 'room-123',
+              'thread_id': 'thread-456',
+              'runs': <dynamic>['unexpected', 'list', 'shape'],
+            },
+          );
+
+          await expectLater(
+            api.getThreadHistory('room-123', 'thread-456'),
+            throwsA(isA<MalformedResponseException>()),
+          );
+        },
+      );
 
       test('validates non-empty roomId', () {
         expect(
@@ -2399,37 +2433,94 @@ void main() {
         expect(texts.single.text, equals('survived'));
       });
 
-      test('non-Map `runs` field returns empty history without throwing',
-          () async {
-        // Backend shape drift on the envelope: `runs` arrives as a list
-        // instead of a Map. Pre-fix this `as Map<String, dynamic>?`
-        // cast threw and surfaced as MessagesFailed; now it falls
-        // through to an empty history.
-        when(
-          () => mockTransport.request<Map<String, dynamic>>(
-            'GET',
-            Uri.parse(
-              'https://api.example.com/api/v1/rooms/room-123/agui/thread-456',
+      test(
+        'transient run-fetch failure mints a drop tile so the run is '
+        'visibly missing from history',
+        () async {
+          // Pre-fix, a NetworkException on a single run was logged via
+          // onWarning and the run vanished entirely from the timeline,
+          // making the rest of the thread look like it had a hole. The
+          // drop tile now signals "this run failed to load" in-place.
+          when(
+            () => mockTransport.request<Map<String, dynamic>>(
+              'GET',
+              Uri.parse(
+                'https://api.example.com/api/v1/rooms/room-123/agui/thread-456',
+              ),
+              cancelToken: any(named: 'cancelToken'),
+              fromJson: any(named: 'fromJson'),
+              body: any(named: 'body'),
+              headers: any(named: 'headers'),
+              timeout: any(named: 'timeout'),
             ),
-            cancelToken: any(named: 'cancelToken'),
-            fromJson: any(named: 'fromJson'),
-            body: any(named: 'body'),
-            headers: any(named: 'headers'),
-            timeout: any(named: 'timeout'),
-          ),
-        ).thenAnswer(
-          (_) async => {
-            'room_id': 'room-123',
-            'thread_id': 'thread-456',
-            'runs': <dynamic>['not-a-map'],
-          },
-        );
+          ).thenAnswer(
+            (_) async => {
+              'room_id': 'room-123',
+              'thread_id': 'thread-456',
+              'runs': {
+                'run-1': {
+                  'run_id': 'run-1',
+                  'created': '2026-01-07T01:00:00.000Z',
+                  'finished': '2026-01-07T01:01:00.000Z',
+                },
+              },
+            },
+          );
+          when(
+            () => mockTransport.request<Map<String, dynamic>>(
+              'GET',
+              Uri.parse(
+                'https://api.example.com/api/v1/rooms/room-123/agui/thread-456/run-1',
+              ),
+              cancelToken: any(named: 'cancelToken'),
+              fromJson: any(named: 'fromJson'),
+              body: any(named: 'body'),
+              headers: any(named: 'headers'),
+              timeout: any(named: 'timeout'),
+            ),
+          ).thenThrow(const NetworkException(message: 'Connection failed'));
 
-        final history = await api.getThreadHistory('room-123', 'thread-456');
+          final history = await api.getThreadHistory('room-123', 'thread-456');
 
-        expect(history.messages, isEmpty);
-        expect(history.runs, isEmpty);
-      });
+          final drop = history.messages.whereType<DroppedEventMessage>().single;
+          expect(drop.runId, 'run-1');
+          expect(drop.reason, contains('Connection failed'));
+        },
+      );
+
+      test(
+        'non-Map run entry in runs envelope mints a drop tile so the run '
+        'is visibly absent from replay',
+        () async {
+          // Pre-fix, a non-Map entry inside the `runs` map was silently
+          // filtered out — the run vanished without trace.
+          when(
+            () => mockTransport.request<Map<String, dynamic>>(
+              'GET',
+              any(),
+              cancelToken: any(named: 'cancelToken'),
+              fromJson: any(named: 'fromJson'),
+              body: any(named: 'body'),
+              headers: any(named: 'headers'),
+              timeout: any(named: 'timeout'),
+            ),
+          ).thenAnswer(
+            (_) async => {
+              'room_id': 'room-123',
+              'thread_id': 'thread-456',
+              'runs': {
+                'run-1': 'not-a-map',
+              },
+            },
+          );
+
+          final history = await api.getThreadHistory('room-123', 'thread-456');
+
+          final drop = history.messages.whereType<DroppedEventMessage>().single;
+          expect(drop.runId, 'run-1');
+          expect(drop.reason, contains('shape'));
+        },
+      );
 
       test(
         'processEvent-throw drop tile preserves the original wire JSON, '
@@ -2614,13 +2705,16 @@ void main() {
           ),
         ).thenThrow(const NotFoundException(message: 'Run not found'));
 
-        // Should not throw - returns empty history gracefully
+        // Should not throw - the deleted run becomes a drop tile so the
+        // gap is visible, and onWarning still fires so callers tracking
+        // partial-load signals continue to receive them.
         final history = await apiWithWarning.getThreadHistory(
           'room-123',
           'thread-456',
         );
 
-        expect(history.messages, isEmpty);
+        final drop = history.messages.whereType<DroppedEventMessage>().single;
+        expect(drop.runId, 'run-1');
         expect(warnings, hasLength(1));
         expect(warnings[0], contains('run-1'));
 

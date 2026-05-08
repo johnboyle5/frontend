@@ -606,27 +606,65 @@ class SoliplexApi {
       cancelToken: cancelToken,
     );
 
-    // Defensive: backend shape drift on the envelope (e.g., `runs`
-    // becoming a list, run entries that aren't Maps, missing run_id)
-    // would otherwise abort the entire history load. Fall through to
-    // empty/skipped instead so the rest of the thread still renders.
+    // Envelope-level shape drift (`runs` arrives as a list/scalar instead
+    // of a map) is a backend bug — retry can't fix it. Throw so the UI
+    // surfaces a non-retryable error rather than rendering an empty
+    // thread (which is indistinguishable from a fresh thread). Null /
+    // missing stays a legitimate empty thread.
     final rawRuns = response['runs'];
+    if (rawRuns != null && rawRuns is! Map<String, dynamic>) {
+      throw MalformedResponseException(
+        message: 'Thread history `runs` field has unexpected shape: '
+            '${rawRuns.runtimeType}',
+      );
+    }
     final runs =
         rawRuns is Map<String, dynamic> ? rawRuns : const <String, dynamic>{};
     if (runs.isEmpty) return ThreadHistory(messages: const []);
 
-    // 2. Get completed run IDs sorted by creation time
-    final completedRunIds = _sortRunsByCreationTime(runs)
-        .where((e) {
-          final value = e.value;
-          return value is Map<String, dynamic> &&
-              value['finished'] != null &&
-              value['run_id'] is String;
-        })
-        .map((e) => (e.value as Map<String, dynamic>)['run_id'] as String)
-        .toList();
+    // 2. Walk runs in creation order, collecting:
+    //    - completed run ids → fetched in parallel below
+    //    - malformed entries → preserved as drop-tile placeholders so the
+    //      run is visibly absent rather than silently filtered out
+    //    Unfinished runs are skipped without surfacing — they are still
+    //    in flight, not corrupted.
+    final completedRunIds = <String>[];
+    final preFetchDrops =
+        <({String runId, MalformedResponseException error})>[];
+    for (final entry in _sortRunsByCreationTime(runs)) {
+      final value = entry.value;
+      if (value is! Map<String, dynamic>) {
+        preFetchDrops.add(
+          (
+            runId: entry.key,
+            error: MalformedResponseException(
+              message: 'Run entry ${entry.key} has unexpected shape: '
+                  '${value.runtimeType}',
+            ),
+          ),
+        );
+        continue;
+      }
+      if (value['finished'] == null) continue;
+      final rawRunId = value['run_id'];
+      if (rawRunId is! String) {
+        preFetchDrops.add(
+          (
+            runId: entry.key,
+            error: MalformedResponseException(
+              message: 'Run entry ${entry.key} missing `run_id` (got '
+                  '${rawRunId.runtimeType})',
+            ),
+          ),
+        );
+        continue;
+      }
+      completedRunIds.add(rawRunId);
+    }
 
-    if (completedRunIds.isEmpty) return ThreadHistory(messages: const []);
+    if (completedRunIds.isEmpty && preFetchDrops.isEmpty) {
+      return ThreadHistory(messages: const []);
+    }
 
     // 3. Fetch all run events in parallel (cache handles duplicates)
     final eventFutures = completedRunIds.map((runId) {
@@ -635,11 +673,18 @@ class SoliplexApi {
         threadId,
         runId,
         cancelToken: cancelToken,
-      ).then((events) => (runId: runId, events: events)).catchError(
+      )
+          .then(
+        (events) => (runId: runId, events: events, fetchError: null as Object?),
+      )
+          .catchError(
         (Object e) {
-          // Log transient failure but continue with other runs
+          // Log transient failure but continue with other runs. The
+          // fetchError below carries the same exception into the replay
+          // loop, which mints a drop tile so the run is visibly missing
+          // rather than silently absent.
           _onWarning?.call('Failed to fetch events for run $runId: $e');
-          return (runId: runId, events: <dynamic>[]);
+          return (runId: runId, events: <dynamic>[], fetchError: e as Object?);
         },
         // Only catch transient errors - show partial results for batch ops:
         // - NetworkException: network blip, retry might succeed
@@ -651,14 +696,39 @@ class SoliplexApi {
 
     final results = await Future.wait(eventFutures);
 
-    // 4. Collect events in run order (results may arrive out of order)
-    final runIdToEvents = {for (final r in results) r.runId: r.events};
-    final eventsPerRun = <({String runId, List<dynamic> events})>[];
-    for (final runId in completedRunIds) {
-      final runEvents = runIdToEvents[runId] ?? const <dynamic>[];
-      if (runEvents.isNotEmpty) {
-        eventsPerRun.add((runId: runId, events: runEvents));
+    // 4. Collect events in run order (results may arrive out of order),
+    //    interleaving pre-fetch drops at their original creation-order
+    //    position by walking the original sort once.
+    final fetchByRunId = {for (final r in results) r.runId: r};
+    final preFetchByRunKey = {for (final d in preFetchDrops) d.runId: d.error};
+    final eventsPerRun =
+        <({String runId, List<dynamic> events, Object? fetchError})>[];
+    for (final entry in _sortRunsByCreationTime(runs)) {
+      final preFetchError = preFetchByRunKey[entry.key];
+      if (preFetchError != null) {
+        eventsPerRun.add(
+          (
+            runId: entry.key,
+            events: const <dynamic>[],
+            fetchError: preFetchError,
+          ),
+        );
+        continue;
       }
+      final value = entry.value;
+      if (value is! Map<String, dynamic>) continue;
+      if (value['finished'] == null) continue;
+      final rawRunId = value['run_id'];
+      if (rawRunId is! String) continue;
+      final fetched = fetchByRunId[rawRunId];
+      if (fetched == null) continue;
+      eventsPerRun.add(
+        (
+          runId: rawRunId,
+          events: fetched.events,
+          fetchError: fetched.fetchError,
+        ),
+      );
     }
 
     // 5. Replay events to reconstruct history (messages + AG-UI state)
@@ -763,7 +833,8 @@ class SoliplexApi {
   /// messages. Each run's citations are keyed by the user message ID that
   /// initiated that run.
   ThreadHistory _replayEventsToHistory(
-    List<({String runId, List<dynamic> events})> eventsPerRun,
+    List<({String runId, List<dynamic> events, Object? fetchError})>
+        eventsPerRun,
     String threadId,
   ) {
     if (eventsPerRun.isEmpty) return ThreadHistory(messages: const []);
@@ -774,7 +845,27 @@ class SoliplexApi {
     final messageStates = <String, MessageState>{};
     final runs = <RunEventBundle>[];
 
-    for (final (:runId, :events) in eventsPerRun) {
+    for (final (:runId, :events, :fetchError) in eventsPerRun) {
+      // Run-level fetch failure (transient HTTP error or pre-fetch
+      // shape-drift on the run entry) → mint one drop tile in place so
+      // the run is visibly missing from the timeline rather than
+      // silently absent. `events` may still be empty (transient failure)
+      // or non-empty if a future code path attaches partial data.
+      if (fetchError != null) {
+        _logger.error(
+          'replay: run $runId in thread $threadId could not be fetched.',
+          error: fetchError,
+        );
+        conversation = conversation.withAppendedMessage(
+          DroppedEventMessage.create(
+            id: 'dropped-$runId-fetch',
+            source: DropSource.decode,
+            reason: fetchError.toString(),
+            runId: runId,
+          ),
+        );
+      }
+
       // Capture AG-UI state before processing this run
       final previousAguiState = conversation.aguiState;
 
