@@ -66,9 +66,7 @@ class ExecutionTrackerExtension extends SessionExtension
     final session = _session;
     if (session == null) {
       // signals teardown is assumed synchronous w.r.t. onDispose, but
-      // that's a fragile invariant — guard explicitly. Capture the
-      // current stack so a future upgrade that breaks the ordering
-      // shows up in Sentry with a breadcrumb to the dispatching site.
+      // that's a fragile invariant across signals upgrades.
       _logger.warning(
         '_onRunState fired after dispose; ignoring',
         stackTrace: StackTrace.current,

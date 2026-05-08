@@ -759,11 +759,8 @@ class SoliplexApi {
         }
       }
 
-      // Process all events in this run. The two boundaries that can lose
-      // user-facing content are the decode boundary (`decodeMapSafely`)
-      // and `processEvent` itself; both append a `DroppedEventMessage`
-      // at the failure position so a malformed event can't abort replay
-      // and leave the user with a half-loaded thread.
+      // Decode + process per-event; failures append a drop tile so one
+      // bad event can't abort replay.
       final decodedEvents = <BaseEvent>[];
       for (var i = 0; i < events.length; i++) {
         final eventJson = events[i];

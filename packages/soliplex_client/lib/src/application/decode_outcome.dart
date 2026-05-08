@@ -14,11 +14,12 @@ sealed class DecodeOutcome {
 
 /// A successfully decoded event paired with its original JSON form.
 ///
-/// The original JSON is retained so a downstream throw inside `processEvent`
-/// can attach it to a `DroppedEventMessage` without reflection.
+/// The original JSON is retained so a `processEvent` throw can attach
+/// the raw payload to its drop tile.
 @immutable
 class DecodedEvent extends DecodeOutcome {
-  /// Creates a decoded-event outcome.
+  /// Pairs the decoded AG-UI [event] with the original [rawJson] it was
+  /// decoded from.
   const DecodedEvent(this.event, this.rawJson);
 
   /// The decoded AG-UI event.
@@ -35,7 +36,9 @@ class DecodedEvent extends DecodeOutcome {
 /// value (list/scalar). The downstream drop-tile widget renders all three.
 @immutable
 class DecodeFailed extends DecodeOutcome {
-  /// Creates a decode-failure outcome.
+  /// Captures the [error] thrown by the decoder, the [rawData] that
+  /// failed to decode, and the [stackTrace] at the throw site (when
+  /// available) for breadcrumbs.
   const DecodeFailed(this.error, this.rawData, [this.stackTrace]);
 
   /// The error thrown by the decoder or JSON parser.
@@ -60,3 +63,11 @@ DecodeOutcome decodeMapSafely(Map<String, dynamic> map) {
     return DecodeFailed(e, map, st);
   }
 }
+
+/// Wraps a synthesized AG-UI event for providers that build events
+/// in-process (e.g., `ChatFnLlmProvider`, `StreamingLlmProvider`).
+/// Their events have no source JSON, so `rawJson` is `const {}`; if
+/// `processEvent` ever throws on one, the resulting drop tile carries
+/// an empty payload.
+DecodedEvent synthesizedDecoded(BaseEvent event) =>
+    DecodedEvent(event, const {});

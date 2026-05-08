@@ -29,13 +29,9 @@ final Logger _logger =
 ///   [noResponseMessageId] for the run so the synthesized no-response
 ///   tile has a tracker to attach to.
 ///
-/// Each call to [bridge] is wrapped in a try/catch — a throw on one
-/// event is logged and skipped, so surrounding events in the same
-/// bundle still bucket correctly. Per-event (not per-bundle) is the
-/// right granularity here: bucket assignment is decided before
-/// bridging, so a skipped event just leaves a hole in the timeline
-/// instead of losing the rest of the bundle. [bridge] defaults to the
-/// production [bridgeBaseEvent] and is overridable for tests.
+/// A throw from [bridge] is logged and the offending event skipped so
+/// surrounding events in the same bundle still bucket correctly.
+/// [bridge] defaults to [bridgeBaseEvent] and is overridable for tests.
 Map<String, ExecutionTracker> replayToTrackers(
   List<RunEventBundle> runs, {
   @visibleForTesting ExecutionBridge bridge = bridgeBaseEvent,
