@@ -2157,7 +2157,7 @@ void main() {
       test('replay drop tile ids are deterministic across reloads', () async {
         // Same raw events on two replays produce drop tiles with the
         // same ids — the live conversation rebuilds deterministically
-        // from backend events on reload (see Step 3.8 id scheme).
+        // from backend events on reload.
         final eventsResponse = {
           'run_id': 'run-1',
           'events': [
@@ -2233,10 +2233,9 @@ void main() {
 
       test('replay survives a STATE_SNAPSHOT with a non-Map snapshot',
           () async {
-        // Backend shape drift used to throw an unguarded cast inside
-        // processEvent and abort the replay. The per-event wrapper now
-        // catches that throw, mints a `DroppedEventMessage` at the
-        // failure position, and lets surrounding messages render.
+        // A non-Map snapshot triggers the cast throw inside
+        // processEvent; the per-event wrapper appends a drop tile at
+        // the failure position and replay continues.
         when(
           () => mockTransport.request<Map<String, dynamic>>(
             'GET',

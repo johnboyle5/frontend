@@ -66,8 +66,11 @@ class ExecutionTrackerExtension extends SessionExtension
     final session = _session;
     if (session == null) {
       // signals teardown is assumed synchronous w.r.t. onDispose, but
-      // that's a fragile invariant across signals upgrades.
-      _logger.warning(
+      // that's a fragile invariant across signals upgrades. Reaching
+      // here means the invariant broke — `error`-level so Sentry can
+      // page on a regression instead of having the breadcrumb buried
+      // among warnings.
+      _logger.error(
         '_onRunState fired after dispose; ignoring',
         stackTrace: StackTrace.current,
         attributes: {'runState': runState.runtimeType.toString()},

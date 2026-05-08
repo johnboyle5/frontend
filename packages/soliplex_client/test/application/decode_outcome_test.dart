@@ -32,6 +32,12 @@ void main() {
       final failed = outcome as DecodeFailed;
       expect(failed.error, isNotNull);
       expect(failed.rawData, equals(raw));
+      // The stack trace is the source of every drop-tile breadcrumb
+      // downstream: orchestrator, replay, and the logger calls all
+      // forward `failed.stackTrace`. If `decodeMapSafely` stops
+      // capturing it, every Sentry breadcrumb on this path loses its
+      // throw site.
+      expect(failed.stackTrace, isNotNull);
     });
   });
 

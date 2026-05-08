@@ -126,9 +126,7 @@ void main() {
         resumePolicy: any(named: 'resumePolicy'),
         onReconnectStatus: any(named: 'onReconnectStatus'),
       ),
-    ).thenAnswer(
-      (_) => stream.map<DecodeOutcome>((e) => DecodedEvent(e, const {})),
-    );
+    ).thenAnswer((_) => _wrap(stream));
   }
 
   group('happy path', () {
@@ -1163,8 +1161,6 @@ void main() {
       required Stream<BaseEvent> second,
     }) {
       callCount = 0;
-      Stream<DecodeOutcome> wrap(Stream<BaseEvent> s) =>
-          s.map<DecodeOutcome>((e) => DecodedEvent(e, const {}));
       when(
         () => agUiStreamClient.runAgent(
           any(),
@@ -1175,7 +1171,7 @@ void main() {
         ),
       ).thenAnswer((_) {
         callCount++;
-        return callCount == 1 ? wrap(first) : wrap(second);
+        return callCount == 1 ? _wrap(first) : _wrap(second);
       });
     }
 
@@ -2657,7 +2653,16 @@ void main() {
         expect(orchestrator.currentState, isA<CompletedState>());
         final completed = orchestrator.currentState as CompletedState;
         final messages = completed.conversation.messages;
-        // user message + drop tile + assistant reply.
+        // Drop tile sits inline between the user input and the
+        // assistant reply — `_appendDropTile` runs on each
+        // `DecodeFailed` rather than buffering and flushing at the
+        // end of the run. A future buffer-then-flush refactor would
+        // silently push the tile to the end of the conversation;
+        // pinning the order here catches that.
+        expect(
+          messages.map((m) => m.runtimeType).toList(),
+          equals([TextMessage, DroppedEventMessage, TextMessage]),
+        );
         final drops = messages.whereType<DroppedEventMessage>().toList();
         expect(drops, hasLength(1));
         expect(drops.single.source, equals(DropSource.decode));

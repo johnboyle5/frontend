@@ -5,6 +5,10 @@ import 'package:soliplex_agent/src/models/thread_key.dart';
 import 'package:soliplex_agent/src/orchestration/agent_llm_provider.dart';
 import 'package:soliplex_agent/src/orchestration/tool_call_parser.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_logging/soliplex_logging.dart';
+
+final Logger _logger =
+    LogManager.instance.getLogger('soliplex_agent.chat_fn_llm_provider');
 
 /// Callback type for LLM chat.
 ///
@@ -30,9 +34,9 @@ typedef ChatFn = Future<String> Function(
 ///
 /// Wraps a [ChatFn] callback, converts AG-UI messages to simple
 /// role/content pairs, and synthesizes AG-UI events from the LLM's
-/// text response. Tool calling uses a text-based protocol (Phase 1)
-/// — the system prompt instructs the LLM to emit fenced `tool_call`
-/// blocks that [parseToolCallResponse] extracts.
+/// text response. Tool calling uses a text-based protocol — the
+/// system prompt instructs the LLM to emit fenced `tool_call` blocks
+/// that [parseToolCallResponse] extracts.
 class ChatFnLlmProvider implements AgentLlmProvider {
   /// Creates a [ChatFnLlmProvider].
   ///
@@ -125,7 +129,12 @@ class ChatFnLlmProvider implements AgentLlmProvider {
       // `RunErrorEvent` would land in `FailedState(serverError)` with
       // the runtime-type stringified into the user-facing message.
       rethrow;
-    } on Object catch (e) {
+    } on Object catch (e, st) {
+      _logger.error(
+        'ChatFnLlmProvider run failed',
+        error: e,
+        stackTrace: st,
+      );
       final msg = e is SoliplexException ? e.message : e.toString();
       yield synthesizedDecoded(RunErrorEvent(message: msg));
     }

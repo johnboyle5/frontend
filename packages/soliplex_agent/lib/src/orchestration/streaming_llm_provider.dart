@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:soliplex_agent/src/models/thread_key.dart';
 import 'package:soliplex_agent/src/orchestration/agent_llm_provider.dart';
 import 'package:soliplex_client/soliplex_client.dart';
+import 'package:soliplex_logging/soliplex_logging.dart';
+
+final Logger _logger =
+    LogManager.instance.getLogger('soliplex_agent.streaming_llm_provider');
 
 /// Callback type for streaming LLM chat with tool support.
 ///
@@ -144,7 +148,12 @@ class StreamingLlmProvider implements AgentLlmProvider {
       // `RunErrorEvent` would land in `FailedState(serverError)` with
       // the runtime-type stringified into the user-facing message.
       rethrow;
-    } on Object catch (e) {
+    } on Object catch (e, st) {
+      _logger.error(
+        'StreamingLlmProvider run failed',
+        error: e,
+        stackTrace: st,
+      );
       final msg = e is SoliplexException ? e.message : e.toString();
       yield synthesizedDecoded(RunErrorEvent(message: msg));
     }
