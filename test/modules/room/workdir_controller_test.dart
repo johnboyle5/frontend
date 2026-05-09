@@ -196,4 +196,28 @@ void main() {
       );
     });
   });
+
+  group('fetchBytes', () {
+    test('returns API bytes and skips the save dialog', () async {
+      final bytes = Uint8List.fromList([9, 9, 9]);
+      when(() => api.getRunWorkdirFile(any(), any(), any(), any()))
+          .thenAnswer((_) async => bytes);
+
+      var saveCalls = 0;
+      final controller = build(
+        saveFile: ({required String fileName, required Uint8List bytes}) async {
+          saveCalls++;
+          return '/tmp/$fileName';
+        },
+      );
+
+      final out =
+          await controller.fetchBytes('t-1', 'r-1', _file('preview.png'));
+
+      expect(out, bytes);
+      expect(saveCalls, 0);
+      verify(() => api.getRunWorkdirFile('room-1', 't-1', 'r-1', 'preview.png'))
+          .called(1);
+    });
+  });
 }

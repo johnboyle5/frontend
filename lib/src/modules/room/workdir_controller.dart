@@ -127,6 +127,16 @@ class WorkdirController {
     }
   }
 
+  /// Fetches the raw bytes for [file] without writing them to disk. Used
+  /// by the in-app preview path; the save dialog is the download path.
+  Future<Uint8List> fetchBytes(
+    String threadId,
+    String runId,
+    WorkdirFile file,
+  ) {
+    return _api.getRunWorkdirFile(_roomId, threadId, runId, file.filename);
+  }
+
   /// Drops every cached fetch result. Call when the user switches away
   /// from a thread so the next thread starts with a clean cache.
   void clearCache() => _cache.clear();
