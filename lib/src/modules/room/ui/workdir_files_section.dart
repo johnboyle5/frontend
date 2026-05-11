@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:soliplex_client/soliplex_client.dart' hide State;
@@ -12,17 +13,42 @@ typedef DownloadWorkdirFile = Future<DownloadOutcome> Function(
   WorkdirFile file,
 );
 
+typedef FetchWorkdirFileBytes = Future<Uint8List> Function(
+  String runId,
+  WorkdirFile file,
+);
+
+const _imageExtensions = {
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.bmp',
+};
+
+bool _isPreviewableImage(String filename) {
+  final dot = filename.lastIndexOf('.');
+  if (dot <= 0) return false;
+  return _imageExtensions.contains(filename.substring(dot).toLowerCase());
+}
+
 class WorkdirFilesSection extends StatefulWidget {
   const WorkdirFilesSection({
     super.key,
     required this.runId,
     required this.fetchFiles,
     required this.onDownload,
+    this.onPreview,
   });
 
   final String runId;
   final FetchWorkdirFiles fetchFiles;
   final DownloadWorkdirFile onDownload;
+
+  /// When non-null, image files render an eye icon that opens a
+  /// full-screen preview backed by bytes from this callback.
+  final FetchWorkdirFileBytes? onPreview;
 
   @override
   State<WorkdirFilesSection> createState() => _WorkdirFilesSectionState();
@@ -68,6 +94,9 @@ class _WorkdirFilesSectionState extends State<WorkdirFilesSection> {
                       _WorkdirFileRow(
                         file: file,
                         onTap: () => widget.onDownload(widget.runId, file),
+                        onPreview: widget.onPreview == null
+                            ? null
+                            : () => widget.onPreview!(widget.runId, file),
                       ),
                   ],
                 ),
@@ -81,10 +110,15 @@ class _WorkdirFilesSectionState extends State<WorkdirFilesSection> {
 }
 
 class _WorkdirFileRow extends StatefulWidget {
-  const _WorkdirFileRow({required this.file, required this.onTap});
+  const _WorkdirFileRow({
+    required this.file,
+    required this.onTap,
+    this.onPreview,
+  });
 
   final WorkdirFile file;
   final Future<DownloadOutcome> Function() onTap;
+  final Future<Uint8List> Function()? onPreview;
 
   @override
   State<_WorkdirFileRow> createState() => _WorkdirFileRowState();
@@ -153,6 +187,8 @@ class _WorkdirFileRowState extends State<_WorkdirFileRow> {
           "Couldn't save",
         ),
     };
+    final canPreview =
+        widget.onPreview != null && _isPreviewableImage(widget.file.filename);
     return InkWell(
       onTap: _feedback == _DownloadFeedback.idle ? _handleTap : null,
       borderRadius: BorderRadius.circular(6),
@@ -172,6 +208,24 @@ class _WorkdirFileRowState extends State<_WorkdirFileRow> {
                 style: theme.textTheme.bodySmall,
               ),
             ),
+            if (canPreview) ...[
+              InkWell(
+                onTap: () => _openPreview(context),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Tooltip(
+                    message: 'Preview',
+                    child: Icon(
+                      Icons.visibility_outlined,
+                      size: 16,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
             Tooltip(
               message: tooltip,
               child: Icon(icon, size: 16, color: color),
@@ -179,6 +233,16 @@ class _WorkdirFileRowState extends State<_WorkdirFileRow> {
           ],
         ),
       ),
+    );
+  }
+
+  void _openPreview(BuildContext context) {
+    final fetch = widget.onPreview;
+    if (fetch == null) return;
+    WorkdirImagePreviewPage.show(
+      context: context,
+      filename: widget.file.filename,
+      fetchBytes: fetch,
     );
   }
 }
@@ -266,6 +330,182 @@ double _measure(String text, TextStyle? style) {
     maxLines: 1,
   )..layout();
   return painter.width;
+}
+
+/// Full-screen image preview for workdir artifacts. Fetches the bytes
+/// lazily via [fetchBytes] so the bytes are not pulled until the user
+/// actually opens the preview.
+class WorkdirImagePreviewPage extends StatefulWidget {
+  const WorkdirImagePreviewPage({
+    super.key,
+    required this.filename,
+    required this.fetchBytes,
+    required this.useDialogLayout,
+  });
+
+  final String filename;
+  final Future<Uint8List> Function() fetchBytes;
+  final bool useDialogLayout;
+
+  static Future<void> show({
+    required BuildContext context,
+    required String filename,
+    required Future<Uint8List> Function() fetchBytes,
+  }) {
+    final useDialog = MediaQuery.sizeOf(context).width >= 600;
+    final child = WorkdirImagePreviewPage(
+      filename: filename,
+      fetchBytes: fetchBytes,
+      useDialogLayout: useDialog,
+    );
+    if (useDialog) {
+      return showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (_) => child,
+      );
+    }
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => child),
+    );
+  }
+
+  @override
+  State<WorkdirImagePreviewPage> createState() =>
+      _WorkdirImagePreviewPageState();
+}
+
+class _WorkdirImagePreviewPageState extends State<WorkdirImagePreviewPage> {
+  late Future<Uint8List> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.fetchBytes();
+  }
+
+  void _retry() {
+    setState(() {
+      _future = widget.fetchBytes();
+    });
+  }
+
+  Widget _buildContent(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return _buildError(context, snapshot.error!);
+        }
+        final bytes = snapshot.data;
+        if (bytes == null || bytes.isEmpty) {
+          return _buildError(context, 'Empty file');
+        }
+        return Center(
+          child: InteractiveViewer(
+            minScale: 1.0,
+            maxScale: 4.0,
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, _) => _buildError(context, error),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildError(BuildContext context, Object error) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
+          const SizedBox(height: 12),
+          Text(
+            'Failed to load preview',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            error.toString(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _retry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTitleBar(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              widget.filename,
+              style: theme.textTheme.titleMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Close',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.useDialogLayout) {
+      return Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 800,
+            maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildTitleBar(context),
+              Expanded(child: _buildContent(context)),
+            ],
+          ),
+        ),
+      );
+    }
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          widget.filename,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        titleTextStyle: Theme.of(context).textTheme.titleMedium,
+      ),
+      body: _buildContent(context),
+    );
+  }
 }
 
 class _WorkdirErrorRow extends StatelessWidget {
