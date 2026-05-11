@@ -351,7 +351,8 @@ void main() {
     expect(find.byType(Dialog), findsNothing);
   });
 
-  testWidgets('preview shows error + Retry when fetch fails', (tester) async {
+  testWidgets('preview shows generic error + Retry when fetch fails',
+      (tester) async {
     var fetchCalls = 0;
     await tester.pumpWidget(_wrap(WorkdirFilesSection(
       runId: 'run-1',
@@ -359,7 +360,7 @@ void main() {
       onDownload: (_, __) async => DownloadOutcome.success,
       onPreview: (_, __) async {
         fetchCalls++;
-        if (fetchCalls == 1) throw Exception('boom');
+        if (fetchCalls == 1) throw Exception('boom-internal-leak-do-not-show');
         return _tinyPng;
       },
     )));
@@ -368,14 +369,37 @@ void main() {
     await tester.tap(find.byIcon(Icons.visibility_outlined));
     await tester.pumpAndSettle();
 
-    expect(find.text('Failed to load preview'), findsOneWidget);
+    expect(find.text("Couldn't load preview"), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
+    // Raw exception text must not leak to the UI.
+    expect(find.textContaining('boom-internal-leak-do-not-show'), findsNothing);
 
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
 
     expect(fetchCalls, 2);
     expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('preview shows "no longer exists" without Retry on 404',
+      (tester) async {
+    await tester.pumpWidget(_wrap(WorkdirFilesSection(
+      runId: 'run-1',
+      fetchFiles: (_) async => [_file('plot.png')],
+      onDownload: (_, __) async => DownloadOutcome.success,
+      onPreview: (_, __) async => throw const NotFoundException(
+        message: 'gone',
+        resource: '/x',
+      ),
+    )));
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('File no longer exists'), findsOneWidget);
+    // Retry on a permanent 404 just refetches the same 404 — no Retry.
+    expect(find.text('Retry'), findsNothing);
   });
 
   testWidgets('.PNG (uppercase) is treated as previewable', (tester) async {

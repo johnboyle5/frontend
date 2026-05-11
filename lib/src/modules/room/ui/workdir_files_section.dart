@@ -425,6 +425,29 @@ class _WorkdirImagePreviewPageState extends State<WorkdirImagePreviewPage> {
 
   Widget _buildError(BuildContext context, Object error) {
     final theme = Theme.of(context);
+    // 404 is permanent for this session — the file is gone between list
+    // and preview. Retrying just refetches the same 404, so we show a
+    // dedicated "gone" state without a Retry button. The dialog's
+    // titlebar X is the way out.
+    if (error is NotFoundException) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.info_outline,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'File no longer exists',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      );
+    }
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -432,16 +455,8 @@ class _WorkdirImagePreviewPageState extends State<WorkdirImagePreviewPage> {
           Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
           const SizedBox(height: 12),
           Text(
-            'Failed to load preview',
+            "Couldn't load preview",
             style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            error.toString(),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
