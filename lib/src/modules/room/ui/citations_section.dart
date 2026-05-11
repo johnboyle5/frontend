@@ -77,9 +77,9 @@ class _CitationsSectionState extends State<CitationsSection> {
                     icon: Icons.copy_all,
                     iconSize: 16,
                     tooltip: 'Copy all',
-                    text: widget.sourceReferences
-                        .map(_formatForClipboard)
-                        .join('\n\n---\n\n'),
+                    text: formatAllCitationsForClipboard(
+                      widget.sourceReferences,
+                    ),
                   ),
                 ),
               ),
@@ -187,7 +187,7 @@ class _SourceReferenceRow extends StatelessWidget {
                 height: 32,
                 child: Center(
                   child: CopyButton(
-                    text: _formatForClipboard(sourceReference),
+                    text: formatCitationForClipboard(sourceReference),
                     tooltip: 'Copy citation $badgeNumber',
                     iconSize: 16,
                   ),
@@ -281,7 +281,8 @@ class _SourceReferenceRow extends StatelessWidget {
   }
 }
 
-String _formatForClipboard(SourceReference ref) {
+@visibleForTesting
+String formatCitationForClipboard(SourceReference ref) {
   final lines = <String>[ref.displayTitle];
   if (ref.headings.isNotEmpty) {
     lines.add(ref.headings.join(' > '));
@@ -300,3 +301,7 @@ String _formatForClipboard(SourceReference ref) {
   }
   return lines.join('\n');
 }
+
+@visibleForTesting
+String formatAllCitationsForClipboard(List<SourceReference> refs) =>
+    refs.map(formatCitationForClipboard).join('\n\n---\n\n');

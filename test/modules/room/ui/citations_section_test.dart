@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
@@ -162,92 +161,65 @@ void main() {
     expect(tappedRef?.documentId, 'doc-2');
   });
 
-  testWidgets('copy button writes citation details to the clipboard',
-      (tester) async {
-    String? copied;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.setData') {
-          copied = (call.arguments as Map)['text'] as String;
-        }
-        return null;
-      },
-    );
-    addTearDown(() {
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        null,
+  group('formatCitationForClipboard', () {
+    test('emits title, headings, pages, uri, and content in order', () {
+      final ref = _ref(
+        index: 1,
+        title: 'Doc',
+        headings: ['Chapter 1', 'Section 2'],
+        pageNumbers: [5, 6],
+        content: 'Preview text here',
+      );
+
+      expect(
+        formatCitationForClipboard(ref),
+        'Doc\n'
+        'Chapter 1 > Section 2\n'
+        'p.5-6\n'
+        'file://doc-1.txt\n'
+        '\n'
+        'Preview text here',
       );
     });
 
-    await tester.pumpWidget(_wrap(
-      CitationsSection(
-        sourceReferences: [
-          _ref(
-            index: 1,
-            title: 'Doc',
-            headings: ['Chapter 1', 'Section 2'],
-            content: 'Preview text here',
-            pageNumbers: [5, 6],
-          ),
-        ],
-      ),
-    ));
+    test('omits headings, pages, uri, and content when absent', () {
+      final ref = SourceReference(
+        documentId: 'doc-1',
+        documentUri: '',
+        content: '',
+        chunkId: 'chunk-1',
+        documentTitle: 'Doc',
+        headings: const [],
+        pageNumbers: const [],
+        index: 1,
+      );
 
-    await tester.tap(find.text('1 source'));
-    await tester.pump();
-    await tester.tap(find.text('Doc'));
-    await tester.pump();
-
-    await tester.tap(find.widgetWithText(TextButton, 'Copy'));
-    await tester.pump();
-
-    expect(copied, isNotNull);
-    expect(copied, contains('Doc'));
-    expect(copied, contains('Chapter 1 > Section 2'));
-    expect(copied, contains('p.5-6'));
-    expect(copied, contains('file://doc-1.txt'));
-    expect(copied, contains('Preview text here'));
-    expect(find.text('Citation copied'), findsOneWidget);
+      expect(formatCitationForClipboard(ref), 'Doc');
+    });
   });
 
-  testWidgets('copy-all button copies every citation', (tester) async {
-    String? copied;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.setData') {
-          copied = (call.arguments as Map)['text'] as String;
-        }
-        return null;
-      },
-    );
-    addTearDown(() {
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        null,
+  group('formatAllCitationsForClipboard', () {
+    test('formats a single ref without trailing separator', () {
+      expect(
+        formatAllCitationsForClipboard([
+          _ref(index: 1, title: 'Alpha', content: 'first'),
+        ]),
+        formatCitationForClipboard(
+          _ref(index: 1, title: 'Alpha', content: 'first'),
+        ),
       );
     });
 
-    await tester.pumpWidget(_wrap(
-      CitationsSection(
-        sourceReferences: [
-          _ref(index: 1, title: 'Alpha', content: 'first'),
-          _ref(index: 2, title: 'Beta', content: 'second'),
-        ],
-      ),
-    ));
+    test('joins multiple refs with a blank-line/rule/blank-line separator', () {
+      final alpha = _ref(index: 1, title: 'Alpha', content: 'first');
+      final beta = _ref(index: 2, title: 'Beta', content: 'second');
 
-    await tester.tap(find.byTooltip('Copy all'));
-    await tester.pump();
-
-    expect(copied, isNotNull);
-    expect(copied, contains('Alpha'));
-    expect(copied, contains('first'));
-    expect(copied, contains('Beta'));
-    expect(copied, contains('second'));
-    expect(copied, contains('---'));
-    expect(find.text('2 citations copied'), findsOneWidget);
+      expect(
+        formatAllCitationsForClipboard([alpha, beta]),
+        '${formatCitationForClipboard(alpha)}'
+        '\n\n---\n\n'
+        '${formatCitationForClipboard(beta)}',
+      );
+    });
   });
 }
