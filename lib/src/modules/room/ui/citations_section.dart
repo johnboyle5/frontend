@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -134,55 +133,79 @@ class _SourceReferenceRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InkWell(
-            onTap: onToggle,
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '$badgeNumber',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.bold,
-                      ),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: onToggle,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            '$badgeNumber',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            sourceReference.displayTitle,
+                            style: theme.textTheme.bodySmall,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (sourceReference.formattedPageNumbers != null) ...[
+                          const SizedBox(width: 4),
+                          Text(
+                            sourceReference.formattedPageNumbers!,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      sourceReference.displayTitle,
-                      style: theme.textTheme.bodySmall,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                ),
+              ),
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: Center(
+                  child: CopyButton(
+                    text: _formatForClipboard(sourceReference),
+                    tooltip: 'Copy citation $badgeNumber',
+                    iconSize: 16,
                   ),
-                  if (sourceReference.formattedPageNumbers != null) ...[
-                    const SizedBox(width: 4),
-                    Text(
-                      sourceReference.formattedPageNumbers!,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                  Icon(
+                ),
+              ),
+              InkWell(
+                onTap: onToggle,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(
                     isExpanded ? Icons.expand_less : Icons.expand_more,
                     size: 16,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
           if (isExpanded) _buildExpandedContent(context, theme),
         ],
@@ -238,50 +261,21 @@ class _SourceReferenceRow extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                TextButton.icon(
-                  onPressed: () => _copyToClipboard(context),
-                  icon: const Icon(Icons.copy, size: 16),
-                  label: const Text('Copy'),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
+          if (sourceReference.isPdf && onShowChunkVisualization != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: TextButton.icon(
+                onPressed: () => onShowChunkVisualization!(sourceReference),
+                icon: const Icon(Icons.picture_as_pdf, size: 16),
+                label: const Text('View in PDF'),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                if (sourceReference.isPdf && onShowChunkVisualization != null)
-                  TextButton.icon(
-                    onPressed: () => onShowChunkVisualization!(sourceReference),
-                    icon: const Icon(Icons.picture_as_pdf, size: 16),
-                    label: const Text('View in PDF'),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-              ],
+              ),
             ),
-          ),
         ],
-      ),
-    );
-  }
-
-  Future<void> _copyToClipboard(BuildContext context) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    await Clipboard.setData(
-      ClipboardData(text: _formatForClipboard(sourceReference)),
-    );
-    messenger?.showSnackBar(
-      const SnackBar(
-        content: Text('Citation copied'),
-        duration: Duration(seconds: 2),
       ),
     );
   }
