@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../shared/copy_button.dart';
 import 'markdown/flutter_markdown_plus_renderer.dart';
 
 class CitationsSection extends StatefulWidget {
@@ -32,54 +33,58 @@ class _CitationsSectionState extends State<CitationsSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 8),
-        InkWell(
-          onTap: () => setState(() => _sectionExpanded = !_sectionExpanded),
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Transform.flip(
-                  flipX: true,
-                  child: Icon(
-                    Icons.format_quote,
-                    size: 16,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '$count source${count == 1 ? '' : 's'}',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(width: 2),
-                Icon(
-                  _sectionExpanded ? Icons.expand_less : Icons.expand_more,
-                  size: 16,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 4),
-                InkWell(
-                  onTap: () => _copyAllToClipboard(context),
-                  borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.all(2),
-                    child: Tooltip(
-                      message: 'Copy all',
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              onTap: () => setState(() => _sectionExpanded = !_sectionExpanded),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Transform.flip(
+                      flipX: true,
                       child: Icon(
-                        Icons.copy_all,
+                        Icons.format_quote,
                         size: 16,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$count source${count == 1 ? '' : 's'}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(
+                      _sectionExpanded ? Icons.expand_less : Icons.expand_more,
+                      size: 16,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (count > 0)
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: Center(
+                  child: CopyButton(
+                    icon: Icons.copy_all,
+                    iconSize: 16,
+                    tooltip: 'Copy all',
+                    text: widget.sourceReferences
+                        .map(_formatForClipboard)
+                        .join('\n\n---\n\n'),
                   ),
                 ),
-              ],
-            ),
-          ),
+              ),
+          ],
         ),
         if (_sectionExpanded) ...[
           const SizedBox(height: 4),
@@ -101,23 +106,6 @@ class _CitationsSectionState extends State<CitationsSection> {
           }),
         ],
       ],
-    );
-  }
-
-  Future<void> _copyAllToClipboard(BuildContext context) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    final blocks = widget.sourceReferences
-        .map(_formatForClipboard)
-        .toList(growable: false);
-    await Clipboard.setData(ClipboardData(text: blocks.join('\n\n---\n\n')));
-    final count = widget.sourceReferences.length;
-    messenger?.showSnackBar(
-      SnackBar(
-        content: Text(
-          count == 1 ? 'Citation copied' : '$count citations copied',
-        ),
-        duration: const Duration(seconds: 2),
-      ),
     );
   }
 }
