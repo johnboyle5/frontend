@@ -223,14 +223,13 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
                     ),
                   ),
                 ),
-                if (activity.status != null)
-                  Text(
-                    activity.status!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                      fontSize: 11,
-                    ),
+                Text(
+                  activity.status,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                    fontSize: 11,
                   ),
+                ),
               ],
             ),
           ),
@@ -294,7 +293,7 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
     }
   }
 
-  Widget _activityStatusIcon(String? status, ThemeData theme) {
+  Widget _activityStatusIcon(String status, ThemeData theme) {
     switch (status) {
       case 'in_progress':
       case 'running':

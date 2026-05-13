@@ -7,17 +7,26 @@ import 'package:meta/meta.dart';
 import 'package:soliplex_client/src/domain/activity_record.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
 
-/// Typed view of a `skill_tool_call` activity record.
+/// Typed view of a `skill_tool_call` or `skill_tool_result` activity
+/// record.
 ///
-/// Decodes the raw [ActivityRecord.content] bag for the
-/// `skill_tool_call` [ActivityRecord.activityType]. The `args` field in
-/// the raw content is a double-encoded JSON string per the backend
-/// contract; this class decodes it into a plain map.
+/// One logical tool invocation arrives as two snapshots sharing a
+/// `messageId`: the call phase (`activity_type='skill_tool_call'`,
+/// carrying `args`) and the result phase (`activity_type=
+/// 'skill_tool_result'`, carrying `result`, with `replace=true`). This
+/// view decodes either phase so the timeline row can render
+/// continuously across the transition.
+///
+/// `status` is sourced from `content['status']` when explicitly
+/// provided as a `String`; otherwise it is synthesized from the
+/// activityType (`skill_tool_call → 'in_progress'`, `skill_tool_result
+/// → 'done'`) so the renderer's icon table picks the right glyph
+/// without a backend-side status field.
 ///
 /// Construct via [SkillToolCallActivity.fromRecord], which returns
-/// `null` when the record is not a well-formed skill_tool_call. The
-/// underlying [ActivityRecord] stays authoritative — this is a read
-/// view for UI consumers, not a replacement.
+/// `null` when the record is not a well-formed skill tool activity.
+/// The underlying [ActivityRecord] stays authoritative — this is a
+/// read view for UI consumers, not a replacement.
 @immutable
 class SkillToolCallActivity {
   /// Creates a [SkillToolCallActivity]. Prefer [fromRecord].
@@ -25,51 +34,96 @@ class SkillToolCallActivity {
     required this.messageId,
     required this.toolName,
     required this.args,
+    required this.result,
     required this.status,
     required this.timestamp,
   });
 
   /// Attempts to decode [record] as a [SkillToolCallActivity].
   ///
-  /// Returns `null` when:
-  /// - [ActivityRecord.activityType] is not `"skill_tool_call"`
-  /// - `content['tool_name']` is missing or not a [String]
-  /// - `content['args']` is present but not decodable as a JSON object
+  /// Dispatches on [ActivityRecord.activityType]:
+  /// - `skill_tool_call` → decodes args, synthesizes status
+  ///   `'in_progress'` when [ActivityRecord.content] does not carry
+  ///   an explicit `status` String.
+  /// - `skill_tool_result` → decodes the optional `result` String,
+  ///   synthesizes status `'done'` when no explicit `status` is set.
+  /// - any other activityType → returns `null`.
   ///
-  /// Missing `args` yields an empty map; missing `status` yields `null`.
-  /// Schema drift is logged (warning) rather than thrown, matching the
-  /// processor's posture in `_processActivitySnapshot`.
+  /// Both phases require `content['tool_name']` to be a `String`.
+  /// Schema drift is logged (level 900) rather than thrown, matching
+  /// the processor's posture in `_processActivitySnapshot`.
   static SkillToolCallActivity? fromRecord(ActivityRecord record) {
-    if (record.activityType != 'skill_tool_call') {
-      return null;
+    switch (record.activityType) {
+      case 'skill_tool_call':
+        return _decodeCall(record);
+      case 'skill_tool_result':
+        return _decodeResult(record);
+      default:
+        return null;
     }
-    final toolName = record.content['tool_name'];
-    if (toolName is! String) {
-      developer.log(
-        'SkillToolCallActivity.fromRecord: missing or invalid tool_name '
-        '(runtimeType=${toolName.runtimeType}) for messageId '
-        '${record.messageId}',
-        name: 'soliplex_client.skill_tool_call_activity',
-        level: 900,
-      );
-      return null;
-    }
+  }
 
+  static SkillToolCallActivity? _decodeCall(ActivityRecord record) {
+    final toolName = _readToolName(record);
+    if (toolName == null) return null;
+
+    final args = _decodeArgs(record);
+    if (args == null) return null;
+
+    return SkillToolCallActivity(
+      messageId: record.messageId,
+      toolName: toolName,
+      args: args,
+      result: null,
+      status: _readStatus(record) ?? 'in_progress',
+      timestamp: record.timestamp,
+    );
+  }
+
+  static SkillToolCallActivity? _decodeResult(ActivityRecord record) {
+    final toolName = _readToolName(record);
+    if (toolName == null) return null;
+
+    final rawResult = record.content['result'];
+    final result = rawResult is String ? rawResult : null;
+
+    return SkillToolCallActivity(
+      messageId: record.messageId,
+      toolName: toolName,
+      args: const {},
+      result: result,
+      status: _readStatus(record) ?? 'done',
+      timestamp: record.timestamp,
+    );
+  }
+
+  static String? _readToolName(ActivityRecord record) {
+    final toolName = record.content['tool_name'];
+    if (toolName is String) return toolName;
+    developer.log(
+      'SkillToolCallActivity.fromRecord: missing or invalid tool_name '
+      '(runtimeType=${toolName.runtimeType}) for messageId '
+      '${record.messageId}',
+      name: 'soliplex_client.skill_tool_call_activity',
+      level: 900,
+    );
+    return null;
+  }
+
+  /// Returns `null` when the args field is structurally invalid (the
+  /// decoder should abandon the record). Returns an empty map when
+  /// args are simply absent.
+  static Map<String, dynamic>? _decodeArgs(ActivityRecord record) {
     final rawArgs = record.content['args'];
-    final Map<String, dynamic> decodedArgs;
     switch (rawArgs) {
       case null:
-        decodedArgs = const {};
+        return const {};
       case final String s when s.isEmpty:
-        decodedArgs = const {};
+        return const {};
       case final String s:
-        final parsed = _tryDecodeJsonObject(s, record.messageId);
-        if (parsed == null) {
-          return null;
-        }
-        decodedArgs = parsed;
+        return _tryDecodeJsonObject(s, record.messageId);
       case final Map<String, dynamic> m:
-        decodedArgs = m;
+        return m;
       default:
         developer.log(
           'SkillToolCallActivity.fromRecord: unexpected args '
@@ -80,17 +134,11 @@ class SkillToolCallActivity {
         );
         return null;
     }
+  }
 
-    final rawStatus = record.content['status'];
-    final status = rawStatus is String ? rawStatus : null;
-
-    return SkillToolCallActivity(
-      messageId: record.messageId,
-      toolName: toolName,
-      args: decodedArgs,
-      status: status,
-      timestamp: record.timestamp,
-    );
+  static String? _readStatus(ActivityRecord record) {
+    final raw = record.content['status'];
+    return raw is String ? raw : null;
   }
 
   /// Identifier for the target `ActivityMessage`.
@@ -99,11 +147,21 @@ class SkillToolCallActivity {
   /// Tool being invoked (e.g. `"ask"`).
   final String toolName;
 
-  /// Decoded arguments for the tool call. Empty when absent.
+  /// Decoded arguments for the tool call. Empty when the record is a
+  /// `skill_tool_result` (the result snapshot does not carry args per
+  /// the AG-UI replace-in-place contract) or when args are absent.
   final Map<String, dynamic> args;
 
-  /// Optional status token (e.g. `"in_progress"`, `"done"`).
-  final String? status;
+  /// Decoded result from a `skill_tool_result` record. `null` while the
+  /// record is still a `skill_tool_call`, or when the result snapshot
+  /// did not include a `result` field.
+  final String? result;
+
+  /// Status token. Always `'in_progress'` for a `skill_tool_call`
+  /// record and `'done'` for a `skill_tool_result` record unless the
+  /// backend supplies an explicit `content['status']` String, in
+  /// which case that value passes through.
+  final String status;
 
   /// Event timestamp for the underlying snapshot.
   final int timestamp;
@@ -115,6 +173,7 @@ class SkillToolCallActivity {
     const mapEquals = DeepCollectionEquality();
     return messageId == other.messageId &&
         toolName == other.toolName &&
+        result == other.result &&
         status == other.status &&
         timestamp == other.timestamp &&
         mapEquals.equals(args, other.args);
@@ -124,6 +183,7 @@ class SkillToolCallActivity {
   int get hashCode => Object.hash(
         messageId,
         toolName,
+        result,
         status,
         timestamp,
         const DeepCollectionEquality().hash(args),
@@ -161,8 +221,8 @@ Map<String, dynamic>? _tryDecodeJsonObject(String raw, String messageId) {
 
 /// Typed accessors for [Conversation.activities].
 extension ConversationSkillToolCalls on Conversation {
-  /// All `skill_tool_call` activities in [activities], decoded to the
-  /// typed view. Malformed records are skipped (see
+  /// All skill tool activities in [activities], decoded to the typed
+  /// view. Malformed records are skipped (see
   /// [SkillToolCallActivity.fromRecord]).
   List<SkillToolCallActivity> get skillToolCalls => [
         for (final record in activities)
