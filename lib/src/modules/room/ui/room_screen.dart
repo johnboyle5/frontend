@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_client/soliplex_client.dart'
     show
+        MalformedResponseException,
         RagDocument,
         ReconnectFailed,
         ReconnectStatus,
@@ -903,9 +904,15 @@ class _RoomScreenState extends State<RoomScreen> {
                     child: CircularProgressIndicator(),
                   ),
                 MessagesFailed(:final error) => ErrorRetryPanel(
-                    title: 'Failed to load messages',
+                    title: error is MalformedResponseException
+                        ? "Couldn't display thread history"
+                        : 'Failed to load messages',
                     error: error,
-                    onRetry: threadView.refresh,
+                    // Shape-drift is a backend bug — retry won't help, so
+                    // hide the button rather than misleading the user.
+                    onRetry: error is MalformedResponseException
+                        ? null
+                        : threadView.refresh,
                   ),
                 MessagesLoaded(:final messages, :final messageStates) =>
                   computeDisplayMessages(messages, streaming).isEmpty
@@ -956,6 +963,12 @@ class _RoomScreenState extends State<RoomScreen> {
                               _workdirs.fetchFiles(threadView.threadId, runId),
                           onDownloadWorkdirFile: (runId, file) =>
                               _workdirs.download(
+                            threadView.threadId,
+                            runId,
+                            file,
+                          ),
+                          onPreviewWorkdirFile: (runId, file) =>
+                              _workdirs.fetchBytes(
                             threadView.threadId,
                             runId,
                             file,

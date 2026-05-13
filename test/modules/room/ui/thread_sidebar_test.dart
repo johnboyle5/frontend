@@ -291,7 +291,8 @@ void main() {
       ),
     ];
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
       home: Scaffold(
         body: ThreadSidebar(
           threadListStatus: ThreadsLoaded(threads),
@@ -306,7 +307,7 @@ void main() {
           runningThreadIds: running.readonly(),
         ),
       ),
-    ));
+    )));
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
 
@@ -337,7 +338,8 @@ void main() {
       ),
     ];
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
       home: Scaffold(
         body: ThreadSidebar(
           threadListStatus: ThreadsLoaded(threads),
@@ -352,7 +354,7 @@ void main() {
           runningThreadIds: running.readonly(),
         ),
       ),
-    ));
+    )));
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(

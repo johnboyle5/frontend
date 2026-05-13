@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soliplex_agent/soliplex_agent.dart';
 
 import '../../../../soliplex_frontend.dart';
 import '../execution_tracker.dart';
-import '../room_providers.dart';
 import 'citations_section.dart';
+import 'copy_button.dart';
 import 'execution/activity_indicator.dart';
 import 'execution/execution_timeline.dart';
+import 'execution/static_thinking_block.dart';
 import 'execution/thinking_block.dart';
-import 'copy_button.dart';
 import 'feedback_buttons.dart';
 import 'markdown/flutter_markdown_plus_renderer.dart';
 import 'workdir_files_section.dart';
@@ -26,6 +25,7 @@ class TextMessageTile extends StatelessWidget {
     this.onShowChunkVisualization,
     this.onFetchWorkdirFiles,
     this.onDownloadWorkdirFile,
+    this.onPreviewWorkdirFile,
     this.executionTracker,
     this.streamingActivity,
   });
@@ -39,6 +39,7 @@ class TextMessageTile extends StatelessWidget {
   final void Function(SourceReference)? onShowChunkVisualization;
   final FetchWorkdirFiles? onFetchWorkdirFiles;
   final DownloadWorkdirFile? onDownloadWorkdirFile;
+  final FetchWorkdirFileBytes? onPreviewWorkdirFile;
   final ExecutionTracker? executionTracker;
   final ActivityType? streamingActivity;
 
@@ -67,7 +68,7 @@ class TextMessageTile extends StatelessWidget {
             tracker: executionTracker!,
           )
         else if (!isUser && message.hasThinkingText)
-          _ThinkingBlock(
+          StaticThinkingBlock(
             roomId: roomId,
             messageId: message.id,
             text: message.thinkingText,
@@ -79,28 +80,7 @@ class TextMessageTile extends StatelessWidget {
           ),
         ),
         const SizedBox(height: SoliplexSpacing.s1),
-        Container(
-          padding: isUser
-              ? const EdgeInsets.symmetric(
-                  horizontal: SoliplexSpacing.s5, vertical: SoliplexSpacing.s2)
-              : const EdgeInsets.symmetric(
-                  horizontal: SoliplexSpacing.s5, vertical: SoliplexSpacing.s1),
-          decoration: BoxDecoration(
-            color: isUser
-                ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
-                : theme.colorScheme.surface,
-          ),
-          child: isUser
-              ? SelectableText(
-                  message.text,
-                  style: TextStyle(
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                )
-              : message.text.isEmpty
-                  ? const Text('...')
-                  : FlutterMarkdownPlusRenderer(data: message.text),
-        ),
+        _MessageBubble(message: message),
         const SizedBox(height: SoliplexSpacing.s2),
         Row(
           children: [
@@ -142,65 +122,42 @@ class TextMessageTile extends StatelessWidget {
             runId: runId!,
             fetchFiles: onFetchWorkdirFiles!,
             onDownload: onDownloadWorkdirFile!,
+            onPreview: onPreviewWorkdirFile,
           ),
       ],
     );
   }
 }
 
-class _ThinkingBlock extends ConsumerWidget {
-  const _ThinkingBlock({
-    required this.roomId,
-    required this.messageId,
-    required this.text,
-  });
+class _MessageBubble extends StatelessWidget {
+  const _MessageBubble({required this.message});
 
-  final String roomId;
-  final String messageId;
-  final String text;
+  final TextMessage message;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final expansion =
-        ref.read(messageExpansionsProvider).forMessage(roomId, messageId);
-    // ExpansionTile reads initiallyExpanded once on mount and does not
-    // rebuild when the store changes. Safe because _ThinkingBlock and
-    // ExecutionThinkingBlock are selected by hasTracker and are therefore
-    // mutually exclusive for any given (roomId, messageId), so only one
-    // of them writes thinkingExpanded.
-    return ExpansionTile(
-      initiallyExpanded: expansion.thinkingExpanded,
-      onExpansionChanged: (v) => expansion.thinkingExpanded = v,
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Thinking...',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          CopyButton(
-            text: text,
-            tooltip: 'Copy thinking',
-            iconSize: 16,
-          ),
-        ],
+    final isUser = message.user == ChatUser.user;
+
+    return Container(
+      padding: isUser
+          ? const EdgeInsets.symmetric(
+              horizontal: SoliplexSpacing.s5, vertical: SoliplexSpacing.s2)
+          : const EdgeInsets.symmetric(
+              horizontal: SoliplexSpacing.s5, vertical: SoliplexSpacing.s1),
+      decoration: BoxDecoration(
+        color: isUser
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
+            : theme.colorScheme.surface,
       ),
-      dense: true,
-      tilePadding: EdgeInsets.zero,
-      childrenPadding: const EdgeInsets.only(bottom: SoliplexSpacing.s1),
-      children: [
-        Text(
-          text,
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontStyle: FontStyle.italic,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
+      child: isUser
+          ? SelectableText(
+              message.text,
+              style: TextStyle(color: theme.colorScheme.onPrimaryContainer),
+            )
+          : message.text.isEmpty
+              ? const Text('...')
+              : FlutterMarkdownPlusRenderer(data: message.text),
     );
   }
 }

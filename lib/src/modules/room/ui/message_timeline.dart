@@ -26,6 +26,7 @@ class MessageTimeline extends StatefulWidget {
     this.onShowChunkVisualization,
     this.onFetchWorkdirFiles,
     this.onDownloadWorkdirFile,
+    this.onPreviewWorkdirFile,
   });
 
   final String roomId;
@@ -39,6 +40,7 @@ class MessageTimeline extends StatefulWidget {
   final void Function(SourceReference)? onShowChunkVisualization;
   final FetchWorkdirFiles? onFetchWorkdirFiles;
   final DownloadWorkdirFile? onDownloadWorkdirFile;
+  final FetchWorkdirFileBytes? onPreviewWorkdirFile;
 
   @override
   State<MessageTimeline> createState() => _MessageTimelineState();
@@ -223,6 +225,7 @@ class _MessageTimelineState extends State<MessageTimeline> {
                       onShowChunkVisualization: widget.onShowChunkVisualization,
                       onFetchWorkdirFiles: widget.onFetchWorkdirFiles,
                       onDownloadWorkdirFile: widget.onDownloadWorkdirFile,
+                      onPreviewWorkdirFile: widget.onPreviewWorkdirFile,
                       executionTracker: widget.executionTrackers[message.id] ??
                           (message is LoadingMessage
                               ? widget.executionTrackers[awaitingTrackerKey]

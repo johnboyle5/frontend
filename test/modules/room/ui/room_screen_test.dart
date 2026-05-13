@@ -203,7 +203,8 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
       home: RoomScreen(
         serverEntry: entry,
         roomId: 'room-1',
@@ -213,7 +214,7 @@ void main() {
         uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
-    ));
+    )));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.menu));
@@ -247,7 +248,8 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
       home: RoomScreen(
         serverEntry: entry,
         roomId: 'room-1',
@@ -257,7 +259,7 @@ void main() {
         uploadRegistry: uploadRegistry,
         documentSelections: DocumentSelections(),
       ),
-    ));
+    )));
     await tester.pumpAndSettle();
 
     final key = (

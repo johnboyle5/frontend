@@ -715,7 +715,7 @@ void main() {
 
       // Attach a session whose extension will produce a live tracker under
       // the same message id.
-      final ext = ExecutionTrackerExtension();
+      final ext = ExecutionTrackerExtension(logger: testLogger());
       final fakeSession = _FakeAgentSession(extensions: [ext]);
       await ext.onAttach(fakeSession);
       state.attachSession(fakeSession);
@@ -903,7 +903,7 @@ void main() {
         state.attachSession(session);
 
         session.emit(
-          FailedState(
+          FailedState.preRun(
             threadKey: (
               serverId: 'test-server',
               roomId: 'room-1',
@@ -918,45 +918,6 @@ void main() {
         expect(sendError, isNotNull);
         expect(sendError!.error, contains('Connection lost'));
         expect(sendError.error, contains('send your message again'));
-
-        state.dispose();
-      },
-    );
-
-    test(
-      'FailedState with skipped-events suffix preserves the count in '
-      'friendly copy',
-      () async {
-        api.nextThreadHistory = ThreadHistory(messages: const []);
-
-        final state = ThreadViewState(
-          connection: connection,
-          roomId: 'room-1',
-          threadId: 'thread-1',
-          registry: registry,
-        );
-        await Future<void>.delayed(Duration.zero);
-
-        final session = _FakeAgentSession();
-        state.attachSession(session);
-
-        session.emit(
-          FailedState(
-            threadKey: (
-              serverId: 'test-server',
-              roomId: 'room-1',
-              threadId: 'thread-1',
-            ),
-            reason: FailureReason.streamResumeFailed,
-            error: '$streamResumeFailedPrefix NetworkException: server gone '
-                '(skipped 3 malformed events)',
-          ),
-        );
-
-        final sendError = state.lastSendError.value;
-        expect(sendError, isNotNull);
-        expect(sendError!.error, contains('Connection lost'));
-        expect(sendError.error, contains('(skipped 3 malformed events)'));
 
         state.dispose();
       },
@@ -979,7 +940,7 @@ void main() {
         state.attachSession(session);
 
         session.emit(
-          FailedState(
+          FailedState.preRun(
             threadKey: (
               serverId: 'test-server',
               roomId: 'room-1',

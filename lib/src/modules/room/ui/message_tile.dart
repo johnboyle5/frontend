@@ -3,9 +3,11 @@ import 'package:soliplex_agent/soliplex_agent.dart';
 
 import '../../../../soliplex_frontend.dart';
 import '../execution_tracker.dart';
+import 'dropped_event_message_tile.dart';
 import 'error_message_tile.dart';
 import 'gen_ui_tile.dart';
 import 'loading_message_tile.dart';
+import 'no_response_tile_widget.dart';
 import 'text_message_tile.dart';
 import 'tool_call_tile.dart';
 import 'workdir_files_section.dart';
@@ -22,6 +24,7 @@ class MessageTile extends StatelessWidget {
     this.onShowChunkVisualization,
     this.onFetchWorkdirFiles,
     this.onDownloadWorkdirFile,
+    this.onPreviewWorkdirFile,
     this.executionTracker,
     this.streamingActivity,
   });
@@ -36,6 +39,7 @@ class MessageTile extends StatelessWidget {
   final void Function(SourceReference)? onShowChunkVisualization;
   final FetchWorkdirFiles? onFetchWorkdirFiles;
   final DownloadWorkdirFile? onDownloadWorkdirFile;
+  final FetchWorkdirFileBytes? onPreviewWorkdirFile;
   final ExecutionTracker? executionTracker;
   final ActivityType? streamingActivity;
 
@@ -59,6 +63,13 @@ class MessageTile extends StatelessWidget {
             onShowChunkVisualization: onShowChunkVisualization,
             onFetchWorkdirFiles: onFetchWorkdirFiles,
             onDownloadWorkdirFile: onDownloadWorkdirFile,
+            onPreviewWorkdirFile: onPreviewWorkdirFile,
+            executionTracker: executionTracker,
+            streamingActivity: streamingActivity,
+          ),
+        final NoResponseTile m => NoResponseTileWidget(
+            roomId: roomId,
+            message: m,
             executionTracker: executionTracker,
             streamingActivity: streamingActivity,
           ),
@@ -71,10 +82,7 @@ class MessageTile extends StatelessWidget {
             executionTracker: executionTracker,
             streamingActivity: streamingActivity,
           ),
-        // Phase 3 wires this up to dropped_event_message_tile.dart. Until
-        // then no production code creates a DroppedEventMessage so the arm
-        // is unreachable in practice.
-        DroppedEventMessage() => const SizedBox.shrink(),
+        final DroppedEventMessage m => DroppedEventMessageTile(message: m),
       },
     );
   }

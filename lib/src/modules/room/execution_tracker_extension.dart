@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:soliplex_agent/soliplex_agent.dart';
 
 import 'execution_tracker.dart';
@@ -15,10 +16,13 @@ import 'tracker_registry.dart';
 /// registry on detach, so execution data persists after the session ends.
 class ExecutionTrackerExtension extends SessionExtension
     with StatefulSessionExtension<Map<String, ExecutionTracker>> {
-  ExecutionTrackerExtension() : _registry = TrackerRegistry() {
+  ExecutionTrackerExtension({required Logger logger})
+      : _logger = logger,
+        _registry = TrackerRegistry(logger: logger) {
     setInitialState(const <String, ExecutionTracker>{});
   }
 
+  final Logger _logger;
   final TrackerRegistry _registry;
   void Function()? _runStateUnsub;
   AgentSession? _session;
@@ -52,17 +56,69 @@ class ExecutionTrackerExtension extends SessionExtension
     super.onDispose();
   }
 
+  /// Test entrypoint for [_onRunState]. Production code routes through
+  /// the signal subscription; tests use this to drive the post-dispose
+  /// path that production can't reach without racing the signals teardown.
+  @visibleForTesting
+  void debugPushRunState(RunState runState) => _onRunState(runState);
+
   void _onRunState(RunState runState) {
-    final session = _session!;
+    final session = _session;
+    if (session == null) {
+      // signals teardown is assumed synchronous w.r.t. onDispose, but
+      // that's a fragile invariant across signals upgrades. Reaching
+      // here means the invariant broke — `error`-level so Sentry can
+      // page on a regression instead of having the breadcrumb buried
+      // among warnings.
+      _logger.error(
+        '_onRunState fired after dispose; ignoring',
+        stackTrace: StackTrace.current,
+        attributes: {'runState': runState.runtimeType.toString()},
+      );
+      return;
+    }
     switch (runState) {
       case RunningState(:final streaming):
         _registry.onStreaming(streaming, session.lastExecutionEvent);
         _sync();
-      case CompletedState() || FailedState() || CancelledState():
+      // Order is load-bearing across the three terminal arms: rekey must
+      // run before `onRunTerminated`, because rekey moves the awaiting
+      // tracker to its synthesized id while the entry is still present;
+      // a future change that drops the awaiting entry on terminate would
+      // silently break the rekey if invoked first.
+      case CompletedState(:final runId, :final conversation):
+        _rekeyAwaitingForNoResponseIfPresent(runId, conversation);
+        _registry.onRunTerminated();
+        _sync();
+      case FailedState(:final runId, :final conversation):
+        _rekeyAwaitingForNoResponseIfPresent(runId, conversation);
+        _registry.onRunTerminated();
+        _sync();
+      case CancelledState(:final runId, :final conversation):
+        _rekeyAwaitingForNoResponseIfPresent(runId, conversation);
         _registry.onRunTerminated();
         _sync();
       case IdleState() || ToolYieldingState():
         break;
+    }
+  }
+
+  /// If the terminal conversation contains a synthesized "no response"
+  /// assistant message for this run, rekey the awaiting tracker under
+  /// that message's id so its captured thinking attaches to the rendered
+  /// tile.
+  ///
+  /// Safe to call unconditionally on every terminal transition — the
+  /// registry call is a no-op when the awaiting tracker doesn't exist or
+  /// when the synthesized id isn't present in the conversation.
+  void _rekeyAwaitingForNoResponseIfPresent(
+    String? runId,
+    Conversation? conversation,
+  ) {
+    if (runId == null || conversation == null) return;
+    final synthesizedId = noResponseMessageId(runId);
+    if (conversation.messages.any((m) => m.id == synthesizedId)) {
+      _registry.renameAwaitingTo(synthesizedId);
     }
   }
 
