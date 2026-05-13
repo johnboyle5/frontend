@@ -176,13 +176,10 @@ EventProcessingResult processEvent(
   };
 }
 
-// Thinking events - buffer thinking text in AwaitingText state
-
 EventProcessingResult _processThinkingStart(
   Conversation conversation,
   StreamingState streaming,
 ) {
-  // Mark thinking as streaming and set phase
   if (streaming is AwaitingText) {
     return EventProcessingResult(
       conversation: conversation,
@@ -394,7 +391,8 @@ EventProcessingResult _processToolCallEnd(
 ) {
   // Only transition streaming → pending. Guard prevents downgrading tools
   // that are already executing/completed/failed (e.g. duplicate ToolCallEnd).
-  // Phase persists until the next phase starts — don't change it here.
+  // Streaming phase is owned by phase-start handlers; ToolCallEnd leaves
+  // it untouched so the current phase persists until the next one starts.
   if (!conversation.toolCalls.any((tc) => tc.id == toolCallId)) {
     _logger.warning(
       'ToolCallEndEvent for unknown toolCallId; ignored',
@@ -485,8 +483,6 @@ EventProcessingResult _processActivitySnapshot(
     streaming: streaming,
   );
 }
-
-// Tool call phase helper
 
 /// Returns [streaming] with [toolName] accumulated on its [ToolCallPhase].
 StreamingState _withToolCallPhase(
@@ -675,9 +671,9 @@ EventProcessingResult _processRunError(
   };
   if (conversation.status is Idle) {
     // RunErrorEvent without a preceding RunStartedEvent is a backend
-    // protocol violation. Log at error so Sentry sees it, then append
-    // an ErrorMessage so the user gets a visible failure row instead of
-    // a silent status-only flip.
+    // protocol violation. Log at error level for backend escalation,
+    // then append an ErrorMessage so the user gets a visible failure
+    // row instead of a silent status-only flip.
     _logger.error(
       'RunErrorEvent on Idle: pre-run failure (backend protocol violation)',
       attributes: logAttributes,

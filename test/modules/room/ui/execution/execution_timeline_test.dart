@@ -101,9 +101,8 @@ void main() {
       // ActivitySnapshot event, then clear the activities signal so
       // skillToolCalls becomes empty. The renderer must fall through to
       // SizedBox.shrink() for the dangling id, not throw on missing
-      // lookup. Today there is no production path that produces this
-      // state — the test pins the defensive fallback for future
-      // MESSAGES_SNAPSHOT or producer/consumer drift.
+      // lookup — pinning the defensive fallback for MESSAGES_SNAPSHOT
+      // or producer/consumer drift.
       events.value = const ClientToolExecuting(
         toolName: 'execute_skill',
         toolCallId: 'tc-1',

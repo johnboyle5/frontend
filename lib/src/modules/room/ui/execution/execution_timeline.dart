@@ -46,7 +46,7 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
   final Set<String> _loadingPhaseSources = <String>{};
 
   // Throttle: log each dangling-id at most once per widget lifetime so a
-  // sustained mismatch doesn't flood Sentry on every frame.
+  // sustained mismatch doesn't flood the logging backend on every frame.
   final Set<String> _loggedDanglingIds = <String>{};
 
   // Persistence handle — null during the AwaitingText phase, because
@@ -174,13 +174,13 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
 
   /// Looks up the decoded activity for [id] in the tracker's
   /// `skillToolCalls`. Returns `null` for a dangling id so the renderer
-  /// falls through to an empty row instead of throwing. The
-  /// tracker only places ids whose activityType the decoder recognises
-  /// (`skill_tool_call` / `skill_tool_result`), so a dangling id today
-  /// indicates a real divergence — a decode failure, a future
-  /// `MESSAGES_SNAPSHOT` that dropped the record, or a producer/consumer
-  /// mismatch. Logged at warning the first time each id fails to resolve
-  /// so the dropped row is observable instead of silent.
+  /// falls through to an empty row instead of throwing. The tracker
+  /// only places ids whose activityType the decoder recognises
+  /// (`skill_tool_call` / `skill_tool_result`), so a dangling id
+  /// indicates a real divergence — a decode failure, a
+  /// `MESSAGES_SNAPSHOT` that dropped the record, or a producer/
+  /// consumer mismatch. Logged at warning the first time each id fails
+  /// to resolve so the dropped row is observable instead of silent.
   SkillToolCallActivity? _resolveActivity(
     String id,
     List<SkillToolCallActivity> calls,

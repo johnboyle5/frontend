@@ -1,30 +1,27 @@
-/// Regression harness for two known bugs in the "$N events" bubble
-/// rendered above assistant messages by [ExecutionTimeline].
+/// Invariants for the "$N events" bubble rendered above assistant
+/// messages by [ExecutionTimeline].
 ///
-/// Bug 1 — Nested rows never get a checkmark
-/// -----------------------------------------
-/// haiku.skills emits one logical sub-skill invocation as two
-/// `ActivitySnapshotEvent`s sharing a `messageId`: a call phase
+/// Nested-row completion
+/// ---------------------
+/// A logical sub-skill invocation arrives as two `ActivitySnapshotEvent`s
+/// sharing a `messageId`: a call phase
 /// (`activity_type='skill_tool_call'`, carrying `args`) and a result
 /// phase (`activity_type='skill_tool_result'`, carrying `result`,
-/// `replace=true`). The original frontend decoder bailed on any
-/// activityType other than `skill_tool_call`, so the result snapshot
-/// was logged and dropped; the nested row stayed at its in-progress
-/// spinner for the rest of the run. The decoder now dispatches on
-/// activityType and routes `skill_tool_result` through a result-phase
-/// decoder that synthesizes `status='done'` and exposes the
-/// `content['result']` text.
+/// `replace=true`). The decoder dispatches on activityType so the
+/// result phase synthesizes `status='done'` and exposes
+/// `content['result']`, flipping the nested row out of its
+/// in-progress spinner.
 ///
-/// Bug 2 — Bubble disappears after reload
-/// --------------------------------------
+/// Bubble survives reload after a tool-yield
+/// -----------------------------------------
 /// On thread reload, [replayToTrackers] keys events by assistant
 /// `TextMessageStart`. A run that ends with a `ToolCallStart` but no
 /// follow-up bundle (errored mid-tool, cancelled, server restart) hits
-/// the "trailing tool-yield" branch and silently drops its events; no
-/// tracker is produced for the run. If the chat-message processor
-/// synthesized a no-response tile for the same run via a different code
-/// path, that tile is rendered without a tracker — the "events bubble"
-/// vanishes on reload even though it was visible during the live run.
+/// the "trailing tool-yield" branch. If the chat-message processor
+/// synthesizes a no-response tile for the same run via a different
+/// code path, the replay must still produce a tracker keyed under the
+/// synthesized id so the bubble keeps rendering the thinking and
+/// tool-call timeline that was visible during the live run.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -51,7 +48,7 @@ void main() {
                 toolCallId: 'tc-1',
                 toolCallName: 'execute_skill',
               ),
-              // Phase 1: call. haiku.skills emits replace=false so the
+              // Phase 1: call. The producer emits replace=false so the
               // initial snapshot lands as a new record.
               ActivitySnapshotEvent(
                 messageId: 'rag:call_1',

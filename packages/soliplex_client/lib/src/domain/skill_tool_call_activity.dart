@@ -107,8 +107,8 @@ class SkillToolCallActivity {
   /// - any other activityType → returns `null`.
   ///
   /// Both phases require `content['tool_name']` to be a `String`.
-  /// Schema drift is logged (level 900) rather than thrown, matching
-  /// the processor's posture in `_processActivitySnapshot`.
+  /// Schema drift is logged at warning level rather than thrown,
+  /// matching the processor's posture in `_processActivitySnapshot`.
   static SkillToolCallActivity? fromRecord(ActivityRecord record) {
     switch (record.activityType) {
       case 'skill_tool_call':
