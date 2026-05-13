@@ -1,3 +1,4 @@
+export 'activity_events.dart';
 export 'agui_event_processor.dart';
 export 'citation_extractor.dart';
 export 'decode_outcome.dart';

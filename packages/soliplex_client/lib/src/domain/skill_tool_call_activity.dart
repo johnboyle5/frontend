@@ -10,6 +10,15 @@ import 'package:soliplex_logging/soliplex_logging.dart';
 final Logger _logger =
     LogManager.instance.getLogger('soliplex_client.skill_tool_call_activity');
 
+/// `activityType` strings that [SkillToolCallActivity.fromRecord]
+/// recognises. Consumers that filter by activityType (e.g. the
+/// execution tracker's timeline placement) reference this set so the
+/// recognised types stay in lockstep with the decoder.
+const Set<String> kSkillToolCallActivityTypes = {
+  'skill_tool_call',
+  'skill_tool_result',
+};
+
 /// Lifecycle status of a [SkillToolCallActivity].
 ///
 /// Decoded from `content['status']` when the backend supplies a value;

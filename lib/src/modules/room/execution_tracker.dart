@@ -21,15 +21,17 @@ class ExecutionTracker {
   ///
   /// The tracker opens no subscription; callers should not pass the
   /// returned instance to any signal. It is immutable from construction
-  /// ([isFrozen] returns `true`). The activities signal is initialised
-  /// from the snapshot events found in [events] applying the AG-UI
-  /// `replace` semantics, so the historical projection matches what
-  /// `Conversation.activities` would hold after live replay.
+  /// ([isFrozen] returns `true`). [activities] is the already-folded
+  /// activities list (see `applyActivityEvent`) — historical replay
+  /// folds the raw AG-UI events through the same function the live
+  /// processor uses, so snapshot + delta application produces the same
+  /// result as a live run with the same event stream.
   ExecutionTracker.historical({
     required List<ExecutionEvent> events,
+    required List<ActivityRecord> activities,
     required Logger logger,
   })  : _logger = logger,
-        _activities = Signal(_reconstructActivities(events)),
+        _activities = Signal(activities),
         _historical = true {
     _stopwatch.start();
     for (final event in events) {
@@ -179,8 +181,7 @@ class ExecutionTracker {
         // layer (so future consumers can read them), but they don't get a
         // timeline row — placing them would produce a phantom entry whose
         // _resolveActivity returns null on every render.
-        if (activityType == 'skill_tool_call' ||
-            activityType == 'skill_tool_result') {
+        if (kSkillToolCallActivityTypes.contains(activityType)) {
           _placeActivityInTimeline(messageId);
         }
       case TextDelta() ||
@@ -273,32 +274,6 @@ class ExecutionTracker {
         return;
       }
     }
-  }
-
-  /// Replays the [ActivitySnapshot] events in [events] using AG-UI
-  /// `replace` semantics so the historical tracker's activities signal
-  /// holds the same list `Conversation.activities` would hold after a
-  /// live run with the same event stream.
-  static List<ActivityRecord> _reconstructActivities(
-    List<ExecutionEvent> events,
-  ) {
-    final list = <ActivityRecord>[];
-    for (final event in events) {
-      if (event is! ActivitySnapshot) continue;
-      final record = ActivityRecord(
-        messageId: event.messageId,
-        activityType: event.activityType,
-        content: event.content,
-        timestamp: event.timestamp ?? DateTime.now().millisecondsSinceEpoch,
-      );
-      final idx = list.indexWhere((a) => a.messageId == event.messageId);
-      if (idx >= 0) {
-        if (event.replace) list[idx] = record;
-      } else {
-        list.add(record);
-      }
-    }
-    return list;
   }
 
   void dispose() {

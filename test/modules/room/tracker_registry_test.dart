@@ -180,10 +180,16 @@ void main() {
   group('seedHistorical', () {
     test('adds frozen trackers under their message ids', () {
       final historical = {
-        'asst-1':
-            ExecutionTracker.historical(events: const [], logger: testLogger()),
-        'asst-2':
-            ExecutionTracker.historical(events: const [], logger: testLogger()),
+        'asst-1': ExecutionTracker.historical(
+          events: const [],
+          activities: const [],
+          logger: testLogger(),
+        ),
+        'asst-2': ExecutionTracker.historical(
+          events: const [],
+          activities: const [],
+          logger: testLogger(),
+        ),
       };
 
       registry.seedHistorical(historical);
@@ -205,8 +211,11 @@ void main() {
       final live = registry.trackers['asst-1'];
 
       final historical = {
-        'asst-1':
-            ExecutionTracker.historical(events: const [], logger: testLogger()),
+        'asst-1': ExecutionTracker.historical(
+          events: const [],
+          activities: const [],
+          logger: testLogger(),
+        ),
       };
       registry.seedHistorical(historical);
 

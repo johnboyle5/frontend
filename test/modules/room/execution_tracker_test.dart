@@ -442,8 +442,11 @@ void main() {
 
   group('ExecutionTracker.historical', () {
     test('returns frozen tracker', () {
-      final tracker =
-          ExecutionTracker.historical(events: const [], logger: testLogger());
+      final tracker = ExecutionTracker.historical(
+        events: const [],
+        activities: const [],
+        logger: testLogger(),
+      );
       expect(tracker.isFrozen, isTrue);
       tracker.dispose();
     });
@@ -457,6 +460,7 @@ void main() {
           ServerToolCallCompleted(toolCallId: 'tc-1', result: 'ok'),
           RunCompleted(),
         ],
+        activities: const [],
         logger: testLogger(),
       );
 
@@ -477,6 +481,14 @@ void main() {
             timestamp: 100,
           ),
         ],
+        activities: const [
+          ActivityRecord(
+            messageId: 'bwrap:call_1',
+            activityType: 'skill_tool_call',
+            content: {'tool_name': 'execute_script', 'args': '{}'},
+            timestamp: 100,
+          ),
+        ],
         logger: testLogger(),
       );
 
@@ -487,56 +499,15 @@ void main() {
     });
 
     test('empty events list yields empty timeline', () {
-      final tracker =
-          ExecutionTracker.historical(events: const [], logger: testLogger());
+      final tracker = ExecutionTracker.historical(
+        events: const [],
+        activities: const [],
+        logger: testLogger(),
+      );
       expect(tracker.steps.value, isEmpty);
       expect(tracker.timeline.value, isEmpty);
       tracker.dispose();
     });
-
-    test(
-      'replace=false against an existing messageId is ignored on replay '
-      '(matches the live _processActivitySnapshot semantics)',
-      () {
-        // Two snapshots share the same messageId. The second declares
-        // replace=false, so AG-UI says: ignore it. _reconstructActivities
-        // must preserve the FIRST snapshot's content; a regression that
-        // overwrote on replace=false would diverge from the live domain
-        // path silently and only on reload.
-        final tracker = ExecutionTracker.historical(
-          events: const [
-            ClientToolExecuting(toolName: 'execute_skill', toolCallId: 'tc-1'),
-            ActivitySnapshot(
-              messageId: 'rag:call_1',
-              activityType: 'skill_tool_call',
-              content: {
-                'tool_name': 'first',
-                'args': '{"q":"first"}',
-              },
-              timestamp: 100,
-            ),
-            ActivitySnapshot(
-              messageId: 'rag:call_1',
-              activityType: 'skill_tool_call',
-              content: {
-                'tool_name': 'second',
-                'args': '{"q":"second"}',
-              },
-              replace: false,
-              timestamp: 200,
-            ),
-          ],
-          logger: testLogger(),
-        );
-
-        final calls = tracker.skillToolCalls.value;
-        expect(calls, hasLength(1));
-        expect(calls.single.toolName, 'first');
-        expect(calls.single.args, {'q': 'first'});
-        expect(calls.single.timestamp, 100);
-        tracker.dispose();
-      },
-    );
 
     test(
         'events ending mid-thinking are finalized: no spinner, no '
@@ -546,6 +517,7 @@ void main() {
           ThinkingStarted(),
           ThinkingContent(delta: 'reasoning'),
         ],
+        activities: const [],
         logger: testLogger(),
       );
 

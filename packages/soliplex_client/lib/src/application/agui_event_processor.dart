@@ -1,10 +1,10 @@
 import 'package:ag_ui/ag_ui.dart';
 import 'package:meta/meta.dart';
+import 'package:soliplex_client/src/application/activity_events.dart';
 import 'package:soliplex_client/src/application/json_patch.dart';
 import 'package:soliplex_client/src/application/no_response_synthesis.dart';
 import 'package:soliplex_client/src/application/run_phase.dart';
 import 'package:soliplex_client/src/application/streaming_state.dart';
-import 'package:soliplex_client/src/domain/activity_record.dart';
 import 'package:soliplex_client/src/domain/chat_message.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
 import 'package:soliplex_logging/soliplex_logging.dart';
@@ -143,22 +143,8 @@ EventProcessingResult processEvent(
       ),
 
     // Activity snapshot events
-    ActivitySnapshotEvent(
-      :final messageId,
-      :final activityType,
-      :final content,
-      :final replace,
-      :final timestamp,
-    ) =>
-      _processActivitySnapshot(
-        conversation,
-        streaming,
-        messageId,
-        activityType,
-        content,
-        replace,
-        timestamp,
-      ),
+    ActivitySnapshotEvent() =>
+      _processActivitySnapshot(conversation, streaming, event),
 
     // Opaque provider-signed blob anchoring a reasoning message to the LLM
     // provider on follow-up turns. Round-trip preservation requires an
@@ -169,20 +155,8 @@ EventProcessingResult processEvent(
 
     // JSON Patch against the prior ActivitySnapshot's content,
     // mirroring how StateDeltaEvent patches aguiState.
-    ActivityDeltaEvent(
-      :final messageId,
-      :final activityType,
-      :final patch,
-      :final timestamp,
-    ) =>
-      _processActivityDelta(
-        conversation,
-        streaming,
-        messageId,
-        activityType,
-        patch,
-        timestamp,
-      ),
+    ActivityDeltaEvent() =>
+      _processActivityDelta(conversation, streaming, event),
 
     // Unhandled event types — pass through unchanged.
     // Explicit cases ensure a compile error if ag_ui adds new event types.
@@ -466,51 +440,20 @@ EventProcessingResult _processToolCallResult(
 EventProcessingResult _processActivitySnapshot(
   Conversation conversation,
   StreamingState streaming,
-  String messageId,
-  String activityType,
-  Map<String, dynamic> content,
-  bool replace,
-  int? timestamp,
+  ActivitySnapshotEvent event,
 ) {
-  final resolvedTimestamp = timestamp ?? DateTime.now().millisecondsSinceEpoch;
-
-  // Persist the snapshot in conversation.activities per ag-ui spec:
-  //   replace=true  → overwrite the record with the same messageId
-  //   replace=false → ignore if a record with that messageId already exists
-  final existingIndex = conversation.activities.indexWhere(
-    (a) => a.messageId == messageId,
+  final updatedActivities = applyActivityEvent(
+    conversation.activities,
+    event,
+    logger: _logger,
   );
-  final List<ActivityRecord> updatedActivities;
-  if (existingIndex >= 0) {
-    if (replace) {
-      updatedActivities = [...conversation.activities]..[existingIndex] =
-            ActivityRecord(
-          messageId: messageId,
-          activityType: activityType,
-          content: content,
-          timestamp: resolvedTimestamp,
-        );
-    } else {
-      updatedActivities = conversation.activities;
-    }
-  } else {
-    updatedActivities = [
-      ...conversation.activities,
-      ActivityRecord(
-        messageId: messageId,
-        activityType: activityType,
-        content: content,
-        timestamp: resolvedTimestamp,
-      ),
-    ];
-  }
   final updatedConversation =
       identical(updatedActivities, conversation.activities)
           ? conversation
           : conversation.copyWith(activities: updatedActivities);
 
-  if (activityType == 'skill_tool_call') {
-    final toolName = content['tool_name'];
+  if (event.activityType == 'skill_tool_call') {
+    final toolName = event.content['tool_name'];
     // Pass through if tool_name is missing or not a String — the backend
     // contract requires it, so this guards against schema drift.
     if (toolName is! String) {
@@ -528,14 +471,14 @@ EventProcessingResult _processActivitySnapshot(
       streaming: _withToolCallPhase(
         streaming,
         toolName,
-        timestamp: resolvedTimestamp,
+        timestamp: event.timestamp,
       ),
     );
   }
   // Unknown activity types pass through unchanged.
   _logger.info(
     'Unhandled activityType',
-    attributes: {'activityType': activityType},
+    attributes: {'activityType': event.activityType},
   );
   return EventProcessingResult(
     conversation: updatedConversation,
@@ -819,69 +762,26 @@ EventProcessingResult _processReasoningEncryptedValue(
   );
 }
 
-/// Applies an RFC 6902 JSON Patch to the [ActivityRecord] previously
-/// received under [messageId]. Mirrors `_processStateDelta` against
-/// `aguiState`: the patch replaces the activity record's content in
-/// place, preserving the timestamp from the event (or the existing
-/// record's timestamp when the event omits one).
-///
-/// Drops the patch with an error when no prior snapshot exists. The
-/// AG-UI spec requires `ACTIVITY_DELTA` to follow an `ACTIVITY_SNAPSHOT`
-/// for the same `messageId`; a delta without a snapshot is a backend
-/// protocol violation that loses state we'd otherwise represent.
+/// Applies an [ActivityDeltaEvent] to [Conversation.activities],
+/// preserving streaming state. Drop semantics (no prior snapshot,
+/// activityType mismatch, malformed patch ops) live in
+/// [applyActivityEvent]; this wrapper only forwards the result.
 EventProcessingResult _processActivityDelta(
   Conversation conversation,
   StreamingState streaming,
-  String messageId,
-  String activityType,
-  List<dynamic> patch,
-  int? timestamp,
+  ActivityDeltaEvent event,
 ) {
-  final idx =
-      conversation.activities.indexWhere((a) => a.messageId == messageId);
-  if (idx < 0) {
-    _logger.error(
-      'ActivityDeltaEvent dropped: no prior snapshot for messageId '
-      '(AG-UI protocol violation)',
-      attributes: {
-        'messageId': messageId,
-        'activityType': activityType,
-        'patchOps': patch.length,
-      },
-    );
+  final updated = applyActivityEvent(
+    conversation.activities,
+    event,
+    logger: _logger,
+  );
+  if (identical(updated, conversation.activities)) {
     return EventProcessingResult(
       conversation: conversation,
       streaming: streaming,
     );
   }
-
-  final existing = conversation.activities[idx];
-  if (existing.activityType != activityType) {
-    // Mismatch is a protocol violation: a delta tagged with one
-    // activityType cannot patch a record of another. Reject rather
-    // than half-applying, since the patch ops were authored against
-    // the wrong content shape and would corrupt the record.
-    _logger.error(
-      'ActivityDeltaEvent dropped: activityType mismatch',
-      attributes: {
-        'messageId': messageId,
-        'expected': existing.activityType,
-        'received': activityType,
-        'patchOps': patch.length,
-      },
-    );
-    return EventProcessingResult(
-      conversation: conversation,
-      streaming: streaming,
-    );
-  }
-  final patched = applyJsonPatch(existing.content, patch, logger: _logger);
-  final updated = [...conversation.activities]..[idx] = ActivityRecord(
-      messageId: messageId,
-      activityType: activityType,
-      content: patched,
-      timestamp: timestamp ?? existing.timestamp,
-    );
   return EventProcessingResult(
     conversation: conversation.copyWith(activities: updated),
     streaming: streaming,
