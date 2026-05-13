@@ -817,6 +817,16 @@ EventProcessingResult _processReasoningEncryptedValue(
   );
 }
 
+/// Applies an RFC 6902 JSON Patch to the [ActivityRecord] previously
+/// received under [messageId]. Mirrors `_processStateDelta` against
+/// `aguiState`: the patch replaces the activity record's content in
+/// place, preserving the timestamp from the event (or the existing
+/// record's timestamp when the event omits one).
+///
+/// Drops the patch with an error when no prior snapshot exists. The
+/// AG-UI spec requires `ACTIVITY_DELTA` to follow an `ACTIVITY_SNAPSHOT`
+/// for the same `messageId`; a delta without a snapshot is a backend
+/// protocol violation that loses state we'd otherwise represent.
 EventProcessingResult _processActivityDelta(
   Conversation conversation,
   StreamingState streaming,
@@ -828,8 +838,9 @@ EventProcessingResult _processActivityDelta(
   final idx =
       conversation.activities.indexWhere((a) => a.messageId == messageId);
   if (idx < 0) {
-    _logger.warning(
-      'ActivityDeltaEvent dropped: no prior snapshot for messageId',
+    _logger.error(
+      'ActivityDeltaEvent dropped: no prior snapshot for messageId '
+      '(AG-UI protocol violation)',
       attributes: {
         'messageId': messageId,
         'activityType': activityType,

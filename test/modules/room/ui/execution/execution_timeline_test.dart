@@ -93,6 +93,43 @@ void main() {
     expect(find.byType(GestureDetector), findsNothing);
   });
 
+  testWidgets(
+    'dangling activity id (in timeline but not in skillToolCalls) renders '
+    'as an empty row instead of throwing',
+    (tester) async {
+      // Place the activity on the timeline by firing a recognized
+      // ActivitySnapshot event, then clear the activities signal so
+      // skillToolCalls becomes empty. The renderer must fall through to
+      // SizedBox.shrink() for the dangling id, not throw on missing
+      // lookup. Today there is no production path that produces this
+      // state — the test pins the defensive fallback for future
+      // MESSAGES_SNAPSHOT or producer/consumer drift.
+      events.value = const ClientToolExecuting(
+        toolName: 'execute_skill',
+        toolCallId: 'tc-1',
+      );
+      pushSnapshot(
+        messageId: 'rag:call_1',
+        activityType: 'skill_tool_call',
+        content: {'tool_name': 'lookup', 'args': '{}'},
+        timestamp: 100,
+      );
+      // Drop the activity record while the timeline retains the id.
+      activities.value = const [];
+
+      await tester.pumpWidget(wrap(build()));
+      await tester.pump();
+      // Expand the timeline so the row is built.
+      await tester.tap(find.text('2 events'));
+      await tester.pump();
+
+      // The step row renders (it's a structural entry, not content-keyed).
+      expect(find.text('execute_skill'), findsOneWidget);
+      // The activity row does not render — no `lookup` text, no throw.
+      expect(find.text('lookup'), findsNothing);
+    },
+  );
+
   testWidgets('header counts step + nested activities', (tester) async {
     events.value = const ClientToolExecuting(
       toolName: 'execute_skill',

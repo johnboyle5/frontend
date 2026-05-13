@@ -65,7 +65,9 @@ class ToolCallPhase extends RunPhase {
   /// Names of tools being/have been called in this phase.
   final Set<String> toolNames;
 
-  /// Single tool name for backward compatibility constructor.
+  /// Storage for the single-tool constructor; `null` when constructed
+  /// via [ToolCallPhase.multiple]. Reading the canonical tool-name set
+  /// must go through [allToolNames] to handle both representations.
   final String? _singleToolName;
 
   /// ID of the most recent tool call that updated this phase.

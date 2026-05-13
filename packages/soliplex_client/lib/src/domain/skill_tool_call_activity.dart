@@ -1,11 +1,14 @@
 import 'dart:convert';
-import 'dart:developer' as developer;
 
 import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 
 import 'package:soliplex_client/src/domain/activity_record.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
+import 'package:soliplex_logging/soliplex_logging.dart';
+
+final Logger _logger =
+    LogManager.instance.getLogger('soliplex_client.skill_tool_call_activity');
 
 /// Typed view of a `skill_tool_call` or `skill_tool_result` activity
 /// record.
@@ -85,7 +88,20 @@ class SkillToolCallActivity {
     if (toolName == null) return null;
 
     final rawResult = record.content['result'];
-    final result = rawResult is String ? rawResult : null;
+    final String? result;
+    if (rawResult == null || rawResult is String) {
+      result = rawResult as String?;
+    } else {
+      _logger.warning(
+        'SkillToolCallActivity: skill_tool_result `result` field has '
+        'unexpected type; coerced to null',
+        attributes: {
+          'messageId': record.messageId,
+          'resultType': rawResult.runtimeType.toString(),
+        },
+      );
+      result = null;
+    }
 
     return SkillToolCallActivity(
       messageId: record.messageId,
@@ -100,12 +116,12 @@ class SkillToolCallActivity {
   static String? _readToolName(ActivityRecord record) {
     final toolName = record.content['tool_name'];
     if (toolName is String) return toolName;
-    developer.log(
-      'SkillToolCallActivity.fromRecord: missing or invalid tool_name '
-      '(runtimeType=${toolName.runtimeType}) for messageId '
-      '${record.messageId}',
-      name: 'soliplex_client.skill_tool_call_activity',
-      level: 900,
+    _logger.warning(
+      'SkillToolCallActivity.fromRecord: missing or invalid tool_name',
+      attributes: {
+        'messageId': record.messageId,
+        'toolNameType': toolName.runtimeType.toString(),
+      },
     );
     return null;
   }
@@ -125,12 +141,12 @@ class SkillToolCallActivity {
       case final Map<String, dynamic> m:
         return m;
       default:
-        developer.log(
-          'SkillToolCallActivity.fromRecord: unexpected args '
-          'runtimeType=${rawArgs.runtimeType} for messageId '
-          '${record.messageId}',
-          name: 'soliplex_client.skill_tool_call_activity',
-          level: 900,
+        _logger.warning(
+          'SkillToolCallActivity.fromRecord: unexpected args runtimeType',
+          attributes: {
+            'messageId': record.messageId,
+            'argsType': rawArgs.runtimeType.toString(),
+          },
         );
         return null;
     }
@@ -200,20 +216,18 @@ Map<String, dynamic>? _tryDecodeJsonObject(String raw, String messageId) {
     if (decoded is Map<String, dynamic>) {
       return decoded;
     }
-    developer.log(
-      'SkillToolCallActivity.fromRecord: args decoded to '
-      '${decoded.runtimeType}, not a JSON object, for messageId '
-      '$messageId',
-      name: 'soliplex_client.skill_tool_call_activity',
-      level: 900,
+    _logger.warning(
+      'SkillToolCallActivity.fromRecord: args decoded to non-object JSON',
+      attributes: {
+        'messageId': messageId,
+        'decodedType': decoded.runtimeType.toString(),
+      },
     );
     return null;
   } on FormatException catch (e) {
-    developer.log(
-      'SkillToolCallActivity.fromRecord: args JSON parse failed for '
-      'messageId $messageId: $e',
-      name: 'soliplex_client.skill_tool_call_activity',
-      level: 900,
+    _logger.warning(
+      'SkillToolCallActivity.fromRecord: args JSON parse failed',
+      attributes: {'messageId': messageId, 'error': e.toString()},
     );
     return null;
   }

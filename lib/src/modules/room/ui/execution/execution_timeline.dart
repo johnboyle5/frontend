@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
+import 'package:soliplex_logging/soliplex_logging.dart';
 
 import '../../compute_display_messages.dart' show loadingMessageId;
 import '../../execution_step.dart';
@@ -12,6 +13,9 @@ import '../../message_expansions.dart';
 import '../../room_providers.dart';
 import '../copy_button.dart';
 import 'timeline_entry.dart';
+
+final Logger _logger =
+    LogManager.instance.getLogger('soliplex_frontend.execution_timeline');
 
 /// Unified execution timeline — single collapsible that nests activities
 /// under their owning step. Activity rows with source (script/code/query
@@ -40,6 +44,10 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
   // response.
   bool _loadingPhaseTimeline = false;
   final Set<String> _loadingPhaseSources = <String>{};
+
+  // Throttle: log each dangling-id at most once per widget lifetime so a
+  // sustained mismatch doesn't flood Sentry on every frame.
+  final Set<String> _loggedDanglingIds = <String>{};
 
   // Persistence handle — null during the AwaitingText phase, because
   // loadingMessageId is reused across runs and persisting under it would
@@ -165,16 +173,32 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
   }
 
   /// Looks up the decoded activity for [id] in the tracker's
-  /// `skillToolCalls`. Returns `null` for a dangling id (e.g. after a
-  /// future `MESSAGES_SNAPSHOT` that drops the record while the
-  /// timeline still references it) so the renderer falls through to
-  /// an empty row instead of throwing.
+  /// `skillToolCalls`. Returns `null` for a dangling id so the renderer
+  /// falls through to an empty row instead of throwing. The
+  /// tracker only places ids whose activityType the decoder recognises
+  /// (`skill_tool_call` / `skill_tool_result`), so a dangling id today
+  /// indicates a real divergence — a decode failure, a future
+  /// `MESSAGES_SNAPSHOT` that dropped the record, or a producer/consumer
+  /// mismatch. Logged at warning the first time each id fails to resolve
+  /// so the dropped row is observable instead of silent.
   SkillToolCallActivity? _resolveActivity(
     String id,
     List<SkillToolCallActivity> calls,
   ) {
     for (final call in calls) {
       if (call.messageId == id) return call;
+    }
+    if (_loggedDanglingIds.add(id)) {
+      _logger.warning(
+        'ExecutionTimeline: timeline references an activity id with no '
+        'matching SkillToolCallActivity; row hidden',
+        attributes: {
+          'activityId': id,
+          'roomId': widget.roomId,
+          'messageId': widget.messageId,
+          'resolvableIdCount': calls.length,
+        },
+      );
     }
     return null;
   }

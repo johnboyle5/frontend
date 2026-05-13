@@ -171,8 +171,16 @@ class ExecutionTracker {
       case RunCancelled():
         _completeAllSteps(StepStatus.failed);
         _isThinkingStreaming.value = false;
-      case ActivitySnapshot(:final messageId):
-        _placeActivityInTimeline(messageId);
+      case ActivitySnapshot(:final messageId, :final activityType):
+        // Only place ids whose activityType the decoder recognises. Other
+        // types still persist into Conversation.activities at the domain
+        // layer (so future consumers can read them), but they don't get a
+        // timeline row — placing them would produce a phantom entry whose
+        // _resolveActivity returns null on every render.
+        if (activityType == 'skill_tool_call' ||
+            activityType == 'skill_tool_result') {
+          _placeActivityInTimeline(messageId);
+        }
       case TextDelta() ||
             StateUpdated() ||
             StepProgress() ||

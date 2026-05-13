@@ -497,6 +497,50 @@ void main() {
     });
 
     test(
+      'replace=false against an existing messageId is ignored on replay '
+      '(matches the live _processActivitySnapshot semantics)',
+      () {
+        // Two snapshots share the same messageId. The second declares
+        // replace=false, so AG-UI says: ignore it. _reconstructActivities
+        // must preserve the FIRST snapshot's content; a regression that
+        // overwrote on replace=false would diverge from the live domain
+        // path silently and only on reload.
+        final tracker = ExecutionTracker.historical(
+          events: const [
+            ClientToolExecuting(toolName: 'execute_skill', toolCallId: 'tc-1'),
+            ActivitySnapshot(
+              messageId: 'rag:call_1',
+              activityType: 'skill_tool_call',
+              content: {
+                'tool_name': 'first',
+                'args': '{"q":"first"}',
+              },
+              timestamp: 100,
+            ),
+            ActivitySnapshot(
+              messageId: 'rag:call_1',
+              activityType: 'skill_tool_call',
+              content: {
+                'tool_name': 'second',
+                'args': '{"q":"second"}',
+              },
+              replace: false,
+              timestamp: 200,
+            ),
+          ],
+          logger: testLogger(),
+        );
+
+        final calls = tracker.skillToolCalls.value;
+        expect(calls, hasLength(1));
+        expect(calls.single.toolName, 'first');
+        expect(calls.single.args, {'q': 'first'});
+        expect(calls.single.timestamp, 100);
+        tracker.dispose();
+      },
+    );
+
+    test(
         'events ending mid-thinking are finalized: no spinner, no '
         'active step', () {
       final tracker = ExecutionTracker.historical(
@@ -525,41 +569,6 @@ void main() {
     expect(tracker.isThinkingStreaming.value, isFalse);
     expect(tracker.steps.value.single.status, StepStatus.completed);
   });
-
-  test(
-    'a throw inside a switch arm is caught; subsequent events still process',
-    () {
-      // ActivitySnapshot with an unrecognized activityType makes
-      // `SkillToolCallActivity.fromRecord` return null. The warning that
-      // fires next reads `content.keys.toList().toString()` while
-      // building its attributes — a Map whose `keys` getter throws makes
-      // that argument-evaluation throw, propagating into the switch arm.
-      // The wrap catches it; the tracker keeps responding to events.
-      events.value = ActivitySnapshot(
-        messageId: 'msg-1',
-        activityType: 'unknown_activity',
-        content: _ThrowingMap(),
-        timestamp: 1,
-        replace: false,
-      );
-
-      // The tracker survives and still bridges later events.
-      events.value = const ThinkingStarted();
-      expect(tracker.steps.value, hasLength(1));
-      expect(tracker.steps.value.single.label, 'Thinking');
-      expect(tracker.isThinkingStreaming.value, isTrue);
-    },
-  );
-}
-
-/// A `Map<String, dynamic>` whose `keys` getter throws. Used to drive the
-/// argument-evaluation throw in `_upsertSkillToolCall`'s warning call.
-class _ThrowingMap implements Map<String, dynamic> {
-  @override
-  Iterable<String> get keys => throw StateError('keys access blew up');
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 extension on StepStatus {
