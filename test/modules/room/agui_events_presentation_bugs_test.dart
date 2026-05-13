@@ -1,25 +1,19 @@
-/// Reproduction harness for two known bugs in the "$N events" bubble
+/// Regression harness for two known bugs in the "$N events" bubble
 /// rendered above assistant messages by [ExecutionTimeline].
-///
-/// Each `test` documents the failure mode it reproduces and asserts the
-/// *correct* behavior. With the bugs present these assertions fail; once
-/// the underlying drops are fixed the assertions pass without other test
-/// changes.
 ///
 /// Bug 1 — Nested rows never get a checkmark
 /// -----------------------------------------
-/// Backend sends an ACTIVITY_SNAPSHOT for `skill_tool_call` with status
-/// `in_progress`, then an ACTIVITY_DELTA jsonpatch (`replace /status →
-/// done`) when the sub-skill completes. The frontend drops every
-/// `ActivityDeltaEvent` at two layers:
-///
-/// * [bridgeBaseEvent] returns `null` for the variant
-///   (agent_session.dart:656).
-/// * [_processActivityDelta] in agui_event_processor.dart is a logged
-///   no-op (line 807).
-///
-/// Net effect: the nested row keeps the in-progress status it had on
-/// first paint, so its trailing icon never flips to a checkmark.
+/// haiku.skills emits one logical sub-skill invocation as two
+/// `ActivitySnapshotEvent`s sharing a `messageId`: a call phase
+/// (`activity_type='skill_tool_call'`, carrying `args`) and a result
+/// phase (`activity_type='skill_tool_result'`, carrying `result`,
+/// `replace=true`). The original frontend decoder bailed on any
+/// activityType other than `skill_tool_call`, so the result snapshot
+/// was logged and dropped; the nested row stayed at its in-progress
+/// spinner for the rest of the run. The decoder now dispatches on
+/// activityType and routes `skill_tool_result` through a result-phase
+/// decoder that synthesizes `status='done'` and exposes the
+/// `content['result']` text.
 ///
 /// Bug 2 — Bubble disappears after reload
 /// --------------------------------------
@@ -43,34 +37,10 @@ import 'package:soliplex_frontend/src/modules/room/ui/execution/timeline_entry.d
 import '../../helpers/test_logger.dart';
 
 void main() {
-  group('Bug 1: ACTIVITY_DELTA status update is dropped', () {
+  group('Bug 1: skill_tool_result snapshot completes the nested row', () {
     test(
-      'bridgeBaseEvent drops ActivityDeltaEvent — nested rows never '
-      'receive the status change that drives the checkmark',
-      () {
-        final delta = ActivityDeltaEvent(
-          messageId: 'rag:call_1',
-          activityType: 'skill_tool_call',
-          patch: const [
-            {'op': 'replace', 'path': '/status', 'value': 'done'},
-          ],
-          timestamp: 200,
-        );
-
-        // Correct behavior: produce an ExecutionEvent the tracker can act
-        // on so the activity's status moves to "done". Currently null.
-        expect(
-          bridgeBaseEvent(delta),
-          isNotNull,
-          reason: 'Bug 1: ActivityDeltaEvent is dropped at the bridge; '
-              'the timeline never sees the status change.',
-        );
-      },
-    );
-
-    test(
-      'historical replay: snapshot(in_progress) + delta(status→done) '
-      'leaves the nested activity stuck at in_progress',
+      'historical replay: call snapshot + result snapshot leaves the '
+      'nested activity at status=done with the result text exposed',
       () {
         final runs = [
           RunEventBundle(
@@ -81,22 +51,27 @@ void main() {
                 toolCallId: 'tc-1',
                 toolCallName: 'execute_skill',
               ),
+              // Phase 1: call. haiku.skills emits replace=false so the
+              // initial snapshot lands as a new record.
               ActivitySnapshotEvent(
                 messageId: 'rag:call_1',
                 activityType: 'skill_tool_call',
                 content: {
                   'tool_name': 'ask',
                   'args': '{"q":"hi"}',
-                  'status': 'in_progress',
                 },
+                replace: false,
                 timestamp: 100,
               ),
-              ActivityDeltaEvent(
+              // Phase 2: result. Different activity_type, same messageId,
+              // replace=true so the call record is overwritten in place.
+              ActivitySnapshotEvent(
                 messageId: 'rag:call_1',
-                activityType: 'skill_tool_call',
-                patch: [
-                  {'op': 'replace', 'path': '/status', 'value': 'done'},
-                ],
+                activityType: 'skill_tool_result',
+                content: {
+                  'tool_name': 'ask',
+                  'result': 'answer text',
+                },
                 timestamp: 150,
               ),
               ToolCallResultEvent(
@@ -113,18 +88,27 @@ void main() {
         final step = trackers['asst-1']!.timeline.value.single as TimelineStep;
 
         expect(step.activities, hasLength(1));
+        final activity = step.activities.single;
         expect(
-          step.activities.single.status,
+          activity.status,
           'done',
-          reason: 'Bug 1: ACTIVITY_DELTA patches are dropped during replay; '
-              'the nested activity stays at its initial in_progress status.',
+          reason: 'Result snapshot must flip the row to done; otherwise '
+              'the nested icon stays at the in-progress spinner.',
+        );
+        expect(activity.result, 'answer text');
+        expect(
+          activity.args,
+          isEmpty,
+          reason: 'replace=true means the result snapshot overwrites the '
+              "call record; args are not present in the result phase's "
+              'content per AG-UI spec.',
         );
       },
     );
 
     test(
-      'live tracker: ActivitySnapshot then ActivityDelta on the same '
-      'messageId does not advance the activity to done',
+      'live tracker: call ActivitySnapshot then result ActivitySnapshot '
+      'on the same messageId advances the activity to done',
       () {
         final events = Signal<ExecutionEvent?>(null);
         final tracker = ExecutionTracker(
@@ -134,50 +118,54 @@ void main() {
         addTearDown(tracker.dispose);
 
         // Bridge each AG-UI event through the production bridge, mirroring
-        // what AgentSession does at runtime. Anything the bridge drops
-        // never reaches the tracker — exactly the bug we're reproducing.
-        final ExecutionEvent? snapshot = bridgeBaseEvent(
+        // what AgentSession does at runtime.
+        final ExecutionEvent? callSnapshot = bridgeBaseEvent(
           const ActivitySnapshotEvent(
             messageId: 'rag:call_1',
             activityType: 'skill_tool_call',
             content: {
               'tool_name': 'ask',
               'args': '{"q":"hi"}',
-              'status': 'in_progress',
             },
+            replace: false,
             timestamp: 100,
           ),
         );
-        expect(snapshot, isNotNull);
-        events.value = snapshot;
-
-        final ExecutionEvent? delta = bridgeBaseEvent(
-          ActivityDeltaEvent(
-            messageId: 'rag:call_1',
-            activityType: 'skill_tool_call',
-            patch: const [
-              {'op': 'replace', 'path': '/status', 'value': 'done'},
-            ],
-            timestamp: 200,
-          ),
-        );
-
-        expect(
-          delta,
-          isNotNull,
-          reason: 'Bug 1: the bridge drops the delta before it can reach '
-              'the live tracker.',
-        );
-        if (delta != null) events.value = delta;
+        expect(callSnapshot, isNotNull);
+        events.value = callSnapshot;
 
         final calls = tracker.skillToolCalls.value;
         expect(calls, hasLength(1));
         expect(
           calls.single.status,
-          'done',
-          reason: 'Bug 1: live tracker never sees the delta-driven '
-              'status change; the trailing icon stays as a spinner.',
+          'in_progress',
+          reason: 'The call phase carries no explicit status; the decoder '
+              'must synthesize in_progress so the spinner renders.',
         );
+
+        final ExecutionEvent? resultSnapshot = bridgeBaseEvent(
+          const ActivitySnapshotEvent(
+            messageId: 'rag:call_1',
+            activityType: 'skill_tool_result',
+            content: {
+              'tool_name': 'ask',
+              'result': 'answer text',
+            },
+            timestamp: 150,
+          ),
+        );
+        expect(resultSnapshot, isNotNull);
+        events.value = resultSnapshot;
+
+        final updated = tracker.skillToolCalls.value;
+        expect(updated, hasLength(1));
+        expect(
+          updated.single.status,
+          'done',
+          reason: 'The result snapshot must replace the call record so '
+              'the trailing icon flips to the checkmark.',
+        );
+        expect(updated.single.result, 'answer text');
       },
     );
   });
