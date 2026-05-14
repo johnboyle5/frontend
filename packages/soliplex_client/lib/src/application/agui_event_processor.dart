@@ -476,9 +476,7 @@ EventProcessingResult _processActivitySnapshot(
     );
   }
   // skill_tool_result is recognized but intentionally leaves the
-  // streaming phase untouched (the call phase already set it). Genuinely
-  // unrecognized activityTypes still get persisted into the conversation
-  // and get a breadcrumb so future decoder additions are discoverable.
+  // streaming phase untouched (the call phase already set it).
   if (!kSkillToolCallActivityTypes.contains(event.activityType)) {
     _logger.info(
       'ActivitySnapshotEvent: activityType has no decoder; '
@@ -510,9 +508,13 @@ StreamingState _withToolCallPhase(
         latestToolCallId: latestToolCallId,
         timestamp: timestamp,
       ),
-    // Synthesize wall-clock when constructing a fresh ToolCallPhase
-    // and the backend omitted a timestamp. Mirrors the same fallback
-    // applied to ActivityRecord timestamps in `applyActivityEvent`.
+    // Fresh-construction branch only: synthesize wall-clock when the
+    // backend omitted a timestamp. The accumulation branch above
+    // deliberately inherits the prior phase's timestamp via
+    // `withToolName`'s `timestamp ?? this.timestamp` — re-synthesizing
+    // there would bump the phase's hashCode on every tool event and
+    // break `identical()` short-circuits downstream. Mirrors the
+    // same fresh-record fallback in `applyActivityEvent`.
     _ => ToolCallPhase.single(
         toolName: toolName,
         latestToolCallId: latestToolCallId,

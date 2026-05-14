@@ -10,12 +10,12 @@ import 'package:soliplex_logging/soliplex_logging.dart';
 final Logger _logger =
     LogManager.instance.getLogger('soliplex_client.skill_tool_call_activity');
 
-/// `activityType` string identifying the call phase of a skill tool
-/// invocation.
+/// Backend wire string for the call phase. Coordinate any change with
+/// the backend before renaming.
 const String kSkillToolCallActivityType = 'skill_tool_call';
 
-/// `activityType` string identifying the result phase of a skill tool
-/// invocation.
+/// Backend wire string for the result phase. Coordinate any change
+/// with the backend before renaming.
 const String kSkillToolResultActivityType = 'skill_tool_result';
 
 /// `activityType` strings that [SkillToolCallActivity.fromRecord]

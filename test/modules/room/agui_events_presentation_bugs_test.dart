@@ -34,7 +34,7 @@ import 'package:soliplex_frontend/src/modules/room/ui/execution/timeline_entry.d
 import '../../helpers/test_logger.dart';
 
 void main() {
-  group('Bug 1: skill_tool_result snapshot completes the nested row', () {
+  group('skill_tool_result snapshot completes the nested row', () {
     test(
       'historical replay: call snapshot + result snapshot leaves the '
       'nested activity at status=done with the result text exposed',
@@ -191,7 +191,7 @@ void main() {
     );
   });
 
-  group('Bug 2: bubble disappears after thread reload', () {
+  group('bubble survives reload after a tool-yield', () {
     test(
       'a run that yielded to a tool and never produced an assistant '
       'TextMessageStart (errored / cancelled mid-tool, trailing in '
@@ -231,27 +231,27 @@ void main() {
         expect(
           trackers,
           contains(expectedKey),
-          reason: 'Bug 2: trailing tool-yield drops its hoisted events; no '
-              'tracker is created for run-stuck so the bubble disappears '
-              'after a reload even though it was visible live.',
+          reason: 'A trailing tool-yield must still produce a tracker '
+              'keyed under the synthesized no-response id so the bubble '
+              'keeps rendering across the reload boundary.',
         );
         expect(
           trackers[expectedKey]!.steps.value.map((s) => s.label),
           containsAll(<String>['Thinking', 'search']),
-          reason: 'Bug 2: the recovered tracker must contain the same '
-              'steps the user saw live.',
+          reason: 'The recovered tracker must contain the same steps the '
+              'user saw live.',
         );
       },
     );
 
     test(
-      'multi-run thread where the LAST run is a trailing tool-yield: the '
-      'preceding assistant bubble is fine, but the last run loses its '
-      'tracker — confirms the bug is isolated to the trailing case',
+      'multi-run thread: a normal-bundle run followed by a trailing '
+      'tool-yield run — both must produce trackers',
       () {
-        // Useful baseline: the bug-free preceding run rules out a regression
-        // in the normal-bundle code path so we can attribute the missing
-        // tracker entirely to the trailing tool-yield.
+        // The first run exercises the normal-bundle code path; the second
+        // exercises the trailing tool-yield branch. Keeping both in one
+        // test pins that the recovery is scoped to the trailing case
+        // without disturbing the surrounding bundles.
         final runs = [
           RunEventBundle(
             runId: 'run-1',
@@ -284,8 +284,8 @@ void main() {
         expect(
           trackers.keys,
           contains(noResponseMessageId('run-stuck')),
-          reason: 'Bug 2: trailing tool-yield bundle silently drops its '
-              'events; the run loses its tracker on reload.',
+          reason: 'A trailing tool-yield bundle must still produce a '
+              'tracker; the second run must not lose it on reload.',
         );
       },
     );
