@@ -614,7 +614,13 @@ List<ActivityRecord> conversationActivitiesOf(RunState runState) =>
       FailedState(:final conversation?) ||
       CancelledState(:final conversation?) =>
         conversation.activities,
-      _ => const <ActivityRecord>[],
+      // Exhaustive over the remaining sealed variants so adding a new
+      // RunState forces an explicit decision here rather than silently
+      // falling back to an empty list.
+      IdleState() ||
+      FailedState(conversation: null) ||
+      CancelledState(conversation: null) =>
+        const <ActivityRecord>[],
     };
 
 /// Translates a raw AG-UI [BaseEvent] into the [ExecutionEvent] that

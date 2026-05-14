@@ -1,6 +1,8 @@
 import 'package:ag_ui/ag_ui.dart';
 import 'package:soliplex_client/src/application/json_patch.dart';
 import 'package:soliplex_client/src/domain/activity_record.dart';
+import 'package:soliplex_client/src/domain/skill_tool_call_activity.dart'
+    show kSkillToolCallActivityType, kSkillToolResultActivityType;
 import 'package:soliplex_logging/soliplex_logging.dart';
 
 final Logger _defaultLogger =
@@ -72,8 +74,8 @@ Map<String, dynamic> _mergeContentAcrossReplace(
   ActivityRecord prior,
   ActivitySnapshotEvent event,
 ) {
-  if (event.activityType != 'skill_tool_result') return event.content;
-  if (prior.activityType != 'skill_tool_call') return event.content;
+  if (event.activityType != kSkillToolResultActivityType) return event.content;
+  if (prior.activityType != kSkillToolCallActivityType) return event.content;
   if (event.content.containsKey('args')) return event.content;
   final priorArgs = prior.content['args'];
   if (priorArgs == null) return event.content;

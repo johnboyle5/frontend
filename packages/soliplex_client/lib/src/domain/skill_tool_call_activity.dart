@@ -10,13 +10,21 @@ import 'package:soliplex_logging/soliplex_logging.dart';
 final Logger _logger =
     LogManager.instance.getLogger('soliplex_client.skill_tool_call_activity');
 
+/// `activityType` string identifying the call phase of a skill tool
+/// invocation.
+const String kSkillToolCallActivityType = 'skill_tool_call';
+
+/// `activityType` string identifying the result phase of a skill tool
+/// invocation.
+const String kSkillToolResultActivityType = 'skill_tool_result';
+
 /// `activityType` strings that [SkillToolCallActivity.fromRecord]
 /// recognises. Consumers that filter by activityType (e.g. the
 /// execution tracker's timeline placement) reference this set so the
 /// recognised types stay in lockstep with the decoder.
 const Set<String> kSkillToolCallActivityTypes = {
-  'skill_tool_call',
-  'skill_tool_result',
+  kSkillToolCallActivityType,
+  kSkillToolResultActivityType,
 };
 
 /// Lifecycle status of a [SkillToolCallActivity].
@@ -111,9 +119,9 @@ class SkillToolCallActivity {
   /// matching the processor's posture in `_processActivitySnapshot`.
   static SkillToolCallActivity? fromRecord(ActivityRecord record) {
     switch (record.activityType) {
-      case 'skill_tool_call':
+      case kSkillToolCallActivityType:
         return _decodeCall(record);
-      case 'skill_tool_result':
+      case kSkillToolResultActivityType:
         return _decodeResult(record);
       default:
         return null;
@@ -190,7 +198,6 @@ class SkillToolCallActivity {
     final rawArgs = record.content['args'];
     switch (rawArgs) {
       case null:
-        return const {};
       case final String s when s.isEmpty:
         return const {};
       case final String s:

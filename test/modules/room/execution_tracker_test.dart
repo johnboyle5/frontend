@@ -314,7 +314,10 @@ void main() {
       expect(
         captured.where((l) => l.contains('read after disposed')),
         isEmpty,
-        reason: 'Frozen tracker must not read the disposed source.',
+        reason: 'Frozen tracker must not read the disposed source. The '
+            'matched substring is signals_core 6.2.1\'s verbatim warning; '
+            'a signals_core upgrade that rewords it would silently pass '
+            'this test — revisit the matcher on signals upgrades.',
       );
     });
   });

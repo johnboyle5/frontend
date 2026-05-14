@@ -7,6 +7,8 @@ import 'package:soliplex_client/src/application/run_phase.dart';
 import 'package:soliplex_client/src/application/streaming_state.dart';
 import 'package:soliplex_client/src/domain/chat_message.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
+import 'package:soliplex_client/src/domain/skill_tool_call_activity.dart'
+    show kSkillToolCallActivityType, kSkillToolCallActivityTypes;
 import 'package:soliplex_logging/soliplex_logging.dart';
 
 final Logger _logger =
@@ -450,7 +452,7 @@ EventProcessingResult _processActivitySnapshot(
           ? conversation
           : conversation.copyWith(activities: updatedActivities);
 
-  if (event.activityType == 'skill_tool_call') {
+  if (event.activityType == kSkillToolCallActivityType) {
     final toolName = event.content['tool_name'];
     // Pass through if tool_name is missing or not a String — the backend
     // contract requires it, so this guards against schema drift.
@@ -473,11 +475,17 @@ EventProcessingResult _processActivitySnapshot(
       ),
     );
   }
-  // Unknown activity types pass through unchanged.
-  _logger.info(
-    'Unhandled activityType',
-    attributes: {'activityType': event.activityType},
-  );
+  // skill_tool_result is recognized but intentionally leaves the
+  // streaming phase untouched (the call phase already set it). Genuinely
+  // unrecognized activityTypes still get persisted into the conversation
+  // and get a breadcrumb so future decoder additions are discoverable.
+  if (!kSkillToolCallActivityTypes.contains(event.activityType)) {
+    _logger.info(
+      'ActivitySnapshotEvent: activityType has no decoder; '
+      'persisted to conversation.activities only',
+      attributes: {'activityType': event.activityType},
+    );
+  }
   return EventProcessingResult(
     conversation: updatedConversation,
     streaming: streaming,
