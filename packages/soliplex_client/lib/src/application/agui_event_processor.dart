@@ -1,11 +1,14 @@
 import 'package:ag_ui/ag_ui.dart';
 import 'package:meta/meta.dart';
+import 'package:soliplex_client/src/application/activity_events.dart';
 import 'package:soliplex_client/src/application/json_patch.dart';
 import 'package:soliplex_client/src/application/no_response_synthesis.dart';
+import 'package:soliplex_client/src/application/run_phase.dart';
 import 'package:soliplex_client/src/application/streaming_state.dart';
-import 'package:soliplex_client/src/domain/activity_record.dart';
 import 'package:soliplex_client/src/domain/chat_message.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
+import 'package:soliplex_client/src/domain/skill_tool_call_activity.dart'
+    show kSkillToolCallActivityType, kSkillToolCallActivityTypes;
 import 'package:soliplex_logging/soliplex_logging.dart';
 
 final Logger _logger =
@@ -111,7 +114,7 @@ EventProcessingResult processEvent(
             status: ToolCallStatus.streaming,
           ),
         ),
-        streaming: _withToolCallActivity(
+        streaming: _withToolCallPhase(
           streaming,
           toolCallName,
           latestToolCallId: toolCallId,
@@ -142,22 +145,8 @@ EventProcessingResult processEvent(
       ),
 
     // Activity snapshot events
-    ActivitySnapshotEvent(
-      :final messageId,
-      :final activityType,
-      :final content,
-      :final replace,
-      :final timestamp,
-    ) =>
-      _processActivitySnapshot(
-        conversation,
-        streaming,
-        messageId,
-        activityType,
-        content,
-        replace,
-        timestamp,
-      ),
+    ActivitySnapshotEvent() =>
+      _processActivitySnapshot(conversation, streaming, event),
 
     // Opaque provider-signed blob anchoring a reasoning message to the LLM
     // provider on follow-up turns. Round-trip preservation requires an
@@ -166,10 +155,10 @@ EventProcessingResult processEvent(
     ReasoningEncryptedValueEvent(:final entityId) =>
       _processReasoningEncryptedValue(conversation, streaming, entityId),
 
-    // JSON Patch against an activity's state; requires a per-message
-    // activity store that does not exist in the domain.
-    ActivityDeltaEvent(:final messageId, :final activityType) =>
-      _processActivityDelta(conversation, streaming, messageId, activityType),
+    // JSON Patch against the prior ActivitySnapshot's content,
+    // mirroring how StateDeltaEvent patches aguiState.
+    ActivityDeltaEvent() =>
+      _processActivityDelta(conversation, streaming, event),
 
     // Unhandled event types — pass through unchanged.
     // Explicit cases ensure a compile error if ag_ui adds new event types.
@@ -189,19 +178,16 @@ EventProcessingResult processEvent(
   };
 }
 
-// Thinking events - buffer thinking text in AwaitingText state
-
 EventProcessingResult _processThinkingStart(
   Conversation conversation,
   StreamingState streaming,
 ) {
-  // Mark thinking as streaming and set activity
   if (streaming is AwaitingText) {
     return EventProcessingResult(
       conversation: conversation,
       streaming: streaming.copyWith(
         isThinkingStreaming: true,
-        currentActivity: const ThinkingActivity(),
+        currentPhase: const ThinkingPhase(),
       ),
     );
   }
@@ -210,7 +196,7 @@ EventProcessingResult _processThinkingStart(
       conversation: conversation,
       streaming: streaming.copyWith(
         isThinkingStreaming: true,
-        currentActivity: const ThinkingActivity(),
+        currentPhase: const ThinkingPhase(),
       ),
     );
   }
@@ -407,7 +393,8 @@ EventProcessingResult _processToolCallEnd(
 ) {
   // Only transition streaming → pending. Guard prevents downgrading tools
   // that are already executing/completed/failed (e.g. duplicate ToolCallEnd).
-  // Activity persists until the next activity starts — don't change it here.
+  // Streaming phase is owned by phase-start handlers; ToolCallEnd leaves
+  // it untouched so the current phase persists until the next one starts.
   if (!conversation.toolCalls.any((tc) => tc.id == toolCallId)) {
     _logger.warning(
       'ToolCallEndEvent for unknown toolCallId; ignored',
@@ -453,51 +440,20 @@ EventProcessingResult _processToolCallResult(
 EventProcessingResult _processActivitySnapshot(
   Conversation conversation,
   StreamingState streaming,
-  String messageId,
-  String activityType,
-  Map<String, dynamic> content,
-  bool replace,
-  int? timestamp,
+  ActivitySnapshotEvent event,
 ) {
-  final resolvedTimestamp = timestamp ?? DateTime.now().millisecondsSinceEpoch;
-
-  // Persist the snapshot in conversation.activities per ag-ui spec:
-  //   replace=true  → overwrite the record with the same messageId
-  //   replace=false → ignore if a record with that messageId already exists
-  final existingIndex = conversation.activities.indexWhere(
-    (a) => a.messageId == messageId,
+  final updatedActivities = applyActivityEvent(
+    conversation.activities,
+    event,
+    logger: _logger,
   );
-  final List<ActivityRecord> updatedActivities;
-  if (existingIndex >= 0) {
-    if (replace) {
-      updatedActivities = [...conversation.activities]..[existingIndex] =
-            ActivityRecord(
-          messageId: messageId,
-          activityType: activityType,
-          content: content,
-          timestamp: resolvedTimestamp,
-        );
-    } else {
-      updatedActivities = conversation.activities;
-    }
-  } else {
-    updatedActivities = [
-      ...conversation.activities,
-      ActivityRecord(
-        messageId: messageId,
-        activityType: activityType,
-        content: content,
-        timestamp: resolvedTimestamp,
-      ),
-    ];
-  }
   final updatedConversation =
       identical(updatedActivities, conversation.activities)
           ? conversation
           : conversation.copyWith(activities: updatedActivities);
 
-  if (activityType == 'skill_tool_call') {
-    final toolName = content['tool_name'];
+  if (event.activityType == kSkillToolCallActivityType) {
+    final toolName = event.content['tool_name'];
     // Pass through if tool_name is missing or not a String — the backend
     // contract requires it, so this guards against schema drift.
     if (toolName is! String) {
@@ -512,54 +468,63 @@ EventProcessingResult _processActivitySnapshot(
     }
     return EventProcessingResult(
       conversation: updatedConversation,
-      streaming: _withToolCallActivity(
+      streaming: _withToolCallPhase(
         streaming,
         toolName,
-        timestamp: resolvedTimestamp,
+        timestamp: event.timestamp,
       ),
     );
   }
-  // Unknown activity types pass through unchanged.
-  _logger.info(
-    'Unhandled activityType',
-    attributes: {'activityType': activityType},
-  );
+  // skill_tool_result is recognized but intentionally leaves the
+  // streaming phase untouched (the call phase already set it).
+  if (!kSkillToolCallActivityTypes.contains(event.activityType)) {
+    _logger.info(
+      'ActivitySnapshotEvent: activityType has no decoder; '
+      'persisted to conversation.activities only',
+      attributes: {'activityType': event.activityType},
+    );
+  }
   return EventProcessingResult(
     conversation: updatedConversation,
     streaming: streaming,
   );
 }
 
-// Tool call activity helper
-
-/// Returns [streaming] with [toolName] accumulated on its [ToolCallActivity].
-StreamingState _withToolCallActivity(
+/// Returns [streaming] with [toolName] accumulated on its [ToolCallPhase].
+StreamingState _withToolCallPhase(
   StreamingState streaming,
   String toolName, {
   String? latestToolCallId,
   int? timestamp,
 }) {
-  final currentActivity = switch (streaming) {
-    AwaitingText(:final currentActivity) => currentActivity,
-    TextStreaming(:final currentActivity) => currentActivity,
+  final currentPhase = switch (streaming) {
+    AwaitingText(:final currentPhase) => currentPhase,
+    TextStreaming(:final currentPhase) => currentPhase,
   };
 
-  final newActivity = switch (currentActivity) {
-    ToolCallActivity() => currentActivity.withToolName(
+  final newPhase = switch (currentPhase) {
+    ToolCallPhase() => currentPhase.withToolName(
         toolName,
         latestToolCallId: latestToolCallId,
         timestamp: timestamp,
       ),
-    _ => ToolCallActivity(
+    // Fresh-construction branch only: synthesize wall-clock when the
+    // backend omitted a timestamp. The accumulation branch above
+    // deliberately inherits the prior phase's timestamp via
+    // `withToolName`'s `timestamp ?? this.timestamp` — re-synthesizing
+    // there would bump the phase's hashCode on every tool event and
+    // break `identical()` short-circuits downstream. Mirrors the
+    // same fresh-record fallback in `applyActivityEvent`.
+    _ => ToolCallPhase.single(
         toolName: toolName,
         latestToolCallId: latestToolCallId,
-        timestamp: timestamp,
+        timestamp: timestamp ?? DateTime.now().millisecondsSinceEpoch,
       ),
   };
 
   return switch (streaming) {
-    AwaitingText() => streaming.copyWith(currentActivity: newActivity),
-    TextStreaming() => streaming.copyWith(currentActivity: newActivity),
+    AwaitingText() => streaming.copyWith(currentPhase: newPhase),
+    TextStreaming() => streaming.copyWith(currentPhase: newPhase),
   };
 }
 
@@ -719,9 +684,9 @@ EventProcessingResult _processRunError(
   };
   if (conversation.status is Idle) {
     // RunErrorEvent without a preceding RunStartedEvent is a backend
-    // protocol violation. Log at error so Sentry sees it, then append
-    // an ErrorMessage so the user gets a visible failure row instead of
-    // a silent status-only flip.
+    // protocol violation. Log at error level for backend escalation,
+    // then append an ErrorMessage so the user gets a visible failure
+    // row instead of a silent status-only flip.
     _logger.error(
       'RunErrorEvent on Idle: pre-run failure (backend protocol violation)',
       attributes: logAttributes,
@@ -765,7 +730,8 @@ EventProcessingResult _processStateSnapshot(
   // The cast throws on non-Map snapshots. The per-event-loop wrappers
   // in `RunOrchestrator._onEvent` and `SoliplexApi._replayEventsToHistory`
   // catch the throw and append a `DroppedEventMessage` at the failure
-  // position; surrounding events still process.
+  // position; surrounding events still process. Future callers of
+  // `processEvent` that don't wrap inherit this contract.
   return EventProcessingResult(
     conversation:
         conversation.copyWith(aguiState: snapshot as Map<String, dynamic>),
@@ -778,7 +744,8 @@ EventProcessingResult _processStateDelta(
   StreamingState streaming,
   List<dynamic> delta,
 ) {
-  final newState = applyJsonPatch(conversation.aguiState, delta);
+  final newState =
+      applyJsonPatch(conversation.aguiState, delta, logger: _logger);
   return EventProcessingResult(
     conversation: conversation.copyWith(aguiState: newState),
     streaming: streaming,
@@ -804,18 +771,28 @@ EventProcessingResult _processReasoningEncryptedValue(
   );
 }
 
+/// Applies an [ActivityDeltaEvent] to [Conversation.activities],
+/// preserving streaming state. Drop semantics (no prior snapshot,
+/// activityType mismatch, malformed patch ops) live in
+/// [applyActivityEvent]; this wrapper only forwards the result.
 EventProcessingResult _processActivityDelta(
   Conversation conversation,
   StreamingState streaming,
-  String messageId,
-  String activityType,
+  ActivityDeltaEvent event,
 ) {
-  _logger.info(
-    'ActivityDeltaEvent dropped: no per-message activity store in the domain',
-    attributes: {'messageId': messageId, 'activityType': activityType},
+  final updated = applyActivityEvent(
+    conversation.activities,
+    event,
+    logger: _logger,
   );
+  if (identical(updated, conversation.activities)) {
+    return EventProcessingResult(
+      conversation: conversation,
+      streaming: streaming,
+    );
+  }
   return EventProcessingResult(
-    conversation: conversation,
+    conversation: conversation.copyWith(activities: updated),
     streaming: streaming,
   );
 }

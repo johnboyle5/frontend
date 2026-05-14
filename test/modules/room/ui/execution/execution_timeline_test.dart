@@ -17,14 +17,53 @@ const _messageId = 'm1';
 
 void main() {
   late Signal<ExecutionEvent?> events;
+  late Signal<List<ActivityRecord>> activities;
   late ExecutionTracker tracker;
   late MessageExpansions store;
 
   setUp(() {
     events = Signal<ExecutionEvent?>(null);
-    tracker = ExecutionTracker(executionEvents: events, logger: testLogger());
+    activities = Signal<List<ActivityRecord>>(const []);
+    tracker = ExecutionTracker(
+      executionEvents: events,
+      activities: activities,
+      logger: testLogger(),
+    );
     store = MessageExpansions();
   });
+
+  // Helper: push an ActivitySnapshot event AND the corresponding
+  // ActivityRecord into the activities signal, mirroring what
+  // `_processActivitySnapshot` + the bridge do in production.
+  void pushSnapshot({
+    required String messageId,
+    required String activityType,
+    required Map<String, dynamic> content,
+    required int timestamp,
+    bool replace = true,
+  }) {
+    final record = ActivityRecord(
+      messageId: messageId,
+      activityType: activityType,
+      content: content,
+      timestamp: timestamp,
+    );
+    final idx = activities.value.indexWhere((a) => a.messageId == messageId);
+    if (idx >= 0) {
+      if (replace) {
+        activities.value = [...activities.value]..[idx] = record;
+      }
+    } else {
+      activities.value = [...activities.value, record];
+    }
+    events.value = ActivitySnapshot(
+      messageId: messageId,
+      activityType: activityType,
+      content: content,
+      timestamp: timestamp,
+      replace: replace,
+    );
+  }
 
   tearDown(() => tracker.dispose());
 
@@ -54,18 +93,54 @@ void main() {
     expect(find.byType(GestureDetector), findsNothing);
   });
 
+  testWidgets(
+    'dangling activity id (in timeline but not in skillToolCalls) renders '
+    'as an empty row instead of throwing',
+    (tester) async {
+      // Place the activity on the timeline by firing a recognized
+      // ActivitySnapshot event, then clear the activities signal so
+      // skillToolCalls becomes empty. The renderer must fall through to
+      // SizedBox.shrink() for the dangling id, not throw on missing
+      // lookup — pinning the defensive fallback for MESSAGES_SNAPSHOT
+      // or producer/consumer drift.
+      events.value = const ClientToolExecuting(
+        toolName: 'execute_skill',
+        toolCallId: 'tc-1',
+      );
+      pushSnapshot(
+        messageId: 'rag:call_1',
+        activityType: 'skill_tool_call',
+        content: {'tool_name': 'lookup', 'args': '{}'},
+        timestamp: 100,
+      );
+      // Drop the activity record while the timeline retains the id.
+      activities.value = const [];
+
+      await tester.pumpWidget(wrap(build()));
+      await tester.pump();
+      // Expand the timeline so the row is built.
+      await tester.tap(find.text('2 events'));
+      await tester.pump();
+
+      // The step row renders (it's a structural entry, not content-keyed).
+      expect(find.text('execute_skill'), findsOneWidget);
+      // The activity row does not render — no `lookup` text, no throw.
+      expect(find.text('lookup'), findsNothing);
+    },
+  );
+
   testWidgets('header counts step + nested activities', (tester) async {
     events.value = const ClientToolExecuting(
       toolName: 'execute_skill',
       toolCallId: 'tc-1',
     );
-    events.value = const ActivitySnapshot(
+    pushSnapshot(
       messageId: 'bwrap:call_1',
       activityType: 'skill_tool_call',
       content: {'tool_name': 'execute_script', 'args': '{}'},
       timestamp: 100,
     );
-    events.value = const ActivitySnapshot(
+    pushSnapshot(
       messageId: 'bwrap:call_2',
       activityType: 'skill_tool_call',
       content: {'tool_name': 'list_environments', 'args': '{}'},
@@ -92,7 +167,7 @@ void main() {
       toolName: 'execute_skill',
       toolCallId: 'tc-1',
     );
-    events.value = const ActivitySnapshot(
+    pushSnapshot(
       messageId: 'bwrap:call_1',
       activityType: 'skill_tool_call',
       content: {'tool_name': 'execute_script', 'args': '{}'},
@@ -117,7 +192,7 @@ void main() {
       toolName: 'execute_skill',
       toolCallId: 'tc-1',
     );
-    events.value = const ActivitySnapshot(
+    pushSnapshot(
       messageId: 'bwrap:call_1',
       activityType: 'skill_tool_call',
       content: {
@@ -141,7 +216,7 @@ void main() {
   });
 
   testWidgets('activity with no args has no source chevron', (tester) async {
-    events.value = const ActivitySnapshot(
+    pushSnapshot(
       messageId: 'bwrap:call_1',
       activityType: 'skill_tool_call',
       content: {'tool_name': 'noop', 'args': '{}'},
@@ -159,7 +234,7 @@ void main() {
   });
 
   testWidgets('generic args fall back to JSON preview', (tester) async {
-    events.value = const ActivitySnapshot(
+    pushSnapshot(
       messageId: 'rag:call_1',
       activityType: 'skill_tool_call',
       content: {
@@ -199,7 +274,7 @@ void main() {
 
   testWidgets('standalone activity rendered when no active step',
       (tester) async {
-    events.value = const ActivitySnapshot(
+    pushSnapshot(
       messageId: 'bwrap:call_1',
       activityType: 'skill_tool_call',
       content: {
@@ -245,7 +320,7 @@ void main() {
         toolName: 'execute_skill',
         toolCallId: 'tc-1',
       );
-      events.value = const ActivitySnapshot(
+      pushSnapshot(
         messageId: 'bwrap:call_1',
         activityType: 'skill_tool_call',
         content: {
@@ -276,14 +351,20 @@ void main() {
       events.value = const ThinkingStarted();
 
       final events2 = Signal<ExecutionEvent?>(null);
-      final tracker2 =
-          ExecutionTracker(executionEvents: events2, logger: testLogger());
+      final tracker2 = ExecutionTracker(
+        executionEvents: events2,
+        activities: Signal<List<ActivityRecord>>(const []),
+        logger: testLogger(),
+      );
       addTearDown(tracker2.dispose);
       events2.value = const ThinkingStarted();
 
       final events3 = Signal<ExecutionEvent?>(null);
-      final tracker3 =
-          ExecutionTracker(executionEvents: events3, logger: testLogger());
+      final tracker3 = ExecutionTracker(
+        executionEvents: events3,
+        activities: Signal<List<ActivityRecord>>(const []),
+        logger: testLogger(),
+      );
       addTearDown(tracker3.dispose);
       events3.value = const ThinkingStarted();
 
@@ -351,7 +432,7 @@ void main() {
         toolName: 'execute_skill',
         toolCallId: 'tc-1',
       );
-      events.value = const ActivitySnapshot(
+      pushSnapshot(
         messageId: 'bwrap:call_1',
         activityType: 'skill_tool_call',
         content: {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
+import 'package:soliplex_logging/soliplex_logging.dart';
 
 import '../../compute_display_messages.dart' show loadingMessageId;
 import '../../execution_step.dart';
@@ -12,6 +13,9 @@ import '../../message_expansions.dart';
 import '../../room_providers.dart';
 import '../copy_button.dart';
 import 'timeline_entry.dart';
+
+final Logger _logger =
+    LogManager.instance.getLogger('soliplex_frontend.execution_timeline');
 
 /// Unified execution timeline — single collapsible that nests activities
 /// under their owning step. Activity rows with source (script/code/query
@@ -40,6 +44,10 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
   // response.
   bool _loadingPhaseTimeline = false;
   final Set<String> _loadingPhaseSources = <String>{};
+
+  // Throttle: log each dangling-id at most once per widget lifetime so a
+  // sustained mismatch doesn't flood the logging backend on every frame.
+  final Set<String> _loggedDanglingIds = <String>{};
 
   // Persistence handle — null during the AwaitingText phase, because
   // loadingMessageId is reused across runs and persisting under it would
@@ -92,11 +100,12 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final entries = widget.tracker.timeline.watch(context);
+    final calls = widget.tracker.skillToolCalls.watch(context);
     if (entries.isEmpty) return const SizedBox.shrink();
 
     final total = entries.fold<int>(
       0,
-      (sum, e) => sum + (e is TimelineStep ? 1 + e.activities.length : 1),
+      (sum, e) => sum + (e is TimelineStep ? 1 + e.activityIds.length : 1),
     );
 
     return Padding(
@@ -132,7 +141,7 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
             ),
             if (_expanded) ...[
               const SizedBox(height: 4),
-              for (final entry in entries) _buildEntry(entry, theme),
+              for (final entry in entries) _buildEntry(entry, theme, calls),
             ],
           ],
         ),
@@ -140,20 +149,58 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
     );
   }
 
-  Widget _buildEntry(TimelineEntry entry, ThemeData theme) {
+  Widget _buildEntry(
+    TimelineEntry entry,
+    ThemeData theme,
+    List<SkillToolCallActivity> calls,
+  ) {
     switch (entry) {
-      case TimelineStep(:final step, :final activities):
+      case TimelineStep(:final step, :final activityIds):
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _stepRow(step, theme),
-            for (final activity in activities)
-              _activityRow(activity, theme, indent: 20),
+            for (final id in activityIds)
+              if (_resolveActivity(id, calls) case final activity?)
+                _activityRow(activity, theme, indent: 20),
           ],
         );
-      case TimelineStandaloneActivity(:final activity):
+      case TimelineStandaloneActivity(:final activityId):
+        final activity = _resolveActivity(activityId, calls);
+        if (activity == null) return const SizedBox.shrink();
         return _activityRow(activity, theme, indent: 0);
     }
+  }
+
+  /// Looks up the decoded activity for [id] in the tracker's
+  /// `skillToolCalls`. Returns `null` for a dangling id so the renderer
+  /// falls through to an empty row instead of throwing. The tracker
+  /// only places ids whose activityType the decoder recognises
+  /// (`skill_tool_call` / `skill_tool_result`), so a dangling id
+  /// indicates a real divergence — a decode failure, a
+  /// `MESSAGES_SNAPSHOT` that dropped the record, or a producer/
+  /// consumer mismatch. Logged at warning the first time each id fails
+  /// to resolve so the dropped row is observable instead of silent.
+  SkillToolCallActivity? _resolveActivity(
+    String id,
+    List<SkillToolCallActivity> calls,
+  ) {
+    for (final call in calls) {
+      if (call.messageId == id) return call;
+    }
+    if (_loggedDanglingIds.add(id)) {
+      _logger.warning(
+        'ExecutionTimeline: timeline references an activity id with no '
+        'matching SkillToolCallActivity; row hidden',
+        attributes: {
+          'activityId': id,
+          'roomId': widget.roomId,
+          'messageId': widget.messageId,
+          'resolvableIdCount': calls.length,
+        },
+      );
+    }
+    return null;
   }
 
   Widget _stepRow(ExecutionStep step, ThemeData theme) {
@@ -223,14 +270,13 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
                     ),
                   ),
                 ),
-                if (activity.status != null)
-                  Text(
-                    activity.status!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                      fontSize: 11,
-                    ),
+                Text(
+                  activity.status.label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                    fontSize: 11,
                   ),
+                ),
               ],
             ),
           ),
@@ -294,10 +340,9 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
     }
   }
 
-  Widget _activityStatusIcon(String? status, ThemeData theme) {
+  Widget _activityStatusIcon(SkillToolCallStatus status, ThemeData theme) {
     switch (status) {
-      case 'in_progress':
-      case 'running':
+      case SkillToolCallStatus.inProgress:
         return SizedBox(
           width: 12,
           height: 12,
@@ -306,18 +351,15 @@ class _ExecutionTimelineState extends ConsumerState<ExecutionTimeline> {
             color: theme.colorScheme.primary,
           ),
         );
-      case 'failed':
-      case 'error':
+      case SkillToolCallStatus.error:
         return Icon(Icons.error, size: 12, color: theme.colorScheme.error);
-      case 'done':
-      case 'completed':
-      case 'success':
+      case SkillToolCallStatus.done:
         return Icon(
           Icons.check_circle,
           size: 12,
           color: theme.colorScheme.primary,
         );
-      default:
+      case SkillToolCallStatus.unknown:
         return Icon(
           Icons.circle_outlined,
           size: 12,

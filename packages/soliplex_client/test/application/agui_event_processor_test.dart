@@ -1,8 +1,11 @@
 import 'package:ag_ui/ag_ui.dart';
 import 'package:soliplex_client/src/application/agui_event_processor.dart';
 import 'package:soliplex_client/src/application/no_response_synthesis.dart';
+import 'package:soliplex_client/src/application/run_phase.dart'
+    as app_streaming;
 import 'package:soliplex_client/src/application/streaming_state.dart'
     as app_streaming;
+import 'package:soliplex_client/src/domain/activity_record.dart';
 import 'package:soliplex_client/src/domain/chat_message.dart';
 import 'package:soliplex_client/src/domain/conversation.dart';
 import 'package:test/test.dart';
@@ -547,7 +550,7 @@ void main() {
           expect(tc.status, equals(ToolCallStatus.streaming));
         });
 
-        test('accumulates tool names in activity across multiple starts', () {
+        test('accumulates tool names in phase across multiple starts', () {
           const event1 = ToolCallStartEvent(
             toolCallId: 'tc-1',
             toolCallName: 'search',
@@ -565,9 +568,9 @@ void main() {
           );
 
           final awaitingText = result2.streaming as app_streaming.AwaitingText;
-          final activity =
-              awaitingText.currentActivity as app_streaming.ToolCallActivity;
-          expect(activity.allToolNames, equals({'search', 'summarize'}));
+          final phase =
+              awaitingText.currentPhase as app_streaming.ToolCallPhase;
+          expect(phase.toolNames, equals({'search', 'summarize'}));
         });
       });
 
@@ -758,9 +761,10 @@ void main() {
           expect(result.conversation.toolCalls.first.id, equals('tc-1'));
         });
 
-        test('does not change activity', () {
-          const awaitingWithTool = app_streaming.AwaitingText(
-            currentActivity: app_streaming.ToolCallActivity(toolName: 'search'),
+        test('does not change phase', () {
+          final awaitingWithTool = app_streaming.AwaitingText(
+            currentPhase:
+                app_streaming.ToolCallPhase.single(toolName: 'search'),
           );
           final conversationWithTool = conversation.withToolCall(
             const ToolCallInfo(
@@ -778,8 +782,8 @@ void main() {
           );
 
           expect(
-            (result.streaming as app_streaming.AwaitingText).currentActivity,
-            isA<app_streaming.ToolCallActivity>(),
+            (result.streaming as app_streaming.AwaitingText).currentPhase,
+            isA<app_streaming.ToolCallPhase>(),
           );
         });
 
@@ -983,7 +987,7 @@ void main() {
         });
       });
 
-      group('ToolCallActivity equality', () {
+      group('ToolCallPhase equality', () {
         test(
             'consecutive starts of same tool produce unequal activities '
             '(different toolCallId)', () {
@@ -1003,14 +1007,14 @@ void main() {
             event2,
           );
 
-          final activity1 =
-              (result1.streaming as app_streaming.AwaitingText).currentActivity;
-          final activity2 =
-              (result2.streaming as app_streaming.AwaitingText).currentActivity;
-          expect(activity1, isNot(equals(activity2)));
+          final phase1 =
+              (result1.streaming as app_streaming.AwaitingText).currentPhase;
+          final phase2 =
+              (result2.streaming as app_streaming.AwaitingText).currentPhase;
+          expect(phase1, isNot(equals(phase2)));
         });
 
-        test('ToolCallStartEvent sets latestToolCallId on activity', () {
+        test('ToolCallStartEvent sets latestToolCallId on phase', () {
           const event = ToolCallStartEvent(
             toolCallId: 'tc-1',
             toolCallName: 'search',
@@ -1018,12 +1022,12 @@ void main() {
 
           final result = processEvent(conversation, streaming, event);
 
-          final activity = (result.streaming as app_streaming.AwaitingText)
-              .currentActivity as app_streaming.ToolCallActivity;
-          expect(activity.latestToolCallId, equals('tc-1'));
+          final phase = (result.streaming as app_streaming.AwaitingText)
+              .currentPhase as app_streaming.ToolCallPhase;
+          expect(phase.latestToolCallId, equals('tc-1'));
         });
 
-        test('ToolCallStartEvent sets timestamp on activity', () {
+        test('ToolCallStartEvent sets timestamp on phase', () {
           const event = ToolCallStartEvent(
             toolCallId: 'tc-1',
             toolCallName: 'search',
@@ -1032,14 +1036,34 @@ void main() {
 
           final result = processEvent(conversation, streaming, event);
 
-          final activity = (result.streaming as app_streaming.AwaitingText)
-              .currentActivity as app_streaming.ToolCallActivity;
-          expect(activity.timestamp, equals(1000));
+          final phase = (result.streaming as app_streaming.AwaitingText)
+              .currentPhase as app_streaming.ToolCallPhase;
+          expect(phase.timestamp, equals(1000));
+        });
+
+        test('ToolCallStartEvent without timestamp synthesizes wall-clock', () {
+          // Sibling to the skill_tool_call synthesis test: both code paths
+          // construct a fresh ToolCallPhase via `_withToolCallPhase`; both
+          // must guarantee a non-null timestamp so equality and any future
+          // UI consumer can rely on the field.
+          final before = DateTime.now().millisecondsSinceEpoch;
+          const event = ToolCallStartEvent(
+            toolCallId: 'tc-1',
+            toolCallName: 'search',
+          );
+
+          final result = processEvent(conversation, streaming, event);
+          final after = DateTime.now().millisecondsSinceEpoch;
+
+          final phase = (result.streaming as app_streaming.AwaitingText)
+              .currentPhase as app_streaming.ToolCallPhase;
+          expect(phase.timestamp, greaterThanOrEqualTo(before));
+          expect(phase.timestamp, lessThanOrEqualTo(after));
         });
       });
 
       group('regression — existing behavior preserved', () {
-        test('ToolCallActivity still tracks tool names', () {
+        test('ToolCallPhase still tracks tool names', () {
           const event = ToolCallStartEvent(
             toolCallId: 'tc-1',
             toolCallName: 'search',
@@ -1048,12 +1072,12 @@ void main() {
           final result = processEvent(conversation, streaming, event);
 
           final awaitingText = result.streaming as app_streaming.AwaitingText;
-          final activity =
-              awaitingText.currentActivity as app_streaming.ToolCallActivity;
-          expect(activity.allToolNames, contains('search'));
+          final phase =
+              awaitingText.currentPhase as app_streaming.ToolCallPhase;
+          expect(phase.toolNames, contains('search'));
         });
 
-        test('ToolCallStartEvent during TextStreaming sets activity', () {
+        test('ToolCallStartEvent during TextStreaming sets phase', () {
           // Start streaming text
           const textStart = TextMessageStartEvent(messageId: 'msg-1');
           var result = processEvent(conversation, streaming, textStart);
@@ -1071,10 +1095,10 @@ void main() {
           );
 
           final textStreaming = result.streaming as app_streaming.TextStreaming;
-          final activity =
-              textStreaming.currentActivity as app_streaming.ToolCallActivity;
-          expect(activity.allToolNames, contains('search'));
-          expect(activity.latestToolCallId, equals('tc-1'));
+          final phase =
+              textStreaming.currentPhase as app_streaming.ToolCallPhase;
+          expect(phase.toolNames, contains('search'));
+          expect(phase.latestToolCallId, equals('tc-1'));
         });
 
         test('text and tool calls coexist', () {
@@ -1133,7 +1157,7 @@ void main() {
     });
 
     group('activity snapshot events', () {
-      test('skill_tool_call sets ToolCallActivity with tool name', () {
+      test('skill_tool_call sets ToolCallPhase with tool name', () {
         const event = ActivitySnapshotEvent(
           messageId: 'msg-1',
           activityType: 'skill_tool_call',
@@ -1143,14 +1167,13 @@ void main() {
         final result = processEvent(conversation, streaming, event);
 
         final awaitingText = result.streaming as app_streaming.AwaitingText;
-        final activity =
-            awaitingText.currentActivity as app_streaming.ToolCallActivity;
-        expect(activity.allToolNames, contains('search'));
+        final phase = awaitingText.currentPhase as app_streaming.ToolCallPhase;
+        expect(phase.toolNames, contains('search'));
       });
 
-      test('skill_tool_call accumulates on existing ToolCallActivity', () {
-        const firstTool = app_streaming.AwaitingText(
-          currentActivity: app_streaming.ToolCallActivity(toolName: 'ask'),
+      test('skill_tool_call accumulates on existing ToolCallPhase', () {
+        final firstTool = app_streaming.AwaitingText(
+          currentPhase: app_streaming.ToolCallPhase.single(toolName: 'ask'),
         );
         const event = ActivitySnapshotEvent(
           messageId: 'msg-1',
@@ -1161,9 +1184,8 @@ void main() {
         final result = processEvent(conversation, firstTool, event);
 
         final awaitingText = result.streaming as app_streaming.AwaitingText;
-        final activity =
-            awaitingText.currentActivity as app_streaming.ToolCallActivity;
-        expect(activity.allToolNames, equals({'ask', 'search'}));
+        final phase = awaitingText.currentPhase as app_streaming.ToolCallPhase;
+        expect(phase.toolNames, equals({'ask', 'search'}));
       });
 
       test('skill_tool_call with missing tool_name passes through', () {
@@ -1177,24 +1199,8 @@ void main() {
 
         final awaitingText = result.streaming as app_streaming.AwaitingText;
         expect(
-          awaitingText.currentActivity,
-          isA<app_streaming.ProcessingActivity>(),
-        );
-      });
-
-      test('unknown activityType passes through unchanged', () {
-        const event = ActivitySnapshotEvent(
-          messageId: 'msg-1',
-          activityType: 'unknown_activity',
-          content: {'data': 'value'},
-        );
-
-        final result = processEvent(conversation, streaming, event);
-
-        final awaitingText = result.streaming as app_streaming.AwaitingText;
-        expect(
-          awaitingText.currentActivity,
-          isA<app_streaming.ProcessingActivity>(),
+          awaitingText.currentPhase,
+          isA<app_streaming.ProcessingPhase>(),
         );
       });
 
@@ -1209,9 +1215,8 @@ void main() {
         final result = processEvent(conversation, streaming, event);
 
         final awaitingText = result.streaming as app_streaming.AwaitingText;
-        final activity =
-            awaitingText.currentActivity as app_streaming.ToolCallActivity;
-        expect(activity.timestamp, equals(2000));
+        final phase = awaitingText.currentPhase as app_streaming.ToolCallPhase;
+        expect(phase.timestamp, equals(2000));
       });
 
       test(
@@ -1227,10 +1232,10 @@ void main() {
           final result = processEvent(conversation, streaming, event);
           final after = DateTime.now().millisecondsSinceEpoch;
 
-          final activity = (result.streaming as app_streaming.AwaitingText)
-              .currentActivity as app_streaming.ToolCallActivity;
-          expect(activity.timestamp, greaterThanOrEqualTo(before));
-          expect(activity.timestamp, lessThanOrEqualTo(after));
+          final phase = (result.streaming as app_streaming.AwaitingText)
+              .currentPhase as app_streaming.ToolCallPhase;
+          expect(phase.timestamp, greaterThanOrEqualTo(before));
+          expect(phase.timestamp, lessThanOrEqualTo(after));
         },
       );
 
@@ -1253,7 +1258,11 @@ void main() {
         expect(record.timestamp, 1234);
       });
 
-      test('unknown activityType is persisted', () {
+      test('unknown activityType is persisted and leaves streaming intact', () {
+        // Two invariants exercised together: unknown activityTypes flow
+        // into Conversation.activities (so future consumers can read
+        // them) AND don't disturb the streaming phase (no spurious
+        // ToolCallPhase transition).
         const event = ActivitySnapshotEvent(
           messageId: 'plan:1',
           activityType: 'plan',
@@ -1265,6 +1274,10 @@ void main() {
 
         expect(result.conversation.activities, hasLength(1));
         expect(result.conversation.activities.first.activityType, 'plan');
+        expect(
+          (result.streaming as app_streaming.AwaitingText).currentPhase,
+          isA<app_streaming.ProcessingPhase>(),
+        );
       });
 
       test('replace:true overwrites record with same messageId in place', () {
@@ -1375,8 +1388,118 @@ void main() {
       });
     });
 
+    group('activity delta events', () {
+      test('applies JSON Patch to the matching record content', () {
+        final seeded = conversation.copyWith(
+          activities: [
+            const ActivityRecord(
+              messageId: 'rag:call_1',
+              activityType: 'skill_tool_call',
+              content: {
+                'tool_name': 'ask',
+                'args': '{"q":"hi"}',
+                'status': 'in_progress',
+              },
+              timestamp: 100,
+            ),
+          ],
+        );
+        const event = ActivityDeltaEvent(
+          messageId: 'rag:call_1',
+          activityType: 'skill_tool_call',
+          patch: [
+            {'op': 'replace', 'path': '/status', 'value': 'done'},
+          ],
+          timestamp: 200,
+        );
+
+        final result = processEvent(seeded, streaming, event);
+
+        expect(result.conversation.activities, hasLength(1));
+        final patched = result.conversation.activities.single;
+        expect(patched.content['status'], 'done');
+        expect(patched.content['tool_name'], 'ask');
+        expect(patched.timestamp, 200);
+      });
+
+      test('with no prior snapshot drops the patch and warns', () {
+        const event = ActivityDeltaEvent(
+          messageId: 'rag:orphan',
+          activityType: 'skill_tool_call',
+          patch: [
+            {'op': 'replace', 'path': '/status', 'value': 'done'},
+          ],
+        );
+
+        final result = processEvent(conversation, streaming, event);
+
+        expect(result.conversation.activities, isEmpty);
+        expect(result.streaming, equals(streaming));
+      });
+
+      test('with mismatched activityType drops the patch and warns', () {
+        final seeded = conversation.copyWith(
+          activities: [
+            const ActivityRecord(
+              messageId: 'rag:call_3',
+              activityType: 'skill_tool_call',
+              content: {'tool_name': 'ask', 'status': 'in_progress'},
+              timestamp: 100,
+            ),
+          ],
+        );
+        const event = ActivityDeltaEvent(
+          messageId: 'rag:call_3',
+          activityType: 'skill_tool_result',
+          patch: [
+            {'op': 'replace', 'path': '/status', 'value': 'done'},
+          ],
+          timestamp: 200,
+        );
+
+        final result = processEvent(seeded, streaming, event);
+
+        // Existing record is preserved unchanged; the mismatched delta
+        // cannot be safely applied because patch ops are authored
+        // against the call-side content shape.
+        expect(
+          result.conversation.activities.single.activityType,
+          'skill_tool_call',
+        );
+        expect(
+          result.conversation.activities.single.content['status'],
+          'in_progress',
+        );
+        expect(result.conversation.activities.single.timestamp, 100);
+      });
+
+      test('without timestamp preserves the prior record timestamp', () {
+        final seeded = conversation.copyWith(
+          activities: [
+            const ActivityRecord(
+              messageId: 'rag:call_2',
+              activityType: 'skill_tool_call',
+              content: {'tool_name': 'ask', 'status': 'in_progress'},
+              timestamp: 500,
+            ),
+          ],
+        );
+        const event = ActivityDeltaEvent(
+          messageId: 'rag:call_2',
+          activityType: 'skill_tool_call',
+          patch: [
+            {'op': 'add', 'path': '/progress', 'value': 0.5},
+          ],
+        );
+
+        final result = processEvent(seeded, streaming, event);
+
+        expect(result.conversation.activities.single.timestamp, 500);
+      });
+    });
+
     group('thinking events', () {
-      test('ThinkingStartEvent sets isThinkingStreaming and activity', () {
+      test('ThinkingStartEvent sets isThinkingStreaming and phase', () {
         const event = ThinkingStartEvent();
 
         final result = processEvent(conversation, streaming, event);
@@ -1384,15 +1507,15 @@ void main() {
         final awaitingText = result.streaming as app_streaming.AwaitingText;
         expect(awaitingText.isThinkingStreaming, isTrue);
         expect(
-          awaitingText.currentActivity,
-          isA<app_streaming.ThinkingActivity>(),
+          awaitingText.currentPhase,
+          isA<app_streaming.ThinkingPhase>(),
         );
       });
 
       test('ThinkingEndEvent sets isThinkingStreaming to false', () {
         const thinkingStreaming = app_streaming.AwaitingText(
           isThinkingStreaming: true,
-          currentActivity: app_streaming.ThinkingActivity(),
+          currentPhase: app_streaming.ThinkingPhase(),
         );
         const event = ThinkingEndEvent();
 
@@ -1403,7 +1526,7 @@ void main() {
       });
 
       test(
-        'ThinkingTextMessageStartEvent sets isThinkingStreaming and activity',
+        'ThinkingTextMessageStartEvent sets isThinkingStreaming and phase',
         () {
           const event = ThinkingTextMessageStartEvent();
 
@@ -1412,8 +1535,8 @@ void main() {
           final awaitingText = result.streaming as app_streaming.AwaitingText;
           expect(awaitingText.isThinkingStreaming, isTrue);
           expect(
-            awaitingText.currentActivity,
-            isA<app_streaming.ThinkingActivity>(),
+            awaitingText.currentPhase,
+            isA<app_streaming.ThinkingPhase>(),
           );
         },
       );
@@ -1522,7 +1645,7 @@ void main() {
     });
 
     group('reasoning events', () {
-      test('ReasoningStartEvent sets isThinkingStreaming and activity', () {
+      test('ReasoningStartEvent sets isThinkingStreaming and phase', () {
         const event = ReasoningStartEvent(messageId: 'reas-1');
 
         final result = processEvent(conversation, streaming, event);
@@ -1530,15 +1653,15 @@ void main() {
         final awaitingText = result.streaming as app_streaming.AwaitingText;
         expect(awaitingText.isThinkingStreaming, isTrue);
         expect(
-          awaitingText.currentActivity,
-          isA<app_streaming.ThinkingActivity>(),
+          awaitingText.currentPhase,
+          isA<app_streaming.ThinkingPhase>(),
         );
       });
 
       test('ReasoningEndEvent sets isThinkingStreaming to false', () {
         const reasoningState = app_streaming.AwaitingText(
           isThinkingStreaming: true,
-          currentActivity: app_streaming.ThinkingActivity(),
+          currentPhase: app_streaming.ThinkingPhase(),
         );
         const event = ReasoningEndEvent(messageId: 'reas-1');
 
@@ -1636,6 +1759,11 @@ void main() {
     });
 
     group('passthrough events', () {
+      // Representative pin: one structural event (TextMessageChunkEvent)
+      // and one wildcard event (CustomEvent) — both must leave
+      // conversation and streaming state untouched. Adding more entries
+      // here doesn't increase coverage; events that need custom
+      // handling have their own targeted tests above.
       final passthroughEvents = <String, BaseEvent>{
         'CustomEvent': const CustomEvent(name: 'custom', value: {'data': 123}),
         'TextMessageChunkEvent': const TextMessageChunkEvent(
@@ -1643,16 +1771,6 @@ void main() {
           role: TextMessageRole.assistant,
           delta: 'Hello',
         ),
-        'ToolCallChunkEvent': const ToolCallChunkEvent(
-          toolCallId: 'tc-1',
-          toolCallName: 'search',
-          delta: '{"q":"test"}',
-        ),
-        'MessagesSnapshotEvent': const MessagesSnapshotEvent(messages: []),
-        'StepStartedEvent': const StepStartedEvent(stepName: 'step-1'),
-        'StepFinishedEvent': const StepFinishedEvent(stepName: 'step-1'),
-        'RawEvent': const RawEvent(event: 'raw-data'),
-        'ThinkingContentEvent': const ThinkingContentEvent(delta: 'hmm'),
       };
 
       for (final entry in passthroughEvents.entries) {

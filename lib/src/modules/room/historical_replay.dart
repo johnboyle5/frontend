@@ -46,11 +46,18 @@ Map<String, ExecutionTracker> replayToTrackers(
   @visibleForTesting ExecutionBridge bridge = bridgeBaseEvent,
 }) {
   final buckets = <String, List<ExecutionEvent>>{};
+  // Parallel to `buckets`: the raw AG-UI events destined for each
+  // tracker, retained so we can fold them through `applyActivityEvent`
+  // at construction time. Bridging drops `ActivityDeltaEvent`, so the
+  // bridged `ExecutionEvent` stream is insufficient for activity
+  // reconstruction.
+  final rawBuckets = <String, List<BaseEvent>>{};
   // Hoisted across bundles: tool-yield events accumulate here until the
   // next normal bundle's first assistant message absorbs them. If no
   // such bundle exists, the trailing handler below routes them under
   // `noResponseMessageId(lastToolYieldRunId)`.
   final pending = <ExecutionEvent>[];
+  final pendingRaw = <BaseEvent>[];
   String? lastToolYieldRunId;
 
   ExecutionEvent? bridgeOrLog(BaseEvent raw) {
@@ -79,42 +86,50 @@ Map<String, ExecutionTracker> replayToTrackers(
             raw.role == TextMessageRole.assistant) {
           final messageId = raw.messageId;
           currentMessageId = messageId;
-          final bucket = buckets.putIfAbsent(messageId, () => []);
+          buckets.putIfAbsent(messageId, () => []);
+          final rawBucket = rawBuckets.putIfAbsent(messageId, () => []);
           if (pending.isNotEmpty) {
-            bucket.addAll(pending);
+            buckets[messageId]!.addAll(pending);
             pending.clear();
+            rawBucket.addAll(pendingRaw);
+            pendingRaw.clear();
             lastToolYieldRunId = null;
           }
         }
 
         final execEvent = bridgeOrLog(raw);
-        if (execEvent == null) continue;
-
         if (currentMessageId != null) {
-          buckets.putIfAbsent(currentMessageId, () => []).add(execEvent);
+          rawBuckets.putIfAbsent(currentMessageId, () => []).add(raw);
+          if (execEvent != null) {
+            buckets.putIfAbsent(currentMessageId, () => []).add(execEvent);
+          }
         } else {
-          pending.add(execEvent);
+          pendingRaw.add(raw);
+          if (execEvent != null) pending.add(execEvent);
         }
       }
     } else if (hasToolCall) {
       lastToolYieldRunId = bundle.runId;
       for (final raw in bundle.events) {
+        pendingRaw.add(raw);
         final execEvent = bridgeOrLog(raw);
-        if (execEvent == null) continue;
-        pending.add(execEvent);
+        if (execEvent != null) pending.add(execEvent);
       }
     } else {
       final synthesizedId = noResponseMessageId(bundle.runId);
       final bucket = buckets.putIfAbsent(synthesizedId, () => []);
+      final rawBucket = rawBuckets.putIfAbsent(synthesizedId, () => []);
       if (pending.isNotEmpty) {
         bucket.addAll(pending);
         pending.clear();
+        rawBucket.addAll(pendingRaw);
+        pendingRaw.clear();
         lastToolYieldRunId = null;
       }
       for (final raw in bundle.events) {
+        rawBucket.add(raw);
         final execEvent = bridgeOrLog(raw);
-        if (execEvent == null) continue;
-        bucket.add(execEvent);
+        if (execEvent != null) bucket.add(execEvent);
       }
     }
   }
@@ -126,17 +141,31 @@ Map<String, ExecutionTracker> replayToTrackers(
   if (pending.isNotEmpty && lastToolYieldRunId != null) {
     final synthesizedId = noResponseMessageId(lastToolYieldRunId);
     buckets.putIfAbsent(synthesizedId, () => []).addAll(pending);
+    rawBuckets.putIfAbsent(synthesizedId, () => []).addAll(pendingRaw);
     pending.clear();
+    pendingRaw.clear();
   } else if (pending.isNotEmpty) {
     _logger.warning(
       'Dropping unattached events with no tool-yield runId to anchor to.',
       attributes: {'pendingCount': pending.length},
     );
+    pendingRaw.clear();
   }
 
   return {
     for (final entry in buckets.entries)
-      entry.key:
-          ExecutionTracker.historical(events: entry.value, logger: _logger),
+      entry.key: ExecutionTracker.historical(
+        events: entry.value,
+        activities: _foldActivities(rawBuckets[entry.key] ?? const []),
+        logger: _logger,
+      ),
   };
+}
+
+List<ActivityRecord> _foldActivities(List<BaseEvent> events) {
+  var activities = const <ActivityRecord>[];
+  for (final event in events) {
+    activities = applyActivityEvent(activities, event, logger: _logger);
+  }
+  return activities;
 }

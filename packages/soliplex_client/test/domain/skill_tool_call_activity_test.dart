@@ -20,7 +20,7 @@ void main() {
       expect(call, isNotNull);
       expect(call!.messageId, 'rag:call_1');
       expect(call.toolName, 'ask');
-      expect(call.status, 'in_progress');
+      expect(call.status, SkillToolCallStatus.inProgress);
       expect(call.timestamp, 1234);
       expect(call.args, {'q': 'hello', 'top_k': 3});
     });
@@ -37,7 +37,7 @@ void main() {
 
       expect(call, isNotNull);
       expect(call!.args, isEmpty);
-      expect(call.status, isNull);
+      expect(call.status, SkillToolCallStatus.inProgress);
     });
 
     test('empty args string decodes to an empty map', () {
@@ -137,7 +137,7 @@ void main() {
       expect(SkillToolCallActivity.fromRecord(record), isNull);
     });
 
-    test('non-string status is coerced to null', () {
+    test('non-string status falls back to synthesized inProgress', () {
       const record = ActivityRecord(
         messageId: 'rag:call_5',
         activityType: 'skill_tool_call',
@@ -148,7 +148,146 @@ void main() {
       final call = SkillToolCallActivity.fromRecord(record);
 
       expect(call, isNotNull);
-      expect(call!.status, isNull);
+      expect(call!.status, SkillToolCallStatus.inProgress);
+    });
+
+    test('skill_tool_call without status synthesizes inProgress', () {
+      const record = ActivityRecord(
+        messageId: 'rag:call_no_status',
+        activityType: 'skill_tool_call',
+        content: {'tool_name': 'ask', 'args': '{"q":"hi"}'},
+        timestamp: 1,
+      );
+
+      final call = SkillToolCallActivity.fromRecord(record);
+
+      expect(call, isNotNull);
+      expect(call!.status, SkillToolCallStatus.inProgress);
+    });
+
+    test('skill_tool_call with explicit status maps to enum', () {
+      const record = ActivityRecord(
+        messageId: 'rag:custom_status',
+        activityType: 'skill_tool_call',
+        content: {
+          'tool_name': 'ask',
+          'args': '{}',
+          'status': 'failed',
+        },
+        timestamp: 1,
+      );
+
+      final call = SkillToolCallActivity.fromRecord(record);
+
+      expect(call, isNotNull);
+      expect(call!.status, SkillToolCallStatus.error);
+    });
+
+    test('decodes a well-formed skill_tool_result', () {
+      const record = ActivityRecord(
+        messageId: 'rag:call_1',
+        activityType: 'skill_tool_result',
+        content: {
+          'tool_name': 'ask',
+          'result': 'answer text',
+        },
+        timestamp: 1500,
+      );
+
+      final call = SkillToolCallActivity.fromRecord(record);
+
+      expect(call, isNotNull);
+      expect(call!.messageId, 'rag:call_1');
+      expect(call.toolName, 'ask');
+      expect(call.status, SkillToolCallStatus.done);
+      expect(call.result, 'answer text');
+      expect(call.args, isEmpty);
+      expect(call.timestamp, 1500);
+    });
+
+    test('skill_tool_result with args in content decodes them', () {
+      // Counterpart to the merge done in _applySnapshot: once args are
+      // carried onto the result-phase record, the typed view must
+      // surface them so the unified row keeps showing the inputs.
+      const record = ActivityRecord(
+        messageId: 'rag:call_1',
+        activityType: 'skill_tool_result',
+        content: {
+          'tool_name': 'ask',
+          'args': '{"q":"hi","top_k":3}',
+          'result': 'answer',
+        },
+        timestamp: 1500,
+      );
+
+      final call = SkillToolCallActivity.fromRecord(record);
+
+      expect(call, isNotNull);
+      expect(call!.args, {'q': 'hi', 'top_k': 3});
+      expect(call.result, 'answer');
+    });
+
+    test('skill_tool_result with unrecognised status decodes as unknown', () {
+      const record = ActivityRecord(
+        messageId: 'rag:explicit_done',
+        activityType: 'skill_tool_result',
+        content: {
+          'tool_name': 'ask',
+          'result': 'answer',
+          'status': 'partial',
+        },
+        timestamp: 1,
+      );
+
+      final call = SkillToolCallActivity.fromRecord(record);
+
+      expect(call, isNotNull);
+      expect(call!.status, SkillToolCallStatus.unknown);
+      expect(call.result, 'answer');
+    });
+
+    test('skill_tool_result without result yields null result field', () {
+      const record = ActivityRecord(
+        messageId: 'rag:no_result',
+        activityType: 'skill_tool_result',
+        content: {'tool_name': 'ask'},
+        timestamp: 1,
+      );
+
+      final call = SkillToolCallActivity.fromRecord(record);
+
+      expect(call, isNotNull);
+      expect(call!.status, SkillToolCallStatus.done);
+      expect(call.result, isNull);
+    });
+
+    test('skill_tool_result without tool_name returns null', () {
+      // Regression guard: if a future backend ever omits tool_name from
+      // the result snapshot, fromRecord must return null so the failure
+      // is loud (row stays at spinner) rather than silently dropping
+      // the completion.
+      const record = ActivityRecord(
+        messageId: 'rag:bad_result',
+        activityType: 'skill_tool_result',
+        content: {'result': 'orphan'},
+        timestamp: 1,
+      );
+
+      expect(SkillToolCallActivity.fromRecord(record), isNull);
+    });
+
+    test('non-string result is coerced to null', () {
+      const record = ActivityRecord(
+        messageId: 'rag:bad_result_type',
+        activityType: 'skill_tool_result',
+        content: {'tool_name': 'ask', 'result': 42},
+        timestamp: 1,
+      );
+
+      final call = SkillToolCallActivity.fromRecord(record);
+
+      expect(call, isNotNull);
+      expect(call!.result, isNull);
     });
   });
 
@@ -161,7 +300,8 @@ void main() {
           'q': 'hi',
           'top_k': 3,
         },
-        status: 'done',
+        result: null,
+        status: SkillToolCallStatus.done,
         timestamp: 1,
       );
       const b = SkillToolCallActivity(
@@ -171,7 +311,8 @@ void main() {
           'q': 'hi',
           'top_k': 3,
         },
-        status: 'done',
+        result: null,
+        status: SkillToolCallStatus.done,
         timestamp: 1,
       );
 
@@ -184,33 +325,41 @@ void main() {
         messageId: 'm1',
         toolName: 'ask',
         args: {'q': 'hi'},
-        status: null,
+        result: null,
+        status: SkillToolCallStatus.inProgress,
         timestamp: 1,
       );
       const b = SkillToolCallActivity(
         messageId: 'm1',
         toolName: 'ask',
         args: {'q': 'bye'},
-        status: null,
+        result: null,
+        status: SkillToolCallStatus.inProgress,
         timestamp: 1,
       );
 
       expect(a, isNot(equals(b)));
     });
 
-    test('toString includes identifying fields', () {
+    test('not equal when result differs', () {
       const a = SkillToolCallActivity(
-        messageId: 'rag:call_1',
+        messageId: 'm1',
         toolName: 'ask',
         args: {},
-        status: 'done',
-        timestamp: 7,
+        result: 'first answer',
+        status: SkillToolCallStatus.done,
+        timestamp: 1,
       );
-      final s = a.toString();
-      expect(s, contains('rag:call_1'));
-      expect(s, contains('ask'));
-      expect(s, contains('done'));
-      expect(s, contains('7'));
+      const b = SkillToolCallActivity(
+        messageId: 'm1',
+        toolName: 'ask',
+        args: {},
+        result: 'second answer',
+        status: SkillToolCallStatus.done,
+        timestamp: 1,
+      );
+
+      expect(a, isNot(equals(b)));
     });
   });
 }
