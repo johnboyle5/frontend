@@ -406,32 +406,11 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
       return;
     }
     if (file == null || !mounted) return;
-
-    // Transitional: drain openStream to bytes for the legacy tracker API.
-    // Phase 5 switches the tracker to accept the stream factory directly.
-    final List<int> bytes;
-    try {
-      bytes = await file.openStream().fold<List<int>>(
-        <int>[],
-        (acc, chunk) => acc..addAll(chunk),
-      );
-    } on Object catch (error, stackTrace) {
-      if (!mounted) return;
-      dev.log(
-        'Failed to read picked file bytes',
-        error: error,
-        stackTrace: stackTrace,
-        name: 'RoomInfoScreen',
-        level: 1000,
-      );
-      return;
-    }
-    if (!mounted) return;
-
     _tracker.uploadToRoom(
       roomId: widget.roomId,
       filename: file.name,
-      fileBytes: bytes,
+      openStream: file.openStream,
+      contentLength: file.size,
       mimeType: file.mimeType,
     );
   }

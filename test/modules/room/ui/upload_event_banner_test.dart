@@ -51,6 +51,7 @@ void main() {
         openStream: any(named: 'openStream'),
         contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
+        cancelToken: any(named: 'cancelToken'),
       ),
     ).thenAnswer((_) async {});
   });
@@ -83,7 +84,8 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-1',
       filename: 'b.pdf',
-      fileBytes: const [1, 2, 3],
+      openStream: () => Stream<List<int>>.value(const [1, 2, 3]),
+      contentLength: 3,
     );
     // POST resolves; refresh now returns the new file.
     when(
@@ -111,6 +113,7 @@ void main() {
         openStream: any(named: 'openStream'),
         contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
+        cancelToken: any(named: 'cancelToken'),
       ),
     ).thenThrow(const NetworkException(message: 'wifi down'));
 
@@ -123,7 +126,8 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-1',
       filename: 'b.pdf',
-      fileBytes: const [1, 2, 3],
+      openStream: () => Stream<List<int>>.value(const [1, 2, 3]),
+      contentLength: 3,
     );
     await tester.pump();
     await tester.pump();
@@ -144,7 +148,8 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-1',
       filename: 'b.pdf',
-      fileBytes: const [1, 2, 3],
+      openStream: () => Stream<List<int>>.value(const [1, 2, 3]),
+      contentLength: 3,
     );
     when(
       () => api.getThreadUploads(
@@ -174,6 +179,7 @@ void main() {
         openStream: any(named: 'openStream'),
         contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
+        cancelToken: any(named: 'cancelToken'),
       ),
     ).thenThrow(const NetworkException(message: 'wifi down'));
 
@@ -186,7 +192,8 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-1',
       filename: 'b.pdf',
-      fileBytes: const [1, 2, 3],
+      openStream: () => Stream<List<int>>.value(const [1, 2, 3]),
+      contentLength: 3,
     );
     await tester.pump();
     await tester.pump();
@@ -210,6 +217,7 @@ void main() {
         openStream: any(named: 'openStream'),
         contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
+        cancelToken: any(named: 'cancelToken'),
       ),
     ).thenAnswer((_) async {
       uploadCallCount++;
@@ -227,7 +235,8 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-1',
       filename: 'a.pdf',
-      fileBytes: const [1],
+      openStream: () => Stream<List<int>>.value(const [1]),
+      contentLength: 1,
     );
     when(
       () => api.getThreadUploads(
@@ -243,7 +252,8 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-1',
       filename: 'bad.pdf',
-      fileBytes: const [2],
+      openStream: () => Stream<List<int>>.value(const [2]),
+      contentLength: 1,
     );
     await tester.pump();
     await tester.pump();
@@ -283,6 +293,7 @@ void main() {
         openStream: any(named: 'openStream'),
         contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
+        cancelToken: any(named: 'cancelToken'),
       ),
     ).thenThrow(const NetworkException(message: 'prior'));
 
@@ -297,7 +308,8 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-A',
       filename: 'old.pdf',
-      fileBytes: const [1],
+      openStream: () => Stream<List<int>>.value(const [1]),
+      contentLength: 1,
     );
     await tester.pump();
     await tester.pump();
@@ -328,7 +340,8 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-A',
       filename: 'a.pdf',
-      fileBytes: const [1],
+      openStream: () => Stream<List<int>>.value(const [1]),
+      contentLength: 1,
     );
     when(
       () => api.getThreadUploads(
@@ -370,13 +383,15 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-1',
       filename: 'a.pdf',
-      fileBytes: const [1],
+      openStream: () => Stream<List<int>>.value(const [1]),
+      contentLength: 1,
     );
     tracker.uploadToThread(
       roomId: 'room-1',
       threadId: 'thread-1',
       filename: 'b.pdf',
-      fileBytes: const [2],
+      openStream: () => Stream<List<int>>.value(const [2]),
+      contentLength: 1,
     );
     when(
       () => api.getThreadUploads(
@@ -404,6 +419,7 @@ void main() {
         openStream: any(named: 'openStream'),
         contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
+        cancelToken: any(named: 'cancelToken'),
       ),
     ).thenAnswer((_) async {
       uploadCallCount++;
@@ -422,7 +438,8 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-1',
       filename: 'bad.pdf',
-      fileBytes: const [1],
+      openStream: () => Stream<List<int>>.value(const [1]),
+      contentLength: 1,
     );
     await tester.pump();
     await tester.pump();
@@ -432,7 +449,8 @@ void main() {
       roomId: 'room-1',
       threadId: 'thread-1',
       filename: 'good.pdf',
-      fileBytes: const [2],
+      openStream: () => Stream<List<int>>.value(const [2]),
+      contentLength: 1,
     );
     when(
       () => api.getThreadUploads(
