@@ -41,7 +41,8 @@ void main() {
     when(() => mockApi.uploadFileToRoom(
           any(),
           filename: any(named: 'filename'),
-          fileBytes: any(named: 'fileBytes'),
+          openStream: any(named: 'openStream'),
+          contentLength: any(named: 'contentLength'),
           mimeType: any(named: 'mimeType'),
         )).thenAnswer((_) async {});
   }
@@ -51,7 +52,8 @@ void main() {
           any(),
           any(),
           filename: any(named: 'filename'),
-          fileBytes: any(named: 'fileBytes'),
+          openStream: any(named: 'openStream'),
+          contentLength: any(named: 'contentLength'),
           mimeType: any(named: 'mimeType'),
         )).thenAnswer((_) async {});
   }
@@ -187,7 +189,8 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
           )).thenAnswer((_) => uploadCompleter.future);
 
@@ -227,7 +230,8 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
           )).thenAnswer((_) => uploadCompleter.future);
 
@@ -274,7 +278,8 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
           )).thenAnswer((_) => completers[callIndex++].future);
 
@@ -332,7 +337,8 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
           )).thenThrow(const ApiException(statusCode: 500, message: 'nope'));
 
@@ -369,7 +375,8 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
           )).thenAnswer((_) async {
         throw StateError('plugin bug');
@@ -479,7 +486,8 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
           )).thenAnswer((_) => posts[postIdx++].future);
 
@@ -589,7 +597,8 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
           )).thenThrow(NetworkException(message: 'dns'));
 
@@ -636,7 +645,8 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
           )).thenAnswer((_) => never.future);
 
@@ -751,7 +761,8 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
           )).thenAnswer((_) async {});
 

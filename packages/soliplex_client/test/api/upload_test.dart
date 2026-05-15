@@ -29,13 +29,14 @@ void main() {
   });
 
   group('uploadFileToRoom', () {
-    test('sends multipart POST to /uploads/{roomId}', () async {
+    test('sends streamed multipart POST to /uploads/{roomId}', () async {
       when(
         () => mockTransport.request<void>(
           any(),
           any(),
           body: any(named: 'body'),
           headers: any(named: 'headers'),
+          cancelToken: any(named: 'cancelToken'),
         ),
       ).thenAnswer((_) async {});
 
@@ -44,7 +45,8 @@ void main() {
       await api.uploadFileToRoom(
         'room-123',
         filename: 'test.txt',
-        fileBytes: fileBytes,
+        openStream: () => Stream<List<int>>.value(fileBytes),
+        contentLength: fileBytes.length,
       );
 
       final captured = verify(
@@ -53,14 +55,20 @@ void main() {
           captureAny(),
           body: captureAny(named: 'body'),
           headers: captureAny(named: 'headers'),
+          cancelToken: any(named: 'cancelToken'),
         ),
       ).captured;
 
       final uri = captured[0] as Uri;
       expect(uri.path, contains('/uploads/room-123'));
 
-      final body = captured[1] as List<int>;
-      final bodyString = utf8.decode(body);
+      // Body is a Stream<List<int>>; drain it to inspect the bytes.
+      final body = captured[1] as Stream<List<int>>;
+      final bytes = await body.fold<List<int>>(
+        <int>[],
+        (acc, chunk) => acc..addAll(chunk),
+      );
+      final bodyString = utf8.decode(bytes);
       expect(bodyString, contains('name="upload_file"'));
       expect(bodyString, contains('filename="test.txt"'));
       expect(bodyString, contains('file content'));
@@ -70,52 +78,66 @@ void main() {
         headers['content-type'],
         startsWith('multipart/form-data; boundary='),
       );
+      // Content-Length matches the total body bytes (preamble + file +
+      // footer), not just the file content.
+      expect(int.parse(headers['content-length']!), equals(bytes.length));
     });
   });
 
   group('uploadFileToThread', () {
-    test('sends multipart POST to /uploads/{roomId}/{threadId}', () async {
-      when(
-        () => mockTransport.request<void>(
-          any(),
-          any(),
-          body: any(named: 'body'),
-          headers: any(named: 'headers'),
-        ),
-      ).thenAnswer((_) async {});
+    test(
+      'sends streamed multipart POST to /uploads/{roomId}/{threadId}',
+      () async {
+        when(
+          () => mockTransport.request<void>(
+            any(),
+            any(),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer((_) async {});
 
-      final fileBytes = utf8.encode('thread file');
+        final fileBytes = utf8.encode('thread file');
 
-      await api.uploadFileToThread(
-        'room-123',
-        'thread-456',
-        filename: 'report.pdf',
-        fileBytes: fileBytes,
-      );
+        await api.uploadFileToThread(
+          'room-123',
+          'thread-456',
+          filename: 'report.pdf',
+          openStream: () => Stream<List<int>>.value(fileBytes),
+          contentLength: fileBytes.length,
+        );
 
-      final captured = verify(
-        () => mockTransport.request<void>(
-          'POST',
-          captureAny(),
-          body: captureAny(named: 'body'),
-          headers: captureAny(named: 'headers'),
-        ),
-      ).captured;
+        final captured = verify(
+          () => mockTransport.request<void>(
+            'POST',
+            captureAny(),
+            body: captureAny(named: 'body'),
+            headers: captureAny(named: 'headers'),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).captured;
 
-      final uri = captured[0] as Uri;
-      expect(uri.path, contains('/uploads/room-123/thread-456'));
+        final uri = captured[0] as Uri;
+        expect(uri.path, contains('/uploads/room-123/thread-456'));
 
-      final body = captured[1] as List<int>;
-      final bodyString = utf8.decode(body);
-      expect(bodyString, contains('filename="report.pdf"'));
-      expect(bodyString, contains('thread file'));
+        final body = captured[1] as Stream<List<int>>;
+        final bytes = await body.fold<List<int>>(
+          <int>[],
+          (acc, chunk) => acc..addAll(chunk),
+        );
+        final bodyString = utf8.decode(bytes);
+        expect(bodyString, contains('filename="report.pdf"'));
+        expect(bodyString, contains('thread file'));
 
-      final headers = captured[2] as Map<String, String>;
-      expect(
-        headers['content-type'],
-        startsWith('multipart/form-data; boundary='),
-      );
-    });
+        final headers = captured[2] as Map<String, String>;
+        expect(
+          headers['content-type'],
+          startsWith('multipart/form-data; boundary='),
+        );
+        expect(int.parse(headers['content-length']!), equals(bytes.length));
+      },
+    );
   });
 
   group('getRoomUploads', () {

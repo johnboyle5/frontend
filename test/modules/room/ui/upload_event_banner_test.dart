@@ -48,7 +48,8 @@ void main() {
         any(),
         any(),
         filename: any(named: 'filename'),
-        fileBytes: any(named: 'fileBytes'),
+        openStream: any(named: 'openStream'),
+        contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
       ),
     ).thenAnswer((_) async {});
@@ -107,7 +108,8 @@ void main() {
         any(),
         any(),
         filename: any(named: 'filename'),
-        fileBytes: any(named: 'fileBytes'),
+        openStream: any(named: 'openStream'),
+        contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
       ),
     ).thenThrow(const NetworkException(message: 'wifi down'));
@@ -169,7 +171,8 @@ void main() {
         any(),
         any(),
         filename: any(named: 'filename'),
-        fileBytes: any(named: 'fileBytes'),
+        openStream: any(named: 'openStream'),
+        contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
       ),
     ).thenThrow(const NetworkException(message: 'wifi down'));
@@ -204,7 +207,8 @@ void main() {
         any(),
         any(),
         filename: any(named: 'filename'),
-        fileBytes: any(named: 'fileBytes'),
+        openStream: any(named: 'openStream'),
+        contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
       ),
     ).thenAnswer((_) async {
@@ -276,7 +280,8 @@ void main() {
         any(),
         any(),
         filename: any(named: 'filename'),
-        fileBytes: any(named: 'fileBytes'),
+        openStream: any(named: 'openStream'),
+        contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
       ),
     ).thenThrow(const NetworkException(message: 'prior'));
@@ -396,7 +401,8 @@ void main() {
         any(),
         any(),
         filename: any(named: 'filename'),
-        fileBytes: any(named: 'fileBytes'),
+        openStream: any(named: 'openStream'),
+        contentLength: any(named: 'contentLength'),
         mimeType: any(named: 'mimeType'),
       ),
     ).thenAnswer((_) async {

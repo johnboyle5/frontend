@@ -263,7 +263,8 @@ class UploadTracker {
       post: () => _api.uploadFileToRoom(
         roomId,
         filename: filename,
-        fileBytes: fileBytes,
+        openStream: () => Stream<List<int>>.value(fileBytes),
+        contentLength: fileBytes.length,
         mimeType: mimeType,
       ),
       refresh: () => _refresh(
@@ -288,7 +289,8 @@ class UploadTracker {
         roomId,
         threadId,
         filename: filename,
-        fileBytes: fileBytes,
+        openStream: () => Stream<List<int>>.value(fileBytes),
+        contentLength: fileBytes.length,
         mimeType: mimeType,
       ),
       refresh: () => _refresh(
