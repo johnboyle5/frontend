@@ -812,6 +812,7 @@ void main() {
               headers: any(named: 'headers'),
               body: any(named: 'body'),
               timeout: any(named: 'timeout'),
+              cancelToken: any(named: 'cancelToken'),
             ),
           ).thenAnswer((_) async {
             // Cancel after request starts
@@ -849,6 +850,7 @@ void main() {
             headers: any(named: 'headers'),
             body: any(named: 'body'),
             timeout: any(named: 'timeout'),
+            cancelToken: any(named: 'cancelToken'),
           ),
         ).thenAnswer((_) async => jsonResponse(200, body: {'result': 'ok'}));
 
