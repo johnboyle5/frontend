@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show FileSystemException;
+import 'dart:io' show FileSystemException, SocketException;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -368,7 +368,10 @@ void main() {
       expect(entries, hasLength(1));
       final failed = entries.single as FailedUpload;
       expect(failed.filename, 'fail.pdf');
-      expect(failed.message, contains('nope'));
+      expect(
+        failed.message,
+        'Server is temporarily unavailable. Try uploading again in a moment.',
+      );
 
       // No extra list fetch was triggered by the failure — the catch
       // path must not call refresh. (Initial fetch is the one call.)
@@ -938,7 +941,7 @@ void main() {
       final status = tracker.roomUploads('room-1').value as UploadsLoaded;
       final failed = status.uploads.whereType<FailedUpload>().single;
       expect(failed.filename, 'fail.pdf');
-      expect(failed.message, contains('token expired'));
+      expect(failed.message, 'Session expired. Please sign in again.');
     });
 
     test(
@@ -1078,6 +1081,70 @@ void main() {
         uploadErrorMessage(wrapped),
         'Could not read file from disk.',
       );
+    });
+
+    test('415 ApiException surfaces as unsupported file type message', () {
+      final message = uploadErrorMessage(
+        const ApiException(
+          statusCode: 415,
+          message: 'Unsupported Media Type',
+        ),
+      );
+      expect(message, "This file type isn't supported.");
+    });
+
+    test('5xx ApiException surfaces as temporarily-unavailable message', () {
+      for (final statusCode in [500, 502, 503, 504]) {
+        final message = uploadErrorMessage(
+          ApiException(statusCode: statusCode, message: 'boom'),
+        );
+        expect(
+          message,
+          'Server is temporarily unavailable. Try uploading again in a moment.',
+          reason: 'statusCode=$statusCode',
+        );
+      }
+    });
+
+    test('NetworkException(isTimeout: true) surfaces as upload-timeout message',
+        () {
+      final message = uploadErrorMessage(
+        NetworkException(message: 'Read timeout', isTimeout: true),
+      );
+      expect(
+        message,
+        'Upload timed out. Try a smaller file or check your connection.',
+      );
+    });
+
+    test(
+      'NetworkException wrapping a SocketException surfaces as '
+      'connection-lost message',
+      () {
+        final message = uploadErrorMessage(
+          NetworkException(
+            message: 'Stream error',
+            originalError: const SocketException('Connection reset by peer'),
+          ),
+        );
+        expect(message, 'Network connection lost. Try uploading again.');
+      },
+    );
+
+    test('AuthException(statusCode: 401) surfaces as session-expired message',
+        () {
+      final message = uploadErrorMessage(
+        const AuthException(statusCode: 401, message: 'token expired'),
+      );
+      expect(message, 'Session expired. Please sign in again.');
+    });
+
+    test('AuthException(statusCode: 403) surfaces as no-permission message',
+        () {
+      final message = uploadErrorMessage(
+        const AuthException(statusCode: 403, message: 'forbidden'),
+      );
+      expect(message, "You don't have permission to upload here.");
     });
 
     test('CancelledException does not produce a Failed row', () async {

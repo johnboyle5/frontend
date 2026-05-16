@@ -1,7 +1,7 @@
 import 'dart:async' show unawaited;
 import 'dart:collection' show Queue;
 import 'dart:developer' as dev;
-import 'dart:io' show FileSystemException;
+import 'dart:io' show FileSystemException, SocketException;
 
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_client/soliplex_client.dart';
@@ -80,11 +80,16 @@ class FailedUpload extends DisplayUpload {
 /// upload-specific failure modes to friendlier messages before falling
 /// back to the [SoliplexException.message], then to a generic string.
 String uploadErrorMessage(Object error) {
-  // 413 Request Entity Too Large — backend or edge proxy rejected the
-  // upload size. Surfaces the same friendly message regardless of
-  // whether the body said anything useful.
-  if (error is ApiException && error.statusCode == 413) {
-    return 'File is too large to upload.';
+  if (error is ApiException) {
+    // 413 Request Entity Too Large — backend or edge proxy rejected
+    // the upload size. Surfaces the same friendly message regardless
+    // of whether the body said anything useful.
+    if (error.statusCode == 413) return 'File is too large to upload.';
+    if (error.statusCode == 415) return "This file type isn't supported.";
+    if (error.statusCode >= 500) {
+      return 'Server is temporarily unavailable. '
+          'Try uploading again in a moment.';
+    }
   }
 
   // The lazy openStream() failed to read the file (typical cause: the
@@ -94,6 +99,24 @@ String uploadErrorMessage(Object error) {
   // by inspecting the error and its originalError.
   if (_isFileSystemRead(error)) {
     return 'Could not read file from disk.';
+  }
+
+  if (error is NetworkException) {
+    if (error.isTimeout) {
+      return 'Upload timed out. Try a smaller file or check your connection.';
+    }
+    if (error.originalError is SocketException) {
+      return 'Network connection lost. Try uploading again.';
+    }
+  }
+
+  if (error is AuthException) {
+    if (error.statusCode == 401) {
+      return 'Session expired. Please sign in again.';
+    }
+    if (error.statusCode == 403) {
+      return "You don't have permission to upload here.";
+    }
   }
 
   if (error is SoliplexException) return error.message;
