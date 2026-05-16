@@ -61,11 +61,15 @@ class FlutterMarkdownPlusRenderer extends MarkdownRenderer {
 
 Widget _buildImage(Uri uri, String? title, String? alt) {
   if (uri.scheme == 'data') {
-    final decoded = tryDecodeImageDataUri(uri.toString());
-    if (decoded == null) return BrokenImagePlaceholder(alt: alt);
+    final rawUri = uri.toString();
+    final decoded = tryDecodeImageDataUri(rawUri);
+    if (decoded == null) {
+      return BrokenDataUriBlock(rawUri: rawUri, alt: alt);
+    }
     return Image.memory(
       decoded.bytes,
-      errorBuilder: (_, __, ___) => BrokenImagePlaceholder(alt: alt),
+      errorBuilder: (_, __, ___) =>
+          BrokenDataUriBlock(rawUri: rawUri, alt: alt),
     );
   }
   if (uri.scheme == 'http' || uri.scheme == 'https') {

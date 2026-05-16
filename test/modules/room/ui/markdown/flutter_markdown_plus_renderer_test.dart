@@ -113,6 +113,39 @@ void main() {
       expect(find.byType(BrokenImagePlaceholder), findsOneWidget);
     });
 
+    testWidgets(
+        'broken data URI image toggles to a source view exposing the raw URI',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: FlutterMarkdownPlusRenderer(
+              data: '![alt](data:image/png;base64,AAAAAA)',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Default mode shows the broken-image preview, no raw URI text.
+      expect(find.byType(BrokenDataUriBlock), findsOneWidget);
+      expect(find.byType(BrokenImagePlaceholder), findsOneWidget);
+      expect(find.byType(SelectableText), findsNothing);
+
+      // Toggle to source view.
+      await tester.tap(find.byIcon(Icons.code));
+      await tester.pump();
+
+      expect(find.byType(BrokenImagePlaceholder), findsNothing);
+      // Uri.toString() normalises truncated base64 by adding `=` padding, so
+      // we assert against the normalised form rather than the raw markdown
+      // source.
+      expect(
+        find.text('data:image/png;base64,AAAAAA=='),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('valid PNG data URI renders an Image widget', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
