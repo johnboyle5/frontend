@@ -74,6 +74,7 @@ class ObservableHttpClient implements SoliplexHttpClient {
     Map<String, String>? headers,
     Object? body,
     Duration? timeout,
+    CancelToken? cancelToken,
   }) async {
     final requestId = _generateRequestId();
     final startTime = DateTime.now();
@@ -102,6 +103,7 @@ class ObservableHttpClient implements SoliplexHttpClient {
         headers: headers,
         body: body,
         timeout: timeout,
+        cancelToken: cancelToken,
       );
 
       final endTime = DateTime.now();
@@ -319,6 +321,15 @@ class ObservableHttpClient implements SoliplexHttpClient {
     Uri uri,
   ) {
     if (body == null) return null;
+
+    // Streamed bodies must never be consumed here — listening to the
+    // stream would steal events from the platform client. Return a
+    // placeholder derived from the Content-Length header.
+    if (body is Stream<List<int>>) {
+      final contentLength =
+          headers?['content-length'] ?? headers?['Content-Length'] ?? 'unknown';
+      return '<stream upload: $contentLength bytes>';
+    }
 
     if (body is List<int>) {
       final contentType = headers?['content-type']?.toLowerCase() ?? '';

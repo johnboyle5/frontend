@@ -266,7 +266,7 @@ class _RoomScreenState extends State<RoomScreen> {
   Future<PickedFile?> _pickWithErrorSurfacing({String? threadId}) async {
     try {
       return await pickFile();
-    } on PickFileException catch (e, st) {
+    } on PickFilePickerException catch (e, st) {
       if (!mounted) return null;
       dev.log(
         'File pick failed',
@@ -275,21 +275,11 @@ class _RoomScreenState extends State<RoomScreen> {
         name: 'RoomScreen',
         level: 1000,
       );
-      final (filename, message) = switch (e) {
-        PickFileReadException(:final filename) => (
-            filename,
-            'Failed to read file',
-          ),
-        PickFilePickerException(:final filename) => (
-            filename ?? '(unknown)',
-            'Could not open file picker',
-          ),
-      };
       _state.uploadTracker.recordClientError(
         roomId: widget.roomId,
         threadId: threadId,
-        filename: filename,
-        message: message,
+        filename: e.filename ?? '(unknown)',
+        message: pickerErrorMessage(e),
       );
       return null;
     }
@@ -302,7 +292,8 @@ class _RoomScreenState extends State<RoomScreen> {
       roomId: widget.roomId,
       threadId: threadId,
       filename: file.name,
-      fileBytes: file.bytes,
+      openStream: file.openStream,
+      contentLength: file.size,
       mimeType: file.mimeType,
     );
   }
@@ -320,7 +311,8 @@ class _RoomScreenState extends State<RoomScreen> {
       roomId: widget.roomId,
       threadId: threadId,
       filename: file.name,
-      fileBytes: file.bytes,
+      openStream: file.openStream,
+      contentLength: file.size,
       mimeType: file.mimeType,
     );
   }
@@ -758,7 +750,14 @@ class _RoomScreenState extends State<RoomScreen> {
             SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: color),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: color,
+                value: switch (entry) {
+                  PendingUpload(:final progress) => progress,
+                  _ => null,
+                },
+              ),
             ),
           const SizedBox(width: 8),
           Expanded(

@@ -1,5 +1,6 @@
 import 'dart:async' show unawaited;
 import 'dart:developer' as dev;
+import 'dart:io' show FileSystemException;
 
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:soliplex_client/soliplex_client.dart';
@@ -38,8 +39,29 @@ class PersistedUpload extends DisplayUpload {
 }
 
 class PendingUpload extends DisplayUpload {
-  const PendingUpload({required this.id, required super.filename});
+  const PendingUpload({
+    required this.id,
+    required super.filename,
+    required this.sentBytes,
+    required this.totalBytes,
+  });
   final String id;
+
+  /// Bytes successfully sent for the in-flight POST. After the server
+  /// confirms the upload (but before the persisted list refresh observes
+  /// it), this equals [totalBytes] — the row shows 100% briefly.
+  final int sentBytes;
+
+  /// Declared content length of the upload, used to compute progress.
+  /// Equal to the file size for single-file uploads.
+  final int totalBytes;
+
+  /// Progress in `[0, 1]`, or `null` for indeterminate (empty file or
+  /// unknown length).
+  double? get progress {
+    if (totalBytes <= 0) return null;
+    return (sentBytes / totalBytes).clamp(0.0, 1.0);
+  }
 }
 
 class FailedUpload extends DisplayUpload {
@@ -53,12 +75,36 @@ class FailedUpload extends DisplayUpload {
 }
 
 /// Formats an error for user display without leaking raw exception
-/// internals (stack frames, request URLs, auth headers). Extracts the
-/// message from known [SoliplexException] subtypes; falls back to a
-/// fixed, translatable string for anything else.
+/// internals (stack frames, request URLs, auth headers). Maps a few
+/// upload-specific failure modes to friendlier messages before falling
+/// back to the [SoliplexException.message], then to a generic string.
 String uploadErrorMessage(Object error) {
+  // 413 Request Entity Too Large — backend or edge proxy rejected the
+  // upload size. Surfaces the same friendly message regardless of
+  // whether the body said anything useful.
+  if (error is ApiException && error.statusCode == 413) {
+    return 'File is too large to upload.';
+  }
+
+  // The lazy openStream() failed to read the file (typical cause: the
+  // user moved or deleted the file between picking and upload).
+  // Surfaces as the API call's `cause` inside NetworkException — and
+  // also directly when the picker reads bytes server-side. Match both
+  // by inspecting the error and its originalError.
+  if (_isFileSystemRead(error)) {
+    return 'Could not read file from disk.';
+  }
+
   if (error is SoliplexException) return error.message;
   return 'Something went wrong. Please try again.';
+}
+
+bool _isFileSystemRead(Object error) {
+  if (error is FileSystemException) return true;
+  if (error is SoliplexException && error.originalError != null) {
+    return error.originalError is FileSystemException;
+  }
+  return false;
 }
 
 /// Internal record for a local upload row. Sealed and immutable:
@@ -71,7 +117,27 @@ sealed class _PendingRecord {
 }
 
 class _Pending extends _PendingRecord {
-  const _Pending({required super.id, required super.filename});
+  const _Pending({
+    required super.id,
+    required super.filename,
+    required this.cancelToken,
+    required this.sentBytes,
+    required this.totalBytes,
+  });
+
+  /// Cancellation handle for the in-flight POST. [UploadTracker.dispose]
+  /// cancels every active token so background uploads on detached
+  /// trackers don't keep running.
+  final CancelToken cancelToken;
+
+  /// Bytes the source stream has yielded so far. Updated as the wrapped
+  /// `openStream` factory observes chunks flowing into the multipart
+  /// encoder.
+  final int sentBytes;
+
+  /// Declared content length of the upload (multipart preamble and
+  /// footer are NOT included — this is the file body length).
+  final int totalBytes;
 }
 
 /// Server-confirmed via POST but not yet observed in the persisted
@@ -79,7 +145,15 @@ class _Pending extends _PendingRecord {
 /// cleaned this record up; the next refresh whose response contains
 /// the filename finally drops it.
 class _Posted extends _PendingRecord {
-  const _Posted({required super.id, required super.filename});
+  const _Posted({
+    required super.id,
+    required super.filename,
+    required this.totalBytes,
+  });
+
+  /// Carried forward from `_Pending` so the row still reports 100%
+  /// while waiting for the refresh that drops it.
+  final int totalBytes;
 }
 
 class _Failed extends _PendingRecord {
@@ -253,18 +327,23 @@ class UploadTracker {
   void uploadToRoom({
     required String roomId,
     required String filename,
-    required List<int> fileBytes,
+    required Stream<List<int>> Function() openStream,
+    required int contentLength,
     String mimeType = 'application/octet-stream',
   }) {
     final key = _roomKey(roomId);
     _startUpload(
       key: key,
       filename: filename,
-      post: () => _api.uploadFileToRoom(
+      openStream: openStream,
+      contentLength: contentLength,
+      runPost: (wrappedOpenStream, token) => _api.uploadFileToRoom(
         roomId,
         filename: filename,
-        fileBytes: fileBytes,
+        openStream: wrappedOpenStream,
+        contentLength: contentLength,
         mimeType: mimeType,
+        cancelToken: token,
       ),
       refresh: () => _refresh(
         key: key,
@@ -277,19 +356,24 @@ class UploadTracker {
     required String roomId,
     required String threadId,
     required String filename,
-    required List<int> fileBytes,
+    required Stream<List<int>> Function() openStream,
+    required int contentLength,
     String mimeType = 'application/octet-stream',
   }) {
     final key = _threadKey(roomId, threadId);
     _startUpload(
       key: key,
       filename: filename,
-      post: () => _api.uploadFileToThread(
+      openStream: openStream,
+      contentLength: contentLength,
+      runPost: (wrappedOpenStream, token) => _api.uploadFileToThread(
         roomId,
         threadId,
         filename: filename,
-        fileBytes: fileBytes,
+        openStream: wrappedOpenStream,
+        contentLength: contentLength,
         mimeType: mimeType,
+        cancelToken: token,
       ),
       refresh: () => _refresh(
         key: key,
@@ -299,76 +383,183 @@ class UploadTracker {
     );
   }
 
+  /// Number of times a streamed POST is re-attempted after an
+  /// `AuthException`. One retry suffices for the transient
+  /// token-expired-mid-upload case: between attempts the request
+  /// re-enters `RefreshingHttpClient`, which runs proactive refresh on
+  /// every dispatch and replaces the stale token before attempt 2.
+  /// If the second attempt still 401s, refresh itself is broken (e.g.
+  /// signed out elsewhere) — more attempts wouldn't help.
+  static const int _maxAuthRetries = 1;
+
+  /// Progress emissions are coalesced to one signal update per
+  /// 50 ms (≈20 Hz) per upload. Final emission (`sent == total`)
+  /// always fires regardless of throttle.
+  static const Duration _progressEmitInterval = Duration(milliseconds: 50);
+
   void _startUpload({
     required String key,
     required String filename,
-    required Future<void> Function() post,
+    required Stream<List<int>> Function() openStream,
+    required int contentLength,
+    required Future<void> Function(
+      Stream<List<int>> Function(),
+      CancelToken,
+    ) runPost,
     required Future<void> Function() refresh,
   }) {
     if (_isDisposed) return;
     final scope = _scope(key);
     final id = 'upload-${_nextId++}';
-    scope.pending.add(_Pending(id: id, filename: filename));
+    final token = CancelToken();
+    scope.pending.add(
+      _Pending(
+        id: id,
+        filename: filename,
+        cancelToken: token,
+        sentBytes: 0,
+        totalBytes: contentLength,
+      ),
+    );
     _emit(scope);
 
-    unawaited(_runUpload(scope: scope, id: id, post: post, refresh: refresh));
+    // Wrap [openStream] so we can observe chunks as they flow into the
+    // multipart encoder. Local state is captured per-call; on retry,
+    // the wrapper is re-invoked and the counters reset.
+    Stream<List<int>> wrappedOpenStream() async* {
+      var sent = 0;
+      DateTime? lastEmit;
+      await for (final chunk in openStream()) {
+        yield chunk;
+        sent += chunk.length;
+        final isFinal = sent >= contentLength;
+        final now = DateTime.now();
+        final dueByThrottle = lastEmit == null ||
+            now.difference(lastEmit) >= _progressEmitInterval;
+        if (isFinal || dueByThrottle) {
+          lastEmit = now;
+          _updateProgress(scope, id, sent);
+        }
+      }
+    }
+
+    unawaited(
+      _runUpload(
+        scope: scope,
+        id: id,
+        runPost: (t) => runPost(wrappedOpenStream, t),
+        refresh: refresh,
+        token: token,
+      ),
+    );
+  }
+
+  /// Replaces the `_Pending` record at [id] with an updated [sentBytes]
+  /// count, then emits the signal. Silent no-op if the record is gone
+  /// (already Posted/Failed) or the tracker is disposed.
+  void _updateProgress(_ScopeState scope, String id, int sentBytes) {
+    if (_isDisposed) return;
+    final idx = scope.pending.indexWhere((r) => r.id == id);
+    if (idx < 0) return;
+    final record = scope.pending[idx];
+    if (record is! _Pending) return;
+    scope.pending[idx] = _Pending(
+      id: id,
+      filename: record.filename,
+      cancelToken: record.cancelToken,
+      sentBytes: sentBytes,
+      totalBytes: record.totalBytes,
+    );
+    _emit(scope);
   }
 
   Future<void> _runUpload({
     required _ScopeState scope,
     required String id,
-    required Future<void> Function() post,
+    required Future<void> Function(CancelToken) runPost,
     required Future<void> Function() refresh,
+    required CancelToken token,
   }) async {
-    try {
-      await post();
-      if (_isDisposed) return;
+    for (var retries = 0; retries <= _maxAuthRetries; retries++) {
+      try {
+        await runPost(token);
+        if (_isDisposed) return;
 
-      // Replace _Pending with _Posted at the same index. The actual
-      // removal happens in `_fetch` once the filename appears in the
-      // server list.
-      final idx = scope.pending.indexWhere((r) => r.id == id);
-      if (idx < 0) return; // Dismissed during POST.
-      final record = scope.pending[idx];
-      if (record is _Pending) {
-        scope.pending[idx] = _Posted(id: id, filename: record.filename);
-      }
+        // Replace _Pending with _Posted at the same index. The actual
+        // removal happens in `_fetch` once the filename appears in the
+        // server list.
+        final idx = scope.pending.indexWhere((r) => r.id == id);
+        if (idx < 0) return; // Dismissed during POST.
+        final record = scope.pending[idx];
+        if (record is _Pending) {
+          scope.pending[idx] = _Posted(
+            id: id,
+            filename: record.filename,
+            totalBytes: record.totalBytes,
+          );
+        }
 
-      unawaited(refresh());
-    } on Object catch (error, stackTrace) {
-      if (_isDisposed) return;
-      if (error is! SoliplexException) {
-        // Non-Soliplex throw indicates a bug (e.g., TypeError from a
-        // mapper, StateError from a plugin). Log loudly; the user
-        // still sees a Failed row via uploadErrorMessage's fallback.
-        dev.log(
-          'Unexpected error during upload POST',
-          error: error,
-          stackTrace: stackTrace,
-          name: 'UploadTracker',
-          level: 1000,
-        );
-      }
-      final idx = scope.pending.indexWhere((r) => r.id == id);
-      if (idx < 0) {
-        // The dismiss path shouldn't be reachable (UI dismisses only
-        // Failed rows); log loudly if it ever fires so the swallowed
-        // exception is investigated.
-        dev.log(
-          'Upload completed after its pending record was removed',
-          error: error,
-          name: 'UploadTracker',
-          level: 1000,
-        );
+        unawaited(refresh());
+        return;
+      } on CancelledException {
+        // Tracker is being disposed or upload was cancelled externally.
+        // No Failed row needed; the dispose path tears the scope down.
+        return;
+      } on AuthException catch (error) {
+        if (_isDisposed) return;
+        if (retries < _maxAuthRetries) {
+          // The next attempt re-invokes openStream() (via runPost) and
+          // re-enters the auth-aware HTTP stack, which gets a fresh
+          // proactive refresh.
+          dev.log(
+            'Upload hit 401; retrying with a fresh stream',
+            error: error,
+            name: 'UploadTracker',
+          );
+          continue;
+        }
+        _markFailed(scope, id, error);
+        return;
+      } on Object catch (error, stackTrace) {
+        if (_isDisposed) return;
+        if (error is! SoliplexException) {
+          // Non-Soliplex throw indicates a bug (e.g., TypeError from a
+          // mapper, StateError from a plugin). Log loudly; the user
+          // still sees a Failed row via uploadErrorMessage's fallback.
+          dev.log(
+            'Unexpected error during upload POST',
+            error: error,
+            stackTrace: stackTrace,
+            name: 'UploadTracker',
+            level: 1000,
+          );
+        }
+        _markFailed(scope, id, error);
         return;
       }
-      scope.pending[idx] = _Failed(
-        id: id,
-        filename: scope.pending[idx].filename,
-        message: uploadErrorMessage(error),
-      );
-      _emit(scope);
     }
+  }
+
+  void _markFailed(_ScopeState scope, String id, Object error) {
+    final idx = scope.pending.indexWhere((r) => r.id == id);
+    if (idx < 0) {
+      // The dismiss path shouldn't be reachable (UI dismisses only
+      // Failed rows); log loudly if it ever fires so the swallowed
+      // exception is investigated.
+      dev.log(
+        'Upload completed after its pending record was removed',
+        error: error,
+        name: 'UploadTracker',
+        level: 1000,
+      );
+      return;
+    }
+    scope.pending[idx] = _Failed(
+      id: id,
+      filename: scope.pending[idx].filename,
+      message: uploadErrorMessage(error),
+    );
+    _emit(scope);
   }
 
   // --------------------------------------------------------
@@ -436,14 +627,27 @@ class UploadTracker {
           PersistedUpload(filename: f.filename, url: f.url),
       for (final p in scope.pending)
         switch (p) {
-          _Pending() ||
-          _Posted() =>
-            PendingUpload(id: p.id, filename: p.filename),
-          _Failed() => FailedUpload(
-              id: p.id,
-              filename: p.filename,
-              message: p.message,
+          _Pending(
+            :final id,
+            :final filename,
+            :final sentBytes,
+            :final totalBytes,
+          ) =>
+            PendingUpload(
+              id: id,
+              filename: filename,
+              sentBytes: sentBytes,
+              totalBytes: totalBytes,
             ),
+          _Posted(:final id, :final filename, :final totalBytes) =>
+            PendingUpload(
+              id: id,
+              filename: filename,
+              sentBytes: totalBytes,
+              totalBytes: totalBytes,
+            ),
+          _Failed(:final id, :final filename, :final message) =>
+            FailedUpload(id: id, filename: filename, message: message),
         },
     ];
 
@@ -462,6 +666,14 @@ class UploadTracker {
     if (_isDisposed) return;
     _isDisposed = true;
     for (final scope in _scopes.values) {
+      // Cancel any in-flight uploads. The POST futures see the
+      // injected sink error and abort cleanly; _runUpload catches the
+      // CancelledException and exits without writing a Failed row.
+      for (final record in scope.pending) {
+        if (record is _Pending) {
+          record.cancelToken.cancel('disposed');
+        }
+      }
       scope.dispose();
     }
     _scopes.clear();

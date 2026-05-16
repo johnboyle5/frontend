@@ -1244,23 +1244,35 @@ class SoliplexApi {
   ///
   /// The backend stores the file at `{upload_path}/rooms/{roomId}/`.
   /// Requires admin access.
+  ///
+  /// [openStream] is called once per attempt and must return a fresh
+  /// `Stream<List<int>>` of the file's bytes. [contentLength] is the
+  /// exact byte length of those contents — used by the transport to set
+  /// the request's `Content-Length` header.
   Future<void> uploadFileToRoom(
     String roomId, {
     required String filename,
-    required List<int> fileBytes,
+    required Stream<List<int>> Function() openStream,
+    required int contentLength,
     String mimeType = 'application/octet-stream',
+    CancelToken? cancelToken,
   }) async {
-    final encoded = encodeMultipart(
+    final encoded = encodeMultipartStream(
       fieldName: 'upload_file',
       filename: filename,
-      fileBytes: fileBytes,
+      openStream: openStream,
+      contentLength: contentLength,
       mimeType: mimeType,
     );
     await _transport.request<void>(
       'POST',
       _urlBuilder.build(pathSegments: ['uploads', roomId]),
-      body: encoded.bodyBytes,
-      headers: {'content-type': encoded.contentType},
+      body: encoded.bodyStream,
+      headers: {
+        'content-type': encoded.contentType,
+        'content-length': '${encoded.contentLength}',
+      },
+      cancelToken: cancelToken,
     );
   }
 
@@ -1268,24 +1280,36 @@ class SoliplexApi {
   ///
   /// The backend stores the file at `{upload_path}/threads/{threadId}/`.
   /// Requires room membership and a valid thread ID.
+  ///
+  /// [openStream] is called once per attempt and must return a fresh
+  /// `Stream<List<int>>` of the file's bytes. [contentLength] is the
+  /// exact byte length of those contents — used by the transport to set
+  /// the request's `Content-Length` header.
   Future<void> uploadFileToThread(
     String roomId,
     String threadId, {
     required String filename,
-    required List<int> fileBytes,
+    required Stream<List<int>> Function() openStream,
+    required int contentLength,
     String mimeType = 'application/octet-stream',
+    CancelToken? cancelToken,
   }) async {
-    final encoded = encodeMultipart(
+    final encoded = encodeMultipartStream(
       fieldName: 'upload_file',
       filename: filename,
-      fileBytes: fileBytes,
+      openStream: openStream,
+      contentLength: contentLength,
       mimeType: mimeType,
     );
     await _transport.request<void>(
       'POST',
       _urlBuilder.build(pathSegments: ['uploads', roomId, threadId]),
-      body: encoded.bodyBytes,
-      headers: {'content-type': encoded.contentType},
+      body: encoded.bodyStream,
+      headers: {
+        'content-type': encoded.contentType,
+        'content-length': '${encoded.contentLength}',
+      },
+      cancelToken: cancelToken,
     );
   }
 

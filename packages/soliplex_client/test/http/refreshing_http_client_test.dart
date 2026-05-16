@@ -55,6 +55,7 @@ class FakeHttpClient implements SoliplexHttpClient {
     Map<String, String>? headers,
     Object? body,
     Duration? timeout,
+    CancelToken? cancelToken,
   }) async {
     if (_callIndex >= _responses.length) {
       throw StateError(
@@ -272,6 +273,30 @@ void main() {
         );
 
         expect(response.statusCode, equals(403));
+        verifyNever(() => mockRefresher.tryRefresh());
+        client.close();
+      });
+
+      test('does not retry 401 when body is a Stream<List<int>>', () async {
+        setupRequestSuccess(401);
+
+        final client = RefreshingHttpClient(
+          inner: mockClient,
+          refresher: mockRefresher,
+        );
+
+        final response = await client.request(
+          'POST',
+          Uri.parse('https://example.com/api'),
+          body: Stream<List<int>>.fromIterable([
+            [1, 2, 3],
+          ]),
+          headers: {'content-length': '3'},
+        );
+
+        // 401 bubbles up unchanged — no refresh attempted because the
+        // stream body can't be replayed.
+        expect(response.statusCode, equals(401));
         verifyNever(() => mockRefresher.tryRefresh());
         client.close();
       });

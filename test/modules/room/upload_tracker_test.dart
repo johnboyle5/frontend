@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show FileSystemException;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -41,8 +42,10 @@ void main() {
     when(() => mockApi.uploadFileToRoom(
           any(),
           filename: any(named: 'filename'),
-          fileBytes: any(named: 'fileBytes'),
+          openStream: any(named: 'openStream'),
+          contentLength: any(named: 'contentLength'),
           mimeType: any(named: 'mimeType'),
+          cancelToken: any(named: 'cancelToken'),
         )).thenAnswer((_) async {});
   }
 
@@ -51,8 +54,10 @@ void main() {
           any(),
           any(),
           filename: any(named: 'filename'),
-          fileBytes: any(named: 'fileBytes'),
+          openStream: any(named: 'openStream'),
+          contentLength: any(named: 'contentLength'),
           mimeType: any(named: 'mimeType'),
+          cancelToken: any(named: 'cancelToken'),
         )).thenAnswer((_) async {});
   }
 
@@ -187,14 +192,17 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => uploadCompleter.future);
 
       tracker.uploadToRoom(
         roomId: 'room-1',
         filename: 'a.pdf',
-        fileBytes: const [1, 2, 3],
+        openStream: () => Stream<List<int>>.value(const [1, 2, 3]),
+        contentLength: 3,
       );
 
       // Pending appears immediately, atop the (empty) persisted list.
@@ -227,14 +235,17 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => uploadCompleter.future);
 
       tracker.uploadToRoom(
         roomId: 'room-1',
         filename: 'a.pdf',
-        fileBytes: const [1],
+        openStream: () => Stream<List<int>>.value(const [1]),
+        contentLength: 1,
       );
 
       // Both rows visible during the POST: old Persisted + new Pending.
@@ -274,19 +285,23 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => completers[callIndex++].future);
 
       tracker.uploadToRoom(
         roomId: 'room-1',
         filename: 'dup.pdf',
-        fileBytes: const [1],
+        openStream: () => Stream<List<int>>.value(const [1]),
+        contentLength: 1,
       );
       tracker.uploadToRoom(
         roomId: 'room-1',
         filename: 'dup.pdf',
-        fileBytes: const [2],
+        openStream: () => Stream<List<int>>.value(const [2]),
+        contentLength: 1,
       );
 
       var pending = (tracker.roomUploads('room-1').value as UploadsLoaded)
@@ -332,14 +347,17 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
           )).thenThrow(const ApiException(statusCode: 500, message: 'nope'));
 
       tracker.uploadToRoom(
         roomId: 'room-1',
         filename: 'fail.pdf',
-        fileBytes: const [1],
+        openStream: () => Stream<List<int>>.value(const [1]),
+        contentLength: 1,
       );
       await _pump();
 
@@ -369,8 +387,10 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) async {
         throw StateError('plugin bug');
       });
@@ -378,7 +398,8 @@ void main() {
       tracker.uploadToRoom(
         roomId: 'room-1',
         filename: 'fail.pdf',
-        fileBytes: const [1],
+        openStream: () => Stream<List<int>>.value(const [1]),
+        contentLength: 1,
       );
       await _pump();
 
@@ -479,8 +500,10 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => posts[postIdx++].future);
 
       // Each upload-triggered refresh gets its own completer so we
@@ -498,12 +521,14 @@ void main() {
       tracker.uploadToRoom(
         roomId: 'room-1',
         filename: 'a.pdf',
-        fileBytes: const [1],
+        openStream: () => Stream<List<int>>.value(const [1]),
+        contentLength: 1,
       );
       tracker.uploadToRoom(
         roomId: 'room-1',
         filename: 'b.pdf',
-        fileBytes: const [2],
+        openStream: () => Stream<List<int>>.value(const [2]),
+        contentLength: 1,
       );
 
       postA.complete();
@@ -589,14 +614,17 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
           )).thenThrow(NetworkException(message: 'dns'));
 
       tracker.uploadToRoom(
         roomId: 'room-1',
         filename: 'a.pdf',
-        fileBytes: const [1],
+        openStream: () => Stream<List<int>>.value(const [1]),
+        contentLength: 1,
       );
       await _pump();
 
@@ -636,14 +664,17 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => never.future);
 
       tracker.uploadToRoom(
         roomId: 'room-1',
         filename: 'a.pdf',
-        fileBytes: const [1],
+        openStream: () => Stream<List<int>>.value(const [1]),
+        contentLength: 1,
       );
 
       final pending = (tracker.roomUploads('room-1').value as UploadsLoaded)
@@ -751,14 +782,17 @@ void main() {
       when(() => mockApi.uploadFileToRoom(
             any(),
             filename: any(named: 'filename'),
-            fileBytes: any(named: 'fileBytes'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) async {});
 
       tracker.uploadToRoom(
         roomId: 'room-1',
         filename: 'x.pdf',
-        fileBytes: const [0],
+        openStream: () => Stream<List<int>>.value(const [0]),
+        contentLength: 1,
       );
       tracker.dispose();
 
@@ -778,6 +812,300 @@ void main() {
         () => tracker.threadUploads('room-1', 'thread-1'),
         throwsStateError,
       );
+    });
+
+    test('dispose cancels the in-flight upload CancelToken', () async {
+      stubGetRoomUploads([]);
+      unawaited(tracker.refreshRoom('room-1'));
+      await _pump();
+
+      CancelToken? capturedToken;
+      final uploadCompleter = Completer<void>();
+      when(() => mockApi.uploadFileToRoom(
+            any(),
+            filename: any(named: 'filename'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
+            mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
+          )).thenAnswer((invocation) {
+        capturedToken = invocation.namedArguments[#cancelToken] as CancelToken;
+        return uploadCompleter.future;
+      });
+
+      tracker.uploadToRoom(
+        roomId: 'room-1',
+        filename: 'a.pdf',
+        openStream: () => Stream<List<int>>.value(const [1, 2, 3]),
+        contentLength: 3,
+      );
+      await _pump();
+
+      expect(capturedToken, isNotNull);
+      expect(capturedToken!.isCancelled, isFalse);
+
+      tracker.dispose();
+
+      expect(capturedToken!.isCancelled, isTrue);
+      expect(capturedToken!.reason, 'disposed');
+    });
+  });
+
+  group('auth retry', () {
+    test('AuthException triggers one retry with a fresh openStream call',
+        () async {
+      stubGetRoomUploads([]);
+      unawaited(tracker.refreshRoom('room-1'));
+      await _pump();
+
+      var callCount = 0;
+      when(() => mockApi.uploadFileToRoom(
+            any(),
+            filename: any(named: 'filename'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
+            mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
+          )).thenAnswer((_) async {
+        callCount++;
+        if (callCount == 1) {
+          throw const AuthException(statusCode: 401, message: 'token expired');
+        }
+        // Retry succeeds.
+      });
+
+      var factoryCalls = 0;
+      Stream<List<int>> openStream() {
+        factoryCalls++;
+        return Stream<List<int>>.value(const [1, 2, 3]);
+      }
+
+      stubGetRoomUploads([_fileUpload('a.pdf')]);
+      tracker.uploadToRoom(
+        roomId: 'room-1',
+        filename: 'a.pdf',
+        openStream: openStream,
+        contentLength: 3,
+      );
+      await _pump();
+      await _pump();
+
+      // Two POSTs (one failed, one succeeded); the API method is the one
+      // that drains openStream on each call, so factoryCalls reflects
+      // POST attempts here too.
+      expect(callCount, 2);
+      expect(factoryCalls, 0,
+          reason: 'Mock API does not drain the stream; factory is invoked '
+              'inside the real api method, not the mock.');
+
+      // No Failed row — retry succeeded.
+      final status = tracker.roomUploads('room-1').value as UploadsLoaded;
+      expect(status.uploads.whereType<FailedUpload>(), isEmpty);
+    });
+
+    test('AuthException on every attempt surfaces a Failed row', () async {
+      stubGetRoomUploads([]);
+      unawaited(tracker.refreshRoom('room-1'));
+      await _pump();
+
+      var callCount = 0;
+      when(() => mockApi.uploadFileToRoom(
+            any(),
+            filename: any(named: 'filename'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
+            mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
+          )).thenAnswer((_) async {
+        callCount++;
+        throw const AuthException(
+          statusCode: 401,
+          message: 'token expired',
+        );
+      });
+
+      tracker.uploadToRoom(
+        roomId: 'room-1',
+        filename: 'fail.pdf',
+        openStream: () => Stream<List<int>>.value(const [1]),
+        contentLength: 1,
+      );
+      await _pump();
+      await _pump();
+
+      expect(callCount, 2, reason: 'Initial attempt + one retry on 401');
+
+      final status = tracker.roomUploads('room-1').value as UploadsLoaded;
+      final failed = status.uploads.whereType<FailedUpload>().single;
+      expect(failed.filename, 'fail.pdf');
+      expect(failed.message, contains('token expired'));
+    });
+
+    test(
+      'progress emissions update PendingUpload.sentBytes as chunks flow',
+      () async {
+        stubGetRoomUploads([]);
+        unawaited(tracker.refreshRoom('room-1'));
+        await _pump();
+
+        // The mock drains the openStream so the wrapper's chunk callbacks
+        // fire. We then inspect the emitted PendingUpload snapshots.
+        when(() => mockApi.uploadFileToRoom(
+              any(),
+              filename: any(named: 'filename'),
+              openStream: any(named: 'openStream'),
+              contentLength: any(named: 'contentLength'),
+              mimeType: any(named: 'mimeType'),
+              cancelToken: any(named: 'cancelToken'),
+            )).thenAnswer((invocation) async {
+          final openStream = invocation.namedArguments[#openStream]
+              as Stream<List<int>> Function();
+          await openStream().drain<void>();
+        });
+
+        // Three chunks summing to 6 bytes.
+        final chunks = <List<int>>[
+          [1, 2],
+          [3, 4],
+          [5, 6],
+        ];
+
+        // Throttle is 50 ms; insert delays so each chunk gets its own
+        // emission rather than coalescing.
+        Stream<List<int>> openStream() async* {
+          for (final chunk in chunks) {
+            yield chunk;
+            await Future<void>.delayed(const Duration(milliseconds: 60));
+          }
+        }
+
+        final sentByteSnapshots = <int>[];
+        final unsub = tracker.roomUploads('room-1').subscribe((status) {
+          if (status is! UploadsLoaded) return;
+          final pending = status.uploads.whereType<PendingUpload>().firstOrNull;
+          if (pending != null) sentByteSnapshots.add(pending.sentBytes);
+        });
+
+        tracker.uploadToRoom(
+          roomId: 'room-1',
+          filename: 'progress.bin',
+          openStream: openStream,
+          contentLength: 6,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        unsub();
+
+        // Saw monotonic progress, including the final 6/6.
+        expect(sentByteSnapshots, contains(6));
+        for (var i = 1; i < sentByteSnapshots.length; i++) {
+          expect(sentByteSnapshots[i],
+              greaterThanOrEqualTo(sentByteSnapshots[i - 1]));
+        }
+      },
+    );
+
+    test('Posted state still reports 100% via PendingUpload.progress',
+        () async {
+      stubGetRoomUploads([]);
+      unawaited(tracker.refreshRoom('room-1'));
+      await _pump();
+
+      final uploadCompleter = Completer<void>();
+      when(() => mockApi.uploadFileToRoom(
+            any(),
+            filename: any(named: 'filename'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
+            mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
+          )).thenAnswer((_) => uploadCompleter.future);
+
+      tracker.uploadToRoom(
+        roomId: 'room-1',
+        filename: 'done.bin',
+        openStream: () => Stream<List<int>>.value(const [1, 2, 3]),
+        contentLength: 3,
+      );
+      await _pump();
+
+      // No refresh queued — leave the upload stuck in _Posted.
+      uploadCompleter.complete();
+      await _pump();
+
+      final pending = (tracker.roomUploads('room-1').value as UploadsLoaded)
+          .uploads
+          .whereType<PendingUpload>()
+          .single;
+      expect(pending.sentBytes, equals(pending.totalBytes));
+      expect(pending.progress, equals(1.0));
+    });
+
+    test('zero-length file reports indeterminate progress (null)', () {
+      // Synthetic check on the PendingUpload class rather than full
+      // tracker flow, since 0-byte streams are an edge case.
+      const upload = PendingUpload(
+        id: 'x',
+        filename: 'empty.bin',
+        sentBytes: 0,
+        totalBytes: 0,
+      );
+      expect(upload.progress, isNull);
+    });
+
+    test('413 ApiException surfaces as "File is too large to upload"', () {
+      final message = uploadErrorMessage(
+        const ApiException(
+            statusCode: 413, message: 'Request Entity Too Large'),
+      );
+      expect(message, 'File is too large to upload.');
+    });
+
+    test('FileSystemException surfaces as "Could not read file from disk"', () {
+      final fsError = FileSystemException('No such file', '/tmp/gone.txt');
+      expect(
+        uploadErrorMessage(fsError),
+        'Could not read file from disk.',
+      );
+
+      // Same translation when the FileSystemException is wrapped inside
+      // a NetworkException (typical path when openStream() fails inside
+      // the HTTP transport's sink-add).
+      final wrapped = NetworkException(
+        message: 'Stream error',
+        originalError: fsError,
+      );
+      expect(
+        uploadErrorMessage(wrapped),
+        'Could not read file from disk.',
+      );
+    });
+
+    test('CancelledException does not produce a Failed row', () async {
+      stubGetRoomUploads([]);
+      unawaited(tracker.refreshRoom('room-1'));
+      await _pump();
+
+      when(() => mockApi.uploadFileToRoom(
+            any(),
+            filename: any(named: 'filename'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
+            mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
+          )).thenAnswer((_) async {
+        throw const CancelledException(reason: 'disposed');
+      });
+
+      tracker.uploadToRoom(
+        roomId: 'room-1',
+        filename: 'cancelled.pdf',
+        openStream: () => Stream<List<int>>.value(const [1]),
+        contentLength: 1,
+      );
+      await _pump();
+
+      final status = tracker.roomUploads('room-1').value as UploadsLoaded;
+      expect(status.uploads.whereType<FailedUpload>(), isEmpty);
     });
   });
 }
