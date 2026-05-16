@@ -1,4 +1,8 @@
+import 'dart:io' show Directory, File;
+
 import 'package:file_picker/file_picker.dart';
+// ignore: implementation_imports
+import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:mime/mime.dart';
 
@@ -222,5 +226,73 @@ Future<PickFilesResult?> pickFiles() async {
       ),
     );
   }
+  return (files: files, errors: errors);
+}
+
+/// Opens the platform directory picker and walks the chosen folder for
+/// uploadable files.
+///
+/// Returns `null` when the user cancels OR when the folder contains no
+/// uploadable files after filtering (dotfiles and entries under
+/// dot-prefixed directories are skipped). Both cases are treated as
+/// cancellation: the caller does not enqueue a phantom empty batch.
+///
+/// Each returned [PickedFile] has its name mangled via
+/// [mangleRelativePath] using the picked folder's basename as the root,
+/// so the backend's flat storage and `pathlib.Path(filename).name`
+/// stripping leave the names intact.
+///
+/// Throws [UnsupportedError] on web — folder pick is not available
+/// through the file_picker plugin on that platform. Throws
+/// [PickFilePickerException] when the directory picker plugin itself
+/// fails or the walk hits a fatal I/O error (e.g., permission denied
+/// on a parent directory).
+Future<PickFilesResult?> pickFolder() async {
+  if (kIsWeb) {
+    throw UnsupportedError(
+      'Folder pick is not supported on web. Gate the UI before calling.',
+    );
+  }
+  final String? picked;
+  try {
+    picked = await FilePickerPlatform.instance.getDirectoryPath();
+  } on Object catch (error) {
+    throw PickFilePickerException(cause: error);
+  }
+  if (picked == null) return null;
+
+  final base = picked.replaceAll(RegExp(r'[/\\]+$'), '');
+  final rootName = base.split(RegExp(r'[/\\]')).last;
+
+  final files = <PickedFile>[];
+  final errors = <PickFileItemError>[];
+  try {
+    await for (final entity
+        in Directory(base).list(recursive: true, followLinks: false)) {
+      if (entity is! File) continue;
+      final relative = entity.path.substring(base.length + 1);
+      final segments = relative.split(RegExp(r'[/\\]'));
+      if (segments.any((s) => s.startsWith('.'))) continue;
+      try {
+        final mangledName = mangleRelativePath(rootName, relative);
+        final mimeType =
+            lookupMimeType(mangledName) ?? 'application/octet-stream';
+        files.add(
+          PickedFile(
+            name: mangledName,
+            mimeType: mimeType,
+            size: entity.lengthSync(),
+            openStream: () => openFileStream(entity.path),
+          ),
+        );
+      } on FormatException catch (e) {
+        errors.add(PickFileItemError(filename: relative, cause: e));
+      }
+    }
+  } on Object catch (error) {
+    throw PickFilePickerException(cause: error);
+  }
+
+  if (files.isEmpty && errors.isEmpty) return null;
   return (files: files, errors: errors);
 }

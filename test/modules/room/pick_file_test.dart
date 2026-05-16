@@ -34,6 +34,21 @@ class _FakeFilePicker extends FilePickerPlatform {
   }
 }
 
+class _FakeFolderPicker extends FilePickerPlatform {
+  _FakeFolderPicker(this._directoryPath);
+
+  final String? _directoryPath;
+
+  @override
+  Future<String?> getDirectoryPath({
+    String? dialogTitle,
+    bool lockParentWindow = false,
+    String? initialDirectory,
+  }) async {
+    return _directoryPath;
+  }
+}
+
 void main() {
   late FilePickerPlatform originalPlatform;
 
@@ -247,6 +262,78 @@ void main() {
         mangleRelativePath('myproject', '/src//main.dart/'),
         'myproject__src__main.dart',
       );
+    });
+  });
+
+  group('pickFolder', () {
+    late Directory tempRoot;
+
+    setUp(() async {
+      tempRoot = await Directory.systemTemp.createTemp('pick_folder_test_');
+    });
+
+    tearDown(() async {
+      if (tempRoot.existsSync()) {
+        await tempRoot.delete(recursive: true);
+      }
+    });
+
+    test('returns null when user cancels (no folder selected)', () async {
+      FilePickerPlatform.instance = _FakeFolderPicker(null);
+      expect(await pickFolder(), isNull);
+    });
+
+    test('returns null when folder contains only dotfiles', () async {
+      final folder = await Directory('${tempRoot.path}/empty_proj').create();
+      await File('${folder.path}/.DS_Store').writeAsString('mac junk');
+      await File('${folder.path}/.gitignore').writeAsString('node_modules');
+      FilePickerPlatform.instance = _FakeFolderPicker(folder.path);
+
+      expect(await pickFolder(), isNull);
+    });
+
+    test(
+      'mangles file names using folder basename as root and walks recursively',
+      () async {
+        final folder = await Directory('${tempRoot.path}/myproject').create();
+        await File('${folder.path}/README.md').writeAsString('readme');
+        final src = await Directory('${folder.path}/src').create();
+        await File('${src.path}/main.dart').writeAsString('void main(){}');
+        FilePickerPlatform.instance = _FakeFolderPicker(folder.path);
+
+        final result = await pickFolder();
+        expect(result, isNotNull);
+        expect(result!.errors, isEmpty);
+
+        final names = result.files.map((f) => f.name).toList()..sort();
+        expect(names, [
+          'myproject__README.md',
+          'myproject__src__main.dart',
+        ]);
+
+        // Each PickedFile re-streams its underlying file bytes.
+        final readme =
+            result.files.firstWhere((f) => f.name == 'myproject__README.md');
+        final bytes = await readme
+            .openStream()
+            .fold<List<int>>(<int>[], (acc, c) => acc..addAll(c));
+        expect(utf8.decode(bytes), 'readme');
+      },
+    );
+
+    test('skips dotfiles in the root and files under dot-prefixed dirs',
+        () async {
+      final folder = await Directory('${tempRoot.path}/project_x').create();
+      await File('${folder.path}/keep.txt').writeAsString('keep');
+      await File('${folder.path}/.DS_Store').writeAsString('mac junk');
+      final dotGit = await Directory('${folder.path}/.git').create();
+      await File('${dotGit.path}/HEAD').writeAsString('ref: refs/heads/main');
+      FilePickerPlatform.instance = _FakeFolderPicker(folder.path);
+
+      final result = await pickFolder();
+      expect(result, isNotNull);
+      expect(result!.errors, isEmpty);
+      expect(result.files.map((f) => f.name), ['project_x__keep.txt']);
     });
   });
 
