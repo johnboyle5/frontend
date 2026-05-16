@@ -1108,4 +1108,161 @@ void main() {
       expect(status.uploads.whereType<FailedUpload>(), isEmpty);
     });
   });
+
+  group('global upload queue', () {
+    test(
+      'queues uploads across scopes and drains one at a time in enqueue order',
+      () async {
+        stubGetRoomUploads([]);
+        stubGetThreadUploads([]);
+        unawaited(tracker.refreshRoom('room-1'));
+        unawaited(tracker.refreshThread('room-1', 'thread-1'));
+        await _pump();
+
+        final firstPost = Completer<void>();
+        final secondPost = Completer<void>();
+        when(() => mockApi.uploadFileToRoom(
+              any(),
+              filename: any(named: 'filename'),
+              openStream: any(named: 'openStream'),
+              contentLength: any(named: 'contentLength'),
+              mimeType: any(named: 'mimeType'),
+              cancelToken: any(named: 'cancelToken'),
+            )).thenAnswer((_) => firstPost.future);
+        when(() => mockApi.uploadFileToThread(
+              any(),
+              any(),
+              filename: any(named: 'filename'),
+              openStream: any(named: 'openStream'),
+              contentLength: any(named: 'contentLength'),
+              mimeType: any(named: 'mimeType'),
+              cancelToken: any(named: 'cancelToken'),
+            )).thenAnswer((_) => secondPost.future);
+
+        // Enqueue: room upload first (job A), thread upload second (job B).
+        tracker.uploadToRoom(
+          roomId: 'room-1',
+          filename: 'room-file.pdf',
+          openStream: () => Stream<List<int>>.value(const [1]),
+          contentLength: 1,
+        );
+        tracker.uploadToThread(
+          roomId: 'room-1',
+          threadId: 'thread-1',
+          filename: 'thread-file.pdf',
+          openStream: () => Stream<List<int>>.value(const [2]),
+          contentLength: 1,
+        );
+
+        // Both Pending rows are visible immediately in their respective
+        // scopes, regardless of which job is currently in flight.
+        expect(
+          (tracker.roomUploads('room-1').value as UploadsLoaded)
+              .uploads
+              .whereType<PendingUpload>(),
+          hasLength(1),
+        );
+        expect(
+          (tracker.threadUploads('room-1', 'thread-1').value as UploadsLoaded)
+              .uploads
+              .whereType<PendingUpload>(),
+          hasLength(1),
+        );
+
+        await _pump();
+
+        // Job A is in flight; job B's API has NOT been called yet.
+        verify(() => mockApi.uploadFileToRoom(
+              any(),
+              filename: any(named: 'filename'),
+              openStream: any(named: 'openStream'),
+              contentLength: any(named: 'contentLength'),
+              mimeType: any(named: 'mimeType'),
+              cancelToken: any(named: 'cancelToken'),
+            )).called(1);
+        verifyNever(() => mockApi.uploadFileToThread(
+              any(),
+              any(),
+              filename: any(named: 'filename'),
+              openStream: any(named: 'openStream'),
+              contentLength: any(named: 'contentLength'),
+              mimeType: any(named: 'mimeType'),
+              cancelToken: any(named: 'cancelToken'),
+            ));
+
+        // Finish job A → drainer pulls job B.
+        firstPost.complete();
+        await _pump();
+
+        verify(() => mockApi.uploadFileToThread(
+              any(),
+              any(),
+              filename: any(named: 'filename'),
+              openStream: any(named: 'openStream'),
+              contentLength: any(named: 'contentLength'),
+              mimeType: any(named: 'mimeType'),
+              cancelToken: any(named: 'cancelToken'),
+            )).called(1);
+
+        // Finish job B → queue drains.
+        secondPost.complete();
+        await _pump();
+      },
+    );
+
+    test('dispose cancels queued-but-not-started jobs without invoking the API',
+        () async {
+      stubGetRoomUploads([]);
+      unawaited(tracker.refreshRoom('room-1'));
+      await _pump();
+
+      final blockedFirst = Completer<void>();
+      when(() => mockApi.uploadFileToRoom(
+            any(),
+            filename: any(named: 'filename'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
+            mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
+          )).thenAnswer((_) => blockedFirst.future);
+
+      tracker.uploadToRoom(
+        roomId: 'room-1',
+        filename: 'first.pdf',
+        openStream: () => Stream<List<int>>.value(const [1]),
+        contentLength: 1,
+      );
+      tracker.uploadToRoom(
+        roomId: 'room-1',
+        filename: 'second.pdf',
+        openStream: () => Stream<List<int>>.value(const [2]),
+        contentLength: 1,
+      );
+      await _pump();
+
+      // Only the first job's POST was invoked; the second waits in queue.
+      verify(() => mockApi.uploadFileToRoom(
+            any(),
+            filename: any(named: 'filename'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
+            mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
+          )).called(1);
+
+      tracker.dispose();
+      // Let any pending microtasks settle.
+      await _pump();
+
+      // dispose() did not let the queued job start.
+      verifyNever(() => mockApi.uploadFileToRoom(
+            any(),
+            filename: any(named: 'filename'),
+            openStream: any(named: 'openStream'),
+            contentLength: any(named: 'contentLength'),
+            mimeType: any(named: 'mimeType'),
+            cancelToken: any(named: 'cancelToken'),
+          ));
+    });
+  });
 }

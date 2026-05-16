@@ -1,4 +1,5 @@
 import 'dart:async' show unawaited;
+import 'dart:collection' show Queue;
 import 'dart:developer' as dev;
 import 'dart:io' show FileSystemException;
 
@@ -179,16 +180,45 @@ class _ScopeState {
   }
 }
 
+/// One pending upload job waiting for the global queue's drainer.
+///
+/// The job's `cancelToken` is the same instance stored on the matching
+/// `_Pending` record in `scope.pending`, so `dispose()` cancels both
+/// in-flight jobs (whose POST observes the token error) and
+/// queued-but-not-started jobs (the drainer sees the cancelled token
+/// and skips them).
+class _QueuedJob {
+  _QueuedJob({
+    required this.scope,
+    required this.id,
+    required this.runPost,
+    required this.refresh,
+    required this.token,
+  });
+  final _ScopeState scope;
+  final String id;
+  final Future<void> Function(CancelToken) runPost;
+  final Future<void> Function() refresh;
+  final CancelToken token;
+}
+
 /// Tracks file uploads across rooms and threads, merging a
 /// server-fetched list with an in-flight optimistic view.
 ///
 /// Owned by the registry so uploads started on one screen survive
 /// when the user navigates away before the POST resolves.
+///
+/// All uploads (room and thread) flow through a single global FIFO
+/// queue: one job is in flight at a time. The user sees a Pending row
+/// for every enqueued upload immediately, regardless of where it sits
+/// in the queue.
 class UploadTracker {
   UploadTracker({required SoliplexApi api}) : _api = api;
 
   final SoliplexApi _api;
   final Map<String, _ScopeState> _scopes = {};
+  final Queue<_QueuedJob> _queue = Queue<_QueuedJob>();
+  bool _draining = false;
   bool _isDisposed = false;
   int _nextId = 0;
 
@@ -443,8 +473,8 @@ class UploadTracker {
       }
     }
 
-    unawaited(
-      _runUpload(
+    _enqueue(
+      _QueuedJob(
         scope: scope,
         id: id,
         runPost: (t) => runPost(wrappedOpenStream, t),
@@ -452,6 +482,33 @@ class UploadTracker {
         token: token,
       ),
     );
+  }
+
+  void _enqueue(_QueuedJob job) {
+    if (_isDisposed) return;
+    _queue.addLast(job);
+    if (!_draining) {
+      _draining = true;
+      unawaited(_drain());
+    }
+  }
+
+  Future<void> _drain() async {
+    try {
+      while (_queue.isNotEmpty && !_isDisposed) {
+        final job = _queue.removeFirst();
+        if (job.token.isCancelled) continue;
+        await _runUpload(
+          scope: job.scope,
+          id: job.id,
+          runPost: job.runPost,
+          refresh: job.refresh,
+          token: job.token,
+        );
+      }
+    } finally {
+      _draining = false;
+    }
   }
 
   /// Replaces the `_Pending` record at [id] with an updated [sentBytes]
@@ -666,9 +723,11 @@ class UploadTracker {
     if (_isDisposed) return;
     _isDisposed = true;
     for (final scope in _scopes.values) {
-      // Cancel any in-flight uploads. The POST futures see the
-      // injected sink error and abort cleanly; _runUpload catches the
-      // CancelledException and exits without writing a Failed row.
+      // Cancel both in-flight POSTs and queued-but-not-started jobs.
+      // Each queued job's token is the same CancelToken instance stored
+      // on its `_Pending` record, so this loop cancels both paths.
+      // The drain loop sees `_isDisposed` and exits without invoking
+      // any remaining queued jobs.
       for (final record in scope.pending) {
         if (record is _Pending) {
           record.cancelToken.cancel('disposed');
@@ -676,6 +735,7 @@ class UploadTracker {
       }
       scope.dispose();
     }
+    _queue.clear();
     _scopes.clear();
   }
 }
