@@ -45,47 +45,30 @@ void main() {
     FilePickerPlatform.instance = originalPlatform;
   });
 
-  test('returns null when user cancels the picker', () async {
+  test('pickFiles returns null when user cancels the picker', () async {
     FilePickerPlatform.instance = _FakeFilePicker.result(
       FilePickerResult(const []),
     );
-    expect(await pickFile(), isNull);
+    expect(await pickFiles(), isNull);
   });
 
-  test('wraps picker plugin errors in PickFilePickerException', () async {
+  test('pickFiles wraps whole-picker plugin errors in PickFilePickerException',
+      () async {
     final cause = StateError('plugin not available');
     FilePickerPlatform.instance = _FakeFilePicker.throwing(cause);
 
     expect(
-      pickFile(),
+      pickFiles(),
       throwsA(
-        isA<PickFilePickerException>()
-            .having((e) => e.cause, 'cause', cause)
-            .having((e) => e.filename, 'filename', isNull),
+        isA<PickFilePickerException>().having((e) => e.cause, 'cause', cause),
       ),
     );
   });
 
-  test('throws PickFilePickerException on native when picker returns no path',
-      () async {
-    FilePickerPlatform.instance = _FakeFilePicker.result(
-      FilePickerResult([PlatformFile(name: 'x.pdf', size: 0)]),
-    );
-
-    expect(
-      pickFile(),
-      throwsA(
-        isA<PickFilePickerException>()
-            .having((e) => e.filename, 'filename', 'x.pdf')
-            .having((e) => e.cause, 'cause', isA<StateError>()),
-      ),
-    );
-  });
-
-  test('returns PickedFile with size and MIME for native path-based pick',
+  test('pickFiles returns a single PickedFile when one file is picked',
       () async {
     final tempFile = await File(
-      '${Directory.systemTemp.path}/pick_file_test_${DateTime.now().microsecondsSinceEpoch}.pdf',
+      '${Directory.systemTemp.path}/pick_files_single_${DateTime.now().microsecondsSinceEpoch}.pdf',
     ).create();
     addTearDown(() async {
       if (tempFile.existsSync()) await tempFile.delete();
@@ -103,17 +86,95 @@ void main() {
       ]),
     );
 
-    final picked = await pickFile();
-    expect(picked, isNotNull);
-    expect(picked!.name, 'doc.pdf');
+    final result = await pickFiles();
+    expect(result, isNotNull);
+    expect(result!.errors, isEmpty);
+    expect(result.files, hasLength(1));
+
+    final picked = result.files.single;
+    expect(picked.name, 'doc.pdf');
     expect(picked.size, fileContents.length);
     expect(picked.mimeType, 'application/pdf');
 
-    // openStream reads bytes lazily and produces the file contents.
     final emitted = await picked
         .openStream()
         .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
     expect(emitted, fileContents);
+  });
+
+  test('pickFiles returns multiple PickedFiles when many files are picked',
+      () async {
+    final fileA = await File(
+      '${Directory.systemTemp.path}/pick_files_multi_a_${DateTime.now().microsecondsSinceEpoch}.txt',
+    ).create();
+    final fileB = await File(
+      '${Directory.systemTemp.path}/pick_files_multi_b_${DateTime.now().microsecondsSinceEpoch}.txt',
+    ).create();
+    addTearDown(() async {
+      if (fileA.existsSync()) await fileA.delete();
+      if (fileB.existsSync()) await fileB.delete();
+    });
+    final aBytes = utf8.encode('aaa');
+    final bBytes = utf8.encode('bbbb');
+    await fileA.writeAsBytes(aBytes);
+    await fileB.writeAsBytes(bBytes);
+
+    FilePickerPlatform.instance = _FakeFilePicker.result(
+      FilePickerResult([
+        PlatformFile(name: 'a.txt', size: aBytes.length, path: fileA.path),
+        PlatformFile(name: 'b.txt', size: bBytes.length, path: fileB.path),
+      ]),
+    );
+
+    final result = await pickFiles();
+    expect(result, isNotNull);
+    expect(result!.errors, isEmpty);
+    expect(result.files.map((f) => f.name), ['a.txt', 'b.txt']);
+    expect(result.files.map((f) => f.size), [aBytes.length, bBytes.length]);
+
+    final emittedA = await result.files[0]
+        .openStream()
+        .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
+    final emittedB = await result.files[1]
+        .openStream()
+        .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
+    expect(emittedA, aBytes);
+    expect(emittedB, bBytes);
+  });
+
+  test(
+      'pickFiles routes a per-file null-path failure to errors '
+      'without aborting siblings', () async {
+    final goodFile = await File(
+      '${Directory.systemTemp.path}/pick_files_partial_${DateTime.now().microsecondsSinceEpoch}.txt',
+    ).create();
+    addTearDown(() async {
+      if (goodFile.existsSync()) await goodFile.delete();
+    });
+    final goodBytes = utf8.encode('ok');
+    await goodFile.writeAsBytes(goodBytes);
+
+    FilePickerPlatform.instance = _FakeFilePicker.result(
+      FilePickerResult([
+        // First file: native invariant violation — no path.
+        PlatformFile(name: 'broken.bin', size: 10),
+        // Second file: works.
+        PlatformFile(
+          name: 'good.txt',
+          size: goodBytes.length,
+          path: goodFile.path,
+        ),
+      ]),
+    );
+
+    final result = await pickFiles();
+    expect(result, isNotNull);
+    expect(result!.files, hasLength(1));
+    expect(result.files.single.name, 'good.txt');
+
+    expect(result.errors, hasLength(1));
+    expect(result.errors.single.filename, 'broken.bin');
+    expect(result.errors.single.cause, isA<StateError>());
   });
 
   group('mangleRelativePath', () {
@@ -175,8 +236,6 @@ void main() {
         () => mangleRelativePath('myproject', ''),
         throwsA(isA<FormatException>()),
       );
-      // Leading separator collapses to empty leading segment, which is
-      // filtered out, but if NOTHING remains it's a format error.
       expect(
         () => mangleRelativePath('myproject', '///'),
         throwsA(isA<FormatException>()),
@@ -193,53 +252,17 @@ void main() {
 
   group('pickerErrorMessage', () {
     test('RangeError cause surfaces as a browser-heap message', () {
-      final error = PickFilePickerException(
-        cause: RangeError('Maximum allowed length'),
-      );
       expect(
-        pickerErrorMessage(error),
+        pickerErrorMessage(RangeError('Maximum allowed length')),
         'Selection is too large to load in the browser.',
       );
     });
 
     test('other causes fall through to generic picker message', () {
-      final error = PickFilePickerException(
-        cause: StateError('plugin not available'),
+      expect(
+        pickerErrorMessage(StateError('plugin not available')),
+        'Could not open file picker',
       );
-      expect(pickerErrorMessage(error), 'Could not open file picker');
     });
-  });
-
-  test('openStream factory is re-callable for retry', () async {
-    final tempFile = await File(
-      '${Directory.systemTemp.path}/pick_file_retry_${DateTime.now().microsecondsSinceEpoch}.bin',
-    ).create();
-    addTearDown(() async {
-      if (tempFile.existsSync()) await tempFile.delete();
-    });
-    final fileContents = [0x01, 0x02, 0x03, 0x04];
-    await tempFile.writeAsBytes(fileContents);
-
-    FilePickerPlatform.instance = _FakeFilePicker.result(
-      FilePickerResult([
-        PlatformFile(
-          name: 'retry.bin',
-          size: fileContents.length,
-          path: tempFile.path,
-        ),
-      ]),
-    );
-
-    final picked = await pickFile();
-
-    final first = await picked!
-        .openStream()
-        .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
-    final second = await picked
-        .openStream()
-        .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
-
-    expect(first, fileContents);
-    expect(second, fileContents);
   });
 }

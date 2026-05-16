@@ -34,10 +34,25 @@ class PickedFile {
   final Stream<List<int>> Function() openStream;
 }
 
-/// Base for failures raised from [pickFile].
-///
-/// Callers surface a user-facing row via the upload tracker; the
-/// wrapped [cause] is preserved for logging and diagnostics.
+/// Successful batch from [pickFiles]: zero or more usable files plus
+/// zero or more per-file failures the caller should surface as Failed
+/// rows.
+typedef PickFilesResult = ({
+  List<PickedFile> files,
+  List<PickFileItemError> errors,
+});
+
+/// Per-file failure inside a [pickFiles] batch. Siblings keep flowing;
+/// the caller routes each entry to the upload tracker's
+/// `recordClientError` so the user sees a Failed row per affected file.
+class PickFileItemError {
+  const PickFileItemError({required this.filename, required this.cause});
+
+  final String filename;
+  final Object cause;
+}
+
+/// Base for failures raised from [pickFiles].
 sealed class PickFileException implements Exception {
   const PickFileException({required this.cause});
 
@@ -46,32 +61,26 @@ sealed class PickFileException implements Exception {
 }
 
 /// Thrown when the platform file picker itself fails — plugin not
-/// wired for the current platform, OS-level picker error, or an
-/// invariant violation where the picker returned neither bytes nor a
-/// usable path.
+/// wired for the current platform or OS-level picker error.
+///
+/// Per-file failures (e.g., one file in a multi-pick has null bytes on
+/// web) do NOT throw; they appear in [PickFilesResult.errors].
 class PickFilePickerException extends PickFileException {
-  const PickFilePickerException({this.filename, required super.cause});
-
-  /// Filename, when the failure happened after the picker identified a
-  /// file (e.g., the bytes-nor-path invariant). `null` when the picker
-  /// itself threw before returning any file.
-  final String? filename;
+  const PickFilePickerException({required super.cause});
 
   @override
-  String toString() => filename == null
-      ? 'File picker failed: $cause'
-      : 'File picker failed for $filename: $cause';
+  String toString() => 'File picker failed: $cause';
 }
 
-/// User-facing message for a [PickFilePickerException].
+/// User-facing message for a pick-related failure cause.
 ///
 /// `RangeError` is the canonical signal that the browser ran out of
-/// heap allocating the file's bytes — `withData: true` on web reads the
+/// heap allocating a file's bytes — `withData: true` on web reads the
 /// whole file into a `Uint8List`. DOM-level `QuotaExceededError` crosses
 /// the JS-interop boundary as a generic JS error and still falls
 /// through to the catch-all message; that's an accepted limitation.
-String pickerErrorMessage(PickFilePickerException error) {
-  if (error.cause is RangeError) {
+String pickerErrorMessage(Object cause) {
+  if (cause is RangeError) {
     return 'Selection is too large to load in the browser.';
   }
   return 'Could not open file picker';
@@ -121,35 +130,36 @@ String mangleRelativePath(String rootName, String relativePath) {
   return [rootName, ...segments].join('__');
 }
 
-/// Opens the platform file picker.
+/// Opens the platform file picker with multi-select enabled.
 ///
-/// Returns `null` when the user cancels. Throws [PickFilePickerException]
-/// when the picker plugin itself fails. Per-file read failures surface
-/// later, inside the upload pipeline, when [PickedFile.openStream] is
-/// drained.
+/// Returns `null` when the user cancels (picker returned no result or an
+/// empty file list). Throws [PickFilePickerException] when the picker
+/// plugin itself fails. Per-file failures (e.g., one of N picked files
+/// has unreadable bytes on web) do NOT abort the batch — they appear in
+/// [PickFilesResult.errors] so the caller can route each one to the
+/// upload tracker's `recordClientError`.
 ///
 /// Platform-conditional flags:
-/// - **Web**: `withData: true` (the file_picker default on web). The
-///   stream factory wraps the eagerly-loaded `Uint8List`.
+/// - **Web**: `withData: true` (the file_picker default on web — passed
+///   explicitly because the static caller's default is `false`). The
+///   stream factory wraps each eagerly-loaded `Uint8List`.
 /// - **macOS**: neither flag is supported per file_picker docs; the
-///   picker returns a path which we stream from via `dart:io`.
+///   picker returns paths which we stream from via `dart:io`.
 /// - **Other native** (iOS / Android / Windows / Linux): both flags
 ///   `false` — file_picker still copies to app cache on mobile and
 ///   populates `path` without setting up unused platform-channel
 ///   stream infrastructure.
-Future<PickedFile?> pickFile() async {
+Future<PickFilesResult?> pickFiles() async {
   final FilePickerResult? result;
   try {
     if (kIsWeb) {
-      // The static `FilePicker.pickFiles` defaults `withData` to false —
-      // despite the file_picker docs claiming it defaults to `true` on
-      // web (that's the web impl's signature default, which gets
-      // overridden when the static caller passes an explicit value).
-      // On web we have no path, so we MUST pass `withData: true` to get
-      // bytes back; otherwise `file.bytes` is always null.
-      result = await FilePicker.pickFiles(withData: true);
+      result = await FilePicker.pickFiles(
+        allowMultiple: true,
+        withData: true,
+      );
     } else {
       result = await FilePicker.pickFiles(
+        allowMultiple: true,
         withData: false,
         withReadStream: false,
       );
@@ -158,44 +168,59 @@ Future<PickedFile?> pickFile() async {
     throw PickFilePickerException(cause: error);
   }
   if (result == null || result.files.isEmpty) return null;
-  final file = result.files.first;
 
-  final mimeType = lookupMimeType(file.name) ?? 'application/octet-stream';
+  final files = <PickedFile>[];
+  final errors = <PickFileItemError>[];
+  for (final file in result.files) {
+    final mimeType = lookupMimeType(file.name) ?? 'application/octet-stream';
 
-  if (kIsWeb) {
-    final bytes = file.bytes;
-    if (bytes == null) {
-      // file_picker's web path uses FileReader.readAsArrayBuffer, which
-      // silently yields null on browser heap exhaustion. Surface this
-      // as a RangeError so [pickerErrorMessage] maps it to the
-      // size-limit message instead of the generic picker-plugin one.
-      throw PickFilePickerException(
-        filename: file.name,
-        cause: RangeError(
-          'FileReader returned no bytes for ${file.name} on web '
-          '(likely too large for browser heap)',
+    if (kIsWeb) {
+      final bytes = file.bytes;
+      if (bytes == null) {
+        // file_picker's web path uses FileReader.readAsArrayBuffer, which
+        // silently yields null on browser heap exhaustion. Map to a
+        // RangeError cause so [pickerErrorMessage] surfaces the
+        // size-limit message instead of the generic picker-plugin one.
+        errors.add(
+          PickFileItemError(
+            filename: file.name,
+            cause: RangeError(
+              'FileReader returned no bytes for ${file.name} on web '
+              '(likely too large for browser heap)',
+            ),
+          ),
+        );
+        continue;
+      }
+      files.add(
+        PickedFile(
+          name: file.name,
+          mimeType: mimeType,
+          size: bytes.length,
+          openStream: () => Stream<List<int>>.value(bytes),
         ),
       );
+      continue;
     }
-    return PickedFile(
-      name: file.name,
-      mimeType: mimeType,
-      size: bytes.length,
-      openStream: () => Stream<List<int>>.value(bytes),
-    );
-  }
 
-  final path = file.path;
-  if (path == null) {
-    throw PickFilePickerException(
-      filename: file.name,
-      cause: StateError('picker returned no path for ${file.name}'),
+    final path = file.path;
+    if (path == null) {
+      errors.add(
+        PickFileItemError(
+          filename: file.name,
+          cause: StateError('picker returned no path for ${file.name}'),
+        ),
+      );
+      continue;
+    }
+    files.add(
+      PickedFile(
+        name: file.name,
+        mimeType: mimeType,
+        size: file.size,
+        openStream: () => openFileStream(path),
+      ),
     );
   }
-  return PickedFile(
-    name: file.name,
-    mimeType: mimeType,
-    size: file.size,
-    openStream: () => openFileStream(path),
-  );
+  return (files: files, errors: errors);
 }

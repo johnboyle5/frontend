@@ -386,9 +386,9 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
   // Not disposed here — the registry owns the tracker's lifecycle.
 
   Future<void> _pickAndUpload() async {
-    final PickedFile? file;
+    final PickFilesResult? result;
     try {
-      file = await pickFile();
+      result = await pickFiles();
     } on PickFilePickerException catch (e, st) {
       if (!mounted) return;
       dev.log(
@@ -400,19 +400,34 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
       );
       _tracker.recordClientError(
         roomId: widget.roomId,
-        filename: e.filename ?? '(unknown)',
-        message: pickerErrorMessage(e),
+        filename: '(unknown)',
+        message: pickerErrorMessage(e.cause),
       );
       return;
     }
-    if (file == null || !mounted) return;
-    _tracker.uploadToRoom(
-      roomId: widget.roomId,
-      filename: file.name,
-      openStream: file.openStream,
-      contentLength: file.size,
-      mimeType: file.mimeType,
-    );
+    if (result == null || !mounted) return;
+    for (final itemError in result.errors) {
+      dev.log(
+        'File pick failed for ${itemError.filename}',
+        error: itemError.cause,
+        name: 'RoomInfoScreen',
+        level: 1000,
+      );
+      _tracker.recordClientError(
+        roomId: widget.roomId,
+        filename: itemError.filename,
+        message: pickerErrorMessage(itemError.cause),
+      );
+    }
+    for (final file in result.files) {
+      _tracker.uploadToRoom(
+        roomId: widget.roomId,
+        filename: file.name,
+        openStream: file.openStream,
+        contentLength: file.size,
+        mimeType: file.mimeType,
+      );
+    }
   }
 
   @override

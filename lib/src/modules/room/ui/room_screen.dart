@@ -263,11 +263,14 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
-  Future<PickedFile?> _pickWithErrorSurfacing({String? threadId}) async {
+  Future<List<PickedFile>> _pickFilesWithErrorSurfacing({
+    String? threadId,
+  }) async {
+    final PickFilesResult? result;
     try {
-      return await pickFile();
+      result = await pickFiles();
     } on PickFilePickerException catch (e, st) {
-      if (!mounted) return null;
+      if (!mounted) return const [];
       dev.log(
         'File pick failed',
         error: e.cause,
@@ -278,43 +281,63 @@ class _RoomScreenState extends State<RoomScreen> {
       _state.uploadTracker.recordClientError(
         roomId: widget.roomId,
         threadId: threadId,
-        filename: e.filename ?? '(unknown)',
-        message: pickerErrorMessage(e),
+        filename: '(unknown)',
+        message: pickerErrorMessage(e.cause),
       );
-      return null;
+      return const [];
     }
+    if (result == null || !mounted) return const [];
+    for (final itemError in result.errors) {
+      dev.log(
+        'File pick failed for ${itemError.filename}',
+        error: itemError.cause,
+        name: 'RoomScreen',
+        level: 1000,
+      );
+      _state.uploadTracker.recordClientError(
+        roomId: widget.roomId,
+        threadId: threadId,
+        filename: itemError.filename,
+        message: pickerErrorMessage(itemError.cause),
+      );
+    }
+    return result.files;
   }
 
   Future<void> _pickAndUploadToThread(String threadId) async {
-    final file = await _pickWithErrorSurfacing(threadId: threadId);
-    if (file == null || !mounted) return;
-    _state.uploadTracker.uploadToThread(
-      roomId: widget.roomId,
-      threadId: threadId,
-      filename: file.name,
-      openStream: file.openStream,
-      contentLength: file.size,
-      mimeType: file.mimeType,
-    );
+    final files = await _pickFilesWithErrorSurfacing(threadId: threadId);
+    if (!mounted) return;
+    for (final file in files) {
+      _state.uploadTracker.uploadToThread(
+        roomId: widget.roomId,
+        threadId: threadId,
+        filename: file.name,
+        openStream: file.openStream,
+        contentLength: file.size,
+        mimeType: file.mimeType,
+      );
+    }
   }
 
   Future<void> _pickAndUploadToNewThread() async {
     // Read errors before thread creation attach to the room scope
     // since there's no thread yet to route them to.
-    final file = await _pickWithErrorSurfacing();
-    if (file == null || !mounted) return;
+    final files = await _pickFilesWithErrorSurfacing();
+    if (files.isEmpty || !mounted) return;
 
     final threadId = await _state.createThread();
     if (threadId == null || !mounted) return;
 
-    _state.uploadTracker.uploadToThread(
-      roomId: widget.roomId,
-      threadId: threadId,
-      filename: file.name,
-      openStream: file.openStream,
-      contentLength: file.size,
-      mimeType: file.mimeType,
-    );
+    for (final file in files) {
+      _state.uploadTracker.uploadToThread(
+        roomId: widget.roomId,
+        threadId: threadId,
+        filename: file.name,
+        openStream: file.openStream,
+        contentLength: file.size,
+        mimeType: file.mimeType,
+      );
+    }
   }
 
   void _onThreadSelected(String threadId) {
