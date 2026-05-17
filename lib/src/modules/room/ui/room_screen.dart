@@ -653,28 +653,40 @@ class _RoomScreenState extends State<RoomScreen> {
           color: theme.colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (bothEmpty)
-              Text(
-                'No files attached.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.outline,
-                ),
-              )
-            else ...[
-              _buildScopeSection('Room', roomStatus, theme),
-              // The divider sits between two visible sections. A scope
-              // is "visible" when it's Loading or Failed (those render
-              // a section row), or Loaded with at least one file.
-              if (_scopeRendersContent(roomStatus) &&
-                  _scopeRendersContent(threadStatus))
-                const Divider(height: 12),
-              _buildScopeSection('Thread', threadStatus, theme),
-            ],
-          ],
+        // Cap the popover height so a large file list scrolls inside
+        // the panel instead of pushing the chat input off-screen.
+        // 40% of the viewport leaves room for the message timeline
+        // and the input bar.
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.4,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (bothEmpty)
+                  Text(
+                    'No files attached.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  )
+                else ...[
+                  _buildScopeSection('Room', roomStatus, theme),
+                  // The divider sits between two visible sections. A
+                  // scope is "visible" when it's Loading or Failed
+                  // (those render a section row), or Loaded with at
+                  // least one file.
+                  if (_scopeRendersContent(roomStatus) &&
+                      _scopeRendersContent(threadStatus))
+                    const Divider(height: 12),
+                  _buildScopeSection('Thread', threadStatus, theme),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
