@@ -314,6 +314,7 @@ class _RoomScreenState extends State<RoomScreen> {
         openStream: file.openStream,
         contentLength: file.size,
         mimeType: file.mimeType,
+        webFileBlob: file.webFileBlob,
       );
     }
   }

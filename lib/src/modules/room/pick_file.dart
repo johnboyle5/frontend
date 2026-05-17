@@ -13,6 +13,7 @@ class PickedFile {
     required this.mimeType,
     required this.size,
     required this.openStream,
+    this.webFileBlob,
   });
 
   /// Display name (basename). Not used as a filesystem path.
@@ -27,6 +28,14 @@ class PickedFile {
 
   /// Re-callable stream factory over the file's bytes.
   final Stream<List<int>> Function() openStream;
+
+  /// Opaque reference to a browser File/Blob (typed as `Object` so this
+  /// file stays free of `package:web` imports). Set on web; `null` on
+  /// native. When present, the upload pipeline can route through
+  /// `WebMultipartFileBody` so the browser handles multipart encoding
+  /// and streams from the file's disk-backed storage — avoiding any
+  /// JS-heap buffering of the file's bytes.
+  final Object? webFileBlob;
 }
 
 /// Successful batch from [pickFiles]: zero or more usable files plus

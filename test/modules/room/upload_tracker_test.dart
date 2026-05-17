@@ -45,6 +45,8 @@ void main() {
           openStream: any(named: 'openStream'),
           contentLength: any(named: 'contentLength'),
           mimeType: any(named: 'mimeType'),
+          webFileBlob: any(named: 'webFileBlob'),
+          onProgress: any(named: 'onProgress'),
           cancelToken: any(named: 'cancelToken'),
         )).thenAnswer((_) async {});
   }
@@ -57,6 +59,8 @@ void main() {
           openStream: any(named: 'openStream'),
           contentLength: any(named: 'contentLength'),
           mimeType: any(named: 'mimeType'),
+          webFileBlob: any(named: 'webFileBlob'),
+          onProgress: any(named: 'onProgress'),
           cancelToken: any(named: 'cancelToken'),
         )).thenAnswer((_) async {});
   }
@@ -195,6 +199,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => uploadCompleter.future);
 
@@ -238,6 +244,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => uploadCompleter.future);
 
@@ -288,6 +296,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => completers[callIndex++].future);
 
@@ -350,6 +360,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenThrow(const ApiException(statusCode: 500, message: 'nope'));
 
@@ -393,6 +405,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) async {
         throw StateError('plugin bug');
@@ -506,6 +520,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => posts[postIdx++].future);
 
@@ -620,6 +636,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenThrow(NetworkException(message: 'dns'));
 
@@ -670,6 +688,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => never.future);
 
@@ -788,6 +808,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) async {});
 
@@ -830,6 +852,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((invocation) {
         capturedToken = invocation.namedArguments[#cancelToken] as CancelToken;
@@ -868,6 +892,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) async {
         callCount++;
@@ -918,6 +944,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) async {
         callCount++;
@@ -959,6 +987,8 @@ void main() {
               openStream: any(named: 'openStream'),
               contentLength: any(named: 'contentLength'),
               mimeType: any(named: 'mimeType'),
+              webFileBlob: any(named: 'webFileBlob'),
+              onProgress: any(named: 'onProgress'),
               cancelToken: any(named: 'cancelToken'),
             )).thenAnswer((invocation) async {
           final openStream = invocation.namedArguments[#openStream]
@@ -1020,6 +1050,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => uploadCompleter.future);
 
@@ -1158,6 +1190,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) async {
         throw const CancelledException(reason: 'disposed');
@@ -1194,6 +1228,8 @@ void main() {
               openStream: any(named: 'openStream'),
               contentLength: any(named: 'contentLength'),
               mimeType: any(named: 'mimeType'),
+              webFileBlob: any(named: 'webFileBlob'),
+              onProgress: any(named: 'onProgress'),
               cancelToken: any(named: 'cancelToken'),
             )).thenAnswer((_) => firstPost.future);
         when(() => mockApi.uploadFileToThread(
@@ -1203,6 +1239,8 @@ void main() {
               openStream: any(named: 'openStream'),
               contentLength: any(named: 'contentLength'),
               mimeType: any(named: 'mimeType'),
+              webFileBlob: any(named: 'webFileBlob'),
+              onProgress: any(named: 'onProgress'),
               cancelToken: any(named: 'cancelToken'),
             )).thenAnswer((_) => secondPost.future);
 
@@ -1245,6 +1283,8 @@ void main() {
               openStream: any(named: 'openStream'),
               contentLength: any(named: 'contentLength'),
               mimeType: any(named: 'mimeType'),
+              webFileBlob: any(named: 'webFileBlob'),
+              onProgress: any(named: 'onProgress'),
               cancelToken: any(named: 'cancelToken'),
             )).called(1);
         verifyNever(() => mockApi.uploadFileToThread(
@@ -1254,6 +1294,8 @@ void main() {
               openStream: any(named: 'openStream'),
               contentLength: any(named: 'contentLength'),
               mimeType: any(named: 'mimeType'),
+              webFileBlob: any(named: 'webFileBlob'),
+              onProgress: any(named: 'onProgress'),
               cancelToken: any(named: 'cancelToken'),
             ));
 
@@ -1268,6 +1310,8 @@ void main() {
               openStream: any(named: 'openStream'),
               contentLength: any(named: 'contentLength'),
               mimeType: any(named: 'mimeType'),
+              webFileBlob: any(named: 'webFileBlob'),
+              onProgress: any(named: 'onProgress'),
               cancelToken: any(named: 'cancelToken'),
             )).called(1);
 
@@ -1290,6 +1334,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) => blockedFirst.future);
 
@@ -1314,6 +1360,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           )).called(1);
 
@@ -1328,6 +1376,8 @@ void main() {
             openStream: any(named: 'openStream'),
             contentLength: any(named: 'contentLength'),
             mimeType: any(named: 'mimeType'),
+            webFileBlob: any(named: 'webFileBlob'),
+            onProgress: any(named: 'onProgress'),
             cancelToken: any(named: 'cancelToken'),
           ));
     });

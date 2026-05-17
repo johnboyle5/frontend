@@ -383,6 +383,7 @@ class UploadTracker {
     required Stream<List<int>> Function() openStream,
     required int contentLength,
     String mimeType = 'application/octet-stream',
+    Object? webFileBlob,
   }) {
     final key = _roomKey(roomId);
     _startUpload(
@@ -390,12 +391,14 @@ class UploadTracker {
       filename: filename,
       openStream: openStream,
       contentLength: contentLength,
-      runPost: (wrappedOpenStream, token) => _api.uploadFileToRoom(
+      runPost: (wrappedOpenStream, onProgress, token) => _api.uploadFileToRoom(
         roomId,
         filename: filename,
         openStream: wrappedOpenStream,
         contentLength: contentLength,
         mimeType: mimeType,
+        webFileBlob: webFileBlob,
+        onProgress: onProgress,
         cancelToken: token,
       ),
       refresh: () => _refresh(
@@ -412,6 +415,7 @@ class UploadTracker {
     required Stream<List<int>> Function() openStream,
     required int contentLength,
     String mimeType = 'application/octet-stream',
+    Object? webFileBlob,
   }) {
     final key = _threadKey(roomId, threadId);
     _startUpload(
@@ -419,13 +423,16 @@ class UploadTracker {
       filename: filename,
       openStream: openStream,
       contentLength: contentLength,
-      runPost: (wrappedOpenStream, token) => _api.uploadFileToThread(
+      runPost: (wrappedOpenStream, onProgress, token) =>
+          _api.uploadFileToThread(
         roomId,
         threadId,
         filename: filename,
         openStream: wrappedOpenStream,
         contentLength: contentLength,
         mimeType: mimeType,
+        webFileBlob: webFileBlob,
+        onProgress: onProgress,
         cancelToken: token,
       ),
       refresh: () => _refresh(
@@ -457,6 +464,7 @@ class UploadTracker {
     required int contentLength,
     required Future<void> Function(
       Stream<List<int>> Function(),
+      void Function(int sent, int total) onProgress,
       CancelToken,
     ) runPost,
     required Future<void> Function() refresh,
@@ -476,23 +484,35 @@ class UploadTracker {
     );
     _emit(scope);
 
+    // Shared throttled progress emitter. The wrapper (native streaming
+    // path) and the web FormData path both feed this. Throttle state
+    // is per upload — captured by closure. On retry, the wrapper is
+    // re-invoked but the throttle continues from where it was; the
+    // worst case is one missed emission per retry, negligible.
+    DateTime? lastEmit;
+    void emitProgress(int sent, int total) {
+      if (_isDisposed) return;
+      final isFinal = sent >= total;
+      final now = DateTime.now();
+      final dueByThrottle = lastEmit == null ||
+          now.difference(lastEmit!) >= _progressEmitInterval;
+      if (isFinal || dueByThrottle) {
+        lastEmit = now;
+        _updateProgress(scope, id, sent);
+      }
+    }
+
     // Wrap [openStream] so we can observe chunks as they flow into the
-    // multipart encoder. Local state is captured per-call; on retry,
-    // the wrapper is re-invoked and the counters reset.
+    // multipart encoder. Only invoked on the native streaming path; on
+    // the web FormData path, openStream is never called — progress
+    // comes from xhr.upload.onprogress via the [emitProgress] callback
+    // wired into the WebMultipartFileBody body type.
     Stream<List<int>> wrappedOpenStream() async* {
       var sent = 0;
-      DateTime? lastEmit;
       await for (final chunk in openStream()) {
         yield chunk;
         sent += chunk.length;
-        final isFinal = sent >= contentLength;
-        final now = DateTime.now();
-        final dueByThrottle = lastEmit == null ||
-            now.difference(lastEmit) >= _progressEmitInterval;
-        if (isFinal || dueByThrottle) {
-          lastEmit = now;
-          _updateProgress(scope, id, sent);
-        }
+        emitProgress(sent, contentLength);
       }
     }
 
@@ -500,7 +520,7 @@ class UploadTracker {
       _QueuedJob(
         scope: scope,
         id: id,
-        runPost: (t) => runPost(wrappedOpenStream, t),
+        runPost: (t) => runPost(wrappedOpenStream, emitProgress, t),
         refresh: refresh,
         token: token,
       ),

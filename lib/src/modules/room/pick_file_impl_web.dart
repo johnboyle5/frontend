@@ -103,6 +103,7 @@ PickFilesResult _toPickFilesResult(
         mimeType: mimeType,
         size: webFile.size,
         openStream: () => _blobStream(webFile),
+        webFileBlob: webFile,
       ),
     );
   }

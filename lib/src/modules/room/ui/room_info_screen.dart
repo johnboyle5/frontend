@@ -428,6 +428,7 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
         openStream: file.openStream,
         contentLength: file.size,
         mimeType: file.mimeType,
+        webFileBlob: file.webFileBlob,
       );
     }
   }
