@@ -264,66 +264,83 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
-  Future<PickedFile?> _pickWithErrorSurfacing({String? threadId}) async {
+  Future<List<PickedFile>> _pickWithErrorSurfacing(
+    Future<PickFilesResult?> Function() pick, {
+    String? threadId,
+  }) async {
+    final PickFilesResult? result;
     try {
-      return await pickFile();
-    } on PickFileException catch (e, st) {
-      if (!mounted) return null;
+      result = await pick();
+    } on PickFilePickerException catch (e, st) {
+      if (!mounted) return const [];
       dev.log(
-        'File pick failed',
+        'Pick failed',
         error: e.cause,
         stackTrace: st,
         name: 'RoomScreen',
         level: 1000,
       );
-      final (filename, message) = switch (e) {
-        PickFileReadException(:final filename) => (
-            filename,
-            'Failed to read file',
-          ),
-        PickFilePickerException(:final filename) => (
-            filename ?? '(unknown)',
-            'Could not open file picker',
-          ),
-      };
       _state.uploadTracker.recordClientError(
         roomId: widget.roomId,
         threadId: threadId,
-        filename: filename,
-        message: message,
+        filename: '(unknown)',
+        message: pickerErrorMessage(e.cause),
       );
-      return null;
+      return const [];
+    }
+    if (result == null || !mounted) return const [];
+    for (final itemError in result.errors) {
+      dev.log(
+        'Pick failed for ${itemError.filename}',
+        error: itemError.cause,
+        name: 'RoomScreen',
+        level: 1000,
+      );
+      _state.uploadTracker.recordClientError(
+        roomId: widget.roomId,
+        threadId: threadId,
+        filename: itemError.filename,
+        message: pickerErrorMessage(itemError.cause),
+      );
+    }
+    return result.files;
+  }
+
+  void _enqueueUploadsToThread(String threadId, List<PickedFile> files) {
+    for (final file in files) {
+      _state.uploadTracker.uploadToThread(
+        roomId: widget.roomId,
+        threadId: threadId,
+        filename: file.name,
+        openStream: file.openStream,
+        contentLength: file.size,
+        mimeType: file.mimeType,
+        webFileBlob: file.webFileBlob,
+      );
     }
   }
 
-  Future<void> _pickAndUploadToThread(String threadId) async {
-    final file = await _pickWithErrorSurfacing(threadId: threadId);
-    if (file == null || !mounted) return;
-    _state.uploadTracker.uploadToThread(
-      roomId: widget.roomId,
-      threadId: threadId,
-      filename: file.name,
-      fileBytes: file.bytes,
-      mimeType: file.mimeType,
-    );
+  Future<void> _pickAndUploadToThread(
+    String threadId,
+    Future<PickFilesResult?> Function() pick,
+  ) async {
+    final files = await _pickWithErrorSurfacing(pick, threadId: threadId);
+    if (!mounted) return;
+    _enqueueUploadsToThread(threadId, files);
   }
 
-  Future<void> _pickAndUploadToNewThread() async {
+  Future<void> _pickAndUploadToNewThread(
+    Future<PickFilesResult?> Function() pick,
+  ) async {
     // Read errors before thread creation attach to the room scope
     // since there's no thread yet to route them to.
-    final file = await _pickWithErrorSurfacing();
-    if (file == null || !mounted) return;
+    final files = await _pickWithErrorSurfacing(pick);
+    if (files.isEmpty || !mounted) return;
 
     final threadId = await _state.createThread();
     if (threadId == null || !mounted) return;
 
-    _state.uploadTracker.uploadToThread(
-      roomId: widget.roomId,
-      threadId: threadId,
-      filename: file.name,
-      fileBytes: file.bytes,
-      mimeType: file.mimeType,
-    );
+    _enqueueUploadsToThread(threadId, files);
   }
 
   void _onThreadSelected(String threadId) {
@@ -653,28 +670,47 @@ class _RoomScreenState extends State<RoomScreen> {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(SoliplexSpacing.s2),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (bothEmpty)
-              Text(
-                'No files attached.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.outline,
-                ),
-              )
-            else ...[
-              _buildScopeSection('Room', roomStatus, theme),
-              // The divider sits between two visible sections. A scope
-              // is "visible" when it's Loading or Failed (those render
-              // a section row), or Loaded with at least one file.
-              if (_scopeRendersContent(roomStatus) &&
-                  _scopeRendersContent(threadStatus))
-                const SizedBox(height: SoliplexSpacing.s4),
-              _buildScopeSection('Thread', threadStatus, theme),
-            ],
-          ],
+        decoration: BoxDecoration(
+          color: theme.colorScheme.outlineVariant,
+        ),
+        // Cap the popover height so a large file list scrolls inside
+        // the panel instead of pushing the chat input off-screen.
+        // 40% of the viewport leaves room for the message timeline
+        // and the input bar.
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.4,
+          ),
+          // Right padding reserves space for the overlay scrollbar so
+          // it doesn't sit on top of trailing close buttons (cancel /
+          // dismiss) on file rows.
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(right: SoliplexSpacing.s3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (bothEmpty)
+                  Text(
+                    'No files attached.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  )
+                else ...[
+                  _buildScopeSection('Room', roomStatus, theme),
+                  // The divider sits between two visible sections. A
+                  // scope is "visible" when it's Loading or Failed
+                  // (those render a section row), or Loaded with at
+                  // least one file.
+                  if (_scopeRendersContent(roomStatus) &&
+                      _scopeRendersContent(threadStatus))
+                    const Divider(height: 12),
+                  _buildScopeSection('Thread', threadStatus, theme),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -735,87 +771,99 @@ class _RoomScreenState extends State<RoomScreen> {
   Widget _buildFileRow(DisplayUpload entry) {
     final theme = Theme.of(context);
     final isFailed = entry is FailedUpload;
-    final (icon, color, errorMessage, dismissible) = switch (entry) {
+    final (icon, color, errorMessage) = switch (entry) {
       PersistedUpload() => (
           Icons.check_circle_outline,
           theme.colorScheme.primary,
           null,
-          false,
         ),
-      PendingUpload() => (null, theme.colorScheme.primary, null, false),
+      PendingUpload() => (null, theme.colorScheme.primary, null),
       FailedUpload(message: final m) => (
           Icons.error_outline,
           theme.colorScheme.onErrorContainer,
           m,
-          true,
         ),
     };
 
-    final dismissId = entry is FailedUpload ? entry.id : null;
+    final (closeTooltip, closeAction) = switch (entry) {
+      PendingUpload(:final id) => (
+          'Cancel upload',
+          () => _state.uploadTracker.cancelUpload(id)
+        ),
+      FailedUpload(:final id) => (
+          'Dismiss',
+          () => _state.uploadTracker.dismissFailed(id)
+        ),
+      _ => (null, null),
+    };
+    final closeColor = isFailed
+        ? theme.colorScheme.onErrorContainer
+        : theme.colorScheme.outline;
 
     return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: theme.colorScheme.outlineVariant,
-          ),
-          left: BorderSide(
-            color:
-                isFailed ? theme.colorScheme.error : theme.colorScheme.surface,
-            width: 4,
-          ),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: SoliplexSpacing.s1, vertical: SoliplexSpacing.s1),
-        child: Row(
-          children: [
-            if (icon != null)
-              Icon(icon, size: 16, color: color)
-            else
-              SizedBox(
-                width: SoliplexSpacing.s4,
-                height: SoliplexSpacing.s4,
-                child: CircularProgressIndicator(strokeWidth: 2, color: color),
-              ),
-            const SizedBox(width: SoliplexSpacing.s2),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.filename,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color:
-                          isFailed ? theme.colorScheme.onErrorContainer : null,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (errorMessage != null)
-                    Text(
-                      errorMessage,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onErrorContainer,
-                        fontSize: 11,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
+      margin: const EdgeInsets.symmetric(vertical: SoliplexSpacing.s1),
+      padding: isFailed
+          ? const EdgeInsets.symmetric(
+              horizontal: SoliplexSpacing.s2, vertical: SoliplexSpacing.s1)
+          : const EdgeInsets.all(SoliplexSpacing.s1),
+      decoration: isFailed
+          ? BoxDecoration(
+              color: theme.colorScheme.errorContainer,
+            )
+          : null,
+      child: Row(
+        children: [
+          if (icon != null)
+            Icon(icon, size: 16, color: color)
+          else
+            SizedBox(
+              width: SoliplexSpacing.s4,
+              height: SoliplexSpacing.s4,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: color,
+                value: switch (entry) {
+                  PendingUpload(:final progress) => progress,
+                  _ => null,
+                },
               ),
             ),
-            if (dismissible && dismissId != null)
-              IconButton(
-                icon: const Icon(Icons.close, size: 14),
-                color: theme.colorScheme.onErrorContainer,
-                onPressed: () => _state.uploadTracker.dismissFailed(dismissId),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                visualDensity: VisualDensity.compact,
-              ),
-          ],
-        ),
+          const SizedBox(width: SoliplexSpacing.s2),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.filename,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: isFailed ? theme.colorScheme.onErrorContainer : null,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (errorMessage != null)
+                  Text(
+                    errorMessage,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onErrorContainer,
+                      fontSize: 11,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          if (closeAction != null)
+            IconButton(
+              icon: const Icon(Icons.close, size: 14),
+              color: closeColor,
+              tooltip: closeTooltip,
+              onPressed: closeAction,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              visualDensity: VisualDensity.compact,
+            ),
+        ],
       ),
     );
   }
@@ -868,7 +916,10 @@ class _RoomScreenState extends State<RoomScreen> {
                   )
               : null,
           onAttachFile: (room?.enableAttachments ?? false)
-              ? _pickAndUploadToNewThread
+              ? () => _pickAndUploadToNewThread(pickFiles)
+              : null,
+          onAttachFolder: (room?.enableAttachments ?? false)
+              ? () => _pickAndUploadToNewThread(pickFolder)
               : null,
         ),
       ],
@@ -1007,7 +1058,16 @@ class _RoomScreenState extends State<RoomScreen> {
                       )
                   : null,
               onAttachFile: attachEnabled
-                  ? () => _pickAndUploadToThread(threadView.threadId)
+                  ? () => _pickAndUploadToThread(
+                        threadView.threadId,
+                        pickFiles,
+                      )
+                  : null,
+              onAttachFolder: attachEnabled
+                  ? () => _pickAndUploadToThread(
+                        threadView.threadId,
+                        pickFolder,
+                      )
                   : null,
             ),
           ],

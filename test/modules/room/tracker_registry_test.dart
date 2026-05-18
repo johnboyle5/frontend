@@ -8,10 +8,12 @@ import '../../helpers/test_logger.dart';
 
 void main() {
   late Signal<ExecutionEvent?> events;
+  late Signal<List<ActivityRecord>> activities;
   late TrackerRegistry registry;
 
   setUp(() {
     events = Signal<ExecutionEvent?>(null);
+    activities = Signal<List<ActivityRecord>>(const []);
     registry = TrackerRegistry(logger: testLogger());
   });
 
@@ -23,8 +25,9 @@ void main() {
 
   test('creates tracker on AwaitingText when idle', () {
     registry.onStreaming(
-      const AwaitingText(currentActivity: ThinkingActivity()),
+      const AwaitingText(currentPhase: ThinkingPhase()),
       events,
+      activities,
     );
 
     expect(registry.trackers, hasLength(1));
@@ -33,8 +36,9 @@ void main() {
 
   test('re-keys awaiting tracker to message ID on TextStreaming', () {
     registry.onStreaming(
-      const AwaitingText(currentActivity: ThinkingActivity()),
+      const AwaitingText(currentPhase: ThinkingPhase()),
       events,
+      activities,
     );
 
     registry.onStreaming(
@@ -44,6 +48,7 @@ void main() {
         text: '',
       ),
       events,
+      activities,
     );
 
     expect(registry.trackers.containsKey(awaitingTrackerKey), isFalse);
@@ -60,6 +65,7 @@ void main() {
         text: '',
       ),
       events,
+      activities,
     );
 
     expect(registry.trackers, hasLength(1));
@@ -77,6 +83,7 @@ void main() {
         text: '',
       ),
       events1,
+      activities,
     );
 
     registry.onStreaming(
@@ -86,6 +93,7 @@ void main() {
         text: '',
       ),
       events2,
+      activities,
     );
 
     expect(registry.trackers, hasLength(2));
@@ -101,6 +109,7 @@ void main() {
         text: '',
       ),
       events,
+      activities,
     );
 
     final tracker = registry.trackers['msg-1'];
@@ -112,6 +121,7 @@ void main() {
         text: 'more text',
       ),
       events,
+      activities,
     );
 
     expect(registry.trackers, hasLength(1));
@@ -127,6 +137,7 @@ void main() {
         text: '',
       ),
       events,
+      activities,
     );
 
     registry.onRunTerminated();
@@ -147,6 +158,7 @@ void main() {
         text: '',
       ),
       events,
+      activities,
     );
 
     registry.onRunTerminated();
@@ -158,6 +170,7 @@ void main() {
         text: '',
       ),
       events,
+      activities,
     );
 
     registry.dispose();
@@ -167,10 +180,16 @@ void main() {
   group('seedHistorical', () {
     test('adds frozen trackers under their message ids', () {
       final historical = {
-        'asst-1':
-            ExecutionTracker.historical(events: const [], logger: testLogger()),
-        'asst-2':
-            ExecutionTracker.historical(events: const [], logger: testLogger()),
+        'asst-1': ExecutionTracker.historical(
+          events: const [],
+          activities: const [],
+          logger: testLogger(),
+        ),
+        'asst-2': ExecutionTracker.historical(
+          events: const [],
+          activities: const [],
+          logger: testLogger(),
+        ),
       };
 
       registry.seedHistorical(historical);
@@ -187,12 +206,16 @@ void main() {
           text: '',
         ),
         events,
+        activities,
       );
       final live = registry.trackers['asst-1'];
 
       final historical = {
-        'asst-1':
-            ExecutionTracker.historical(events: const [], logger: testLogger()),
+        'asst-1': ExecutionTracker.historical(
+          events: const [],
+          activities: const [],
+          logger: testLogger(),
+        ),
       };
       registry.seedHistorical(historical);
 
@@ -203,8 +226,9 @@ void main() {
   group('renameAwaitingTo', () {
     test('moves the awaiting tracker to the new key', () {
       registry.onStreaming(
-        const AwaitingText(currentActivity: ThinkingActivity()),
+        const AwaitingText(currentPhase: ThinkingPhase()),
         events,
+        activities,
       );
       final awaitingTracker = registry.trackers[awaitingTrackerKey];
 
@@ -219,8 +243,9 @@ void main() {
       // synthesized id; otherwise _freezeActive would no-op (the awaiting
       // entry no longer exists under that key).
       registry.onStreaming(
-        const AwaitingText(currentActivity: ThinkingActivity()),
+        const AwaitingText(currentPhase: ThinkingPhase()),
         events,
+        activities,
       );
       registry.renameAwaitingTo('no-response-run-1');
 
@@ -231,8 +256,9 @@ void main() {
 
     test('no-ops when the new key equals the awaiting sentinel', () {
       registry.onStreaming(
-        const AwaitingText(currentActivity: ThinkingActivity()),
+        const AwaitingText(currentPhase: ThinkingPhase()),
         events,
+        activities,
       );
       final before = registry.trackers[awaitingTrackerKey];
 
@@ -259,13 +285,15 @@ void main() {
       final historicalEvents = Signal<ExecutionEvent?>(null);
       final historicalTracker = ExecutionTracker(
         executionEvents: historicalEvents,
+        activities: activities,
         logger: testLogger(),
       );
       registry.seedHistorical({'no-response-run-1': historicalTracker});
 
       registry.onStreaming(
-        const AwaitingText(currentActivity: ThinkingActivity()),
+        const AwaitingText(currentPhase: ThinkingPhase()),
         events,
+        activities,
       );
       final awaitingTracker = registry.trackers[awaitingTrackerKey];
 
@@ -294,11 +322,13 @@ void main() {
         text: '',
       ),
       events,
+      activities,
     );
 
     registry.onStreaming(
-      const AwaitingText(currentActivity: ThinkingActivity()),
+      const AwaitingText(currentPhase: ThinkingPhase()),
       events,
+      activities,
     );
 
     // Should not create an awaiting tracker — msg-1 is still active

@@ -56,11 +56,13 @@ class DartHttpClient implements SoliplexHttpClient {
     Map<String, String>? headers,
     Object? body,
     Duration? timeout,
+    CancelToken? cancelToken,
   }) async {
     _checkNotClosed();
+    cancelToken?.throwIfCancelled();
 
     final effectiveTimeout = timeout ?? defaultTimeout;
-    final request = _createRequest(method, uri, headers, body);
+    final request = _createRequest(method, uri, headers, body, cancelToken);
 
     try {
       final streamedResponse = await _client.send(request).timeout(
@@ -73,6 +75,8 @@ class DartHttpClient implements SoliplexHttpClient {
         },
       );
 
+      cancelToken?.throwIfCancelled();
+
       final bodyBytes = await streamedResponse.stream.toBytes().timeout(
         effectiveTimeout,
         onTimeout: () {
@@ -83,12 +87,16 @@ class DartHttpClient implements SoliplexHttpClient {
         },
       );
 
+      cancelToken?.throwIfCancelled();
+
       return HttpResponse(
         statusCode: streamedResponse.statusCode,
         bodyBytes: Uint8List.fromList(bodyBytes),
         headers: _normalizeHeaders(streamedResponse.headers),
         reasonPhrase: streamedResponse.reasonPhrase,
       );
+    } on CancelledException {
+      rethrow;
     } on TimeoutException catch (e, stackTrace) {
       throw NetworkException(
         message: e.message ?? 'Request timed out',
@@ -123,7 +131,7 @@ class DartHttpClient implements SoliplexHttpClient {
     _checkNotClosed();
     cancelToken?.throwIfCancelled();
 
-    final request = _createRequest(method, uri, headers, body);
+    final request = _createRequest(method, uri, headers, body, cancelToken);
 
     try {
       final streamedResponse = await _client.send(request);
@@ -177,12 +185,21 @@ class DartHttpClient implements SoliplexHttpClient {
   }
 
   /// Creates an HTTP request with the given parameters.
-  http.Request _createRequest(
+  ///
+  /// Returns [http.StreamedRequest] for `Stream<List<int>>` bodies — used
+  /// for streamed uploads with an exact `Content-Length`. Returns
+  /// [http.Request] (buffered) for all other supported body types.
+  http.BaseRequest _createRequest(
     String method,
     Uri uri,
     Map<String, String>? headers,
     Object? body,
+    CancelToken? cancelToken,
   ) {
+    if (body is Stream<List<int>>) {
+      return _createStreamedRequest(method, uri, headers, body, cancelToken);
+    }
+
     final request = http.Request(method.toUpperCase(), uri);
 
     if (headers != null) {
@@ -204,12 +221,94 @@ class DartHttpClient implements SoliplexHttpClient {
       } else {
         throw ArgumentError(
           'Unsupported body type: ${body.runtimeType}. '
-          'Use String, List<int>, or Map<String, dynamic>.',
+          'Use String, List<int>, Map<String, dynamic>, or Stream<List<int>>.',
         );
       }
     }
 
     return request;
+  }
+
+  /// Builds a [http.StreamedRequest] from a `Stream<List<int>>` body.
+  ///
+  /// Reads `content-length` from [headers] (case-insensitive) to set
+  /// `request.contentLength` so the wire uses an exact `Content-Length`
+  /// header rather than `Transfer-Encoding: chunked`. Callers MUST supply
+  /// content-length for streamed bodies.
+  ///
+  /// Wires [cancelToken] to inject an error into the request sink — the
+  /// underlying socket aborts cleanly when the sink errors.
+  http.StreamedRequest _createStreamedRequest(
+    String method,
+    Uri uri,
+    Map<String, String>? headers,
+    Stream<List<int>> body,
+    CancelToken? cancelToken,
+  ) {
+    final request = http.StreamedRequest(method.toUpperCase(), uri);
+
+    if (headers != null) {
+      request.headers.addAll(headers);
+    }
+
+    final contentLength = _findHeader(headers, 'content-length');
+    if (contentLength != null) {
+      request.contentLength = int.parse(contentLength);
+    }
+    request.headers['content-type'] ??= 'application/octet-stream';
+
+    _pipeStreamToSink(body, request.sink, cancelToken);
+    return request;
+  }
+
+  /// Pipes [source] chunks into [sink], honoring [cancelToken] by injecting
+  /// a [CancelledException] into the sink. The underlying client treats a
+  /// sink error as an abrupt connection abort.
+  void _pipeStreamToSink(
+    Stream<List<int>> source,
+    EventSink<List<int>> sink,
+    CancelToken? cancelToken,
+  ) {
+    StreamSubscription<void>? cancelSub;
+    var closed = false;
+
+    void closeSink() {
+      if (closed) return;
+      closed = true;
+      sink.close();
+    }
+
+    final subscription = source.listen(
+      sink.add,
+      onError: (Object error, StackTrace stack) {
+        if (closed) return;
+        sink.addError(error, stack);
+        closeSink();
+      },
+      onDone: () {
+        cancelSub?.cancel();
+        closeSink();
+      },
+    );
+
+    if (cancelToken != null) {
+      cancelSub = cancelToken.whenCancelled.asStream().listen((_) {
+        if (closed) return;
+        sink.addError(CancelledException(reason: cancelToken.reason));
+        closeSink();
+        subscription.cancel();
+      });
+    }
+  }
+
+  /// Case-insensitive header lookup.
+  String? _findHeader(Map<String, String>? headers, String name) {
+    if (headers == null) return null;
+    final lower = name.toLowerCase();
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() == lower) return entry.value;
+    }
+    return null;
   }
 
   /// Normalizes headers by converting keys to lowercase.

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:soliplex_agent/soliplex_agent.dart' hide State;
 
 import '../execution_tracker.dart';
-import 'execution/activity_indicator.dart';
+import 'execution/phase_indicator.dart';
 import 'execution/execution_timeline.dart';
 import 'execution/thinking_block.dart';
 import '../../../../soliplex_frontend.dart';
@@ -13,13 +13,13 @@ class LoadingMessageTile extends StatelessWidget {
     required this.roomId,
     required this.messageId,
     this.executionTracker,
-    this.streamingActivity,
+    this.streamingPhase,
   });
 
   final String roomId;
   final String messageId;
   final ExecutionTracker? executionTracker;
-  final ActivityType? streamingActivity;
+  final RunPhase? streamingPhase;
 
   @override
   Widget build(BuildContext context) {
@@ -27,8 +27,7 @@ class LoadingMessageTile extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (streamingActivity != null)
-            ActivityIndicator(activity: streamingActivity!),
+          if (streamingPhase != null) PhaseIndicator(phase: streamingPhase!),
           ExecutionTimeline(
             roomId: roomId,
             messageId: messageId,

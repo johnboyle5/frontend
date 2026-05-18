@@ -391,43 +391,52 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
 
   // Not disposed here — the registry owns the tracker's lifecycle.
 
-  Future<void> _pickAndUpload() async {
-    final PickedFile? file;
+  Future<void> _pickAndUpload(
+    Future<PickFilesResult?> Function() pick,
+  ) async {
+    final PickFilesResult? result;
     try {
-      file = await pickFile();
-    } on PickFileException catch (e, st) {
+      result = await pick();
+    } on PickFilePickerException catch (e, st) {
       if (!mounted) return;
       dev.log(
-        'File pick failed',
+        'Pick failed',
         error: e.cause,
         stackTrace: st,
         name: 'RoomInfoScreen',
         level: 1000,
       );
-      final (filename, message) = switch (e) {
-        PickFileReadException(:final filename) => (
-            filename,
-            'Failed to read file',
-          ),
-        PickFilePickerException(:final filename) => (
-            filename ?? '(unknown)',
-            'Could not open file picker',
-          ),
-      };
       _tracker.recordClientError(
         roomId: widget.roomId,
-        filename: filename,
-        message: message,
+        filename: '(unknown)',
+        message: pickerErrorMessage(e.cause),
       );
       return;
     }
-    if (file == null || !mounted) return;
-    _tracker.uploadToRoom(
-      roomId: widget.roomId,
-      filename: file.name,
-      fileBytes: file.bytes,
-      mimeType: file.mimeType,
-    );
+    if (result == null || !mounted) return;
+    for (final itemError in result.errors) {
+      dev.log(
+        'Pick failed for ${itemError.filename}',
+        error: itemError.cause,
+        name: 'RoomInfoScreen',
+        level: 1000,
+      );
+      _tracker.recordClientError(
+        roomId: widget.roomId,
+        filename: itemError.filename,
+        message: pickerErrorMessage(itemError.cause),
+      );
+    }
+    for (final file in result.files) {
+      _tracker.uploadToRoom(
+        roomId: widget.roomId,
+        filename: file.name,
+        openStream: file.openStream,
+        contentLength: file.size,
+        mimeType: file.mimeType,
+        webFileBlob: file.webFileBlob,
+      );
+    }
   }
 
   @override
@@ -447,10 +456,21 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
         const SizedBox(height: SoliplexSpacing.s2),
         Align(
           alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            onPressed: _pickAndUpload,
-            icon: const Icon(Icons.upload_file, size: 18),
-            label: const Text('Upload file to room'),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: () => _pickAndUpload(pickFiles),
+                icon: const Icon(Icons.upload_file, size: 18),
+                label: const Text('Upload files to room'),
+              ),
+              FilledButton.icon(
+                onPressed: () => _pickAndUpload(pickFolder),
+                icon: const Icon(Icons.drive_folder_upload, size: 18),
+                label: const Text('Upload folder to room'),
+              ),
+            ],
           ),
         ),
       ],
@@ -475,7 +495,11 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
           children: [
             const SizedBox(height: SoliplexSpacing.s2),
             for (final entry in list)
-              _UploadEntryRow(entry: entry, onDismiss: _tracker.dismissFailed),
+              _UploadEntryRow(
+                entry: entry,
+                onCancel: _tracker.cancelUpload,
+                onDismiss: _tracker.dismissFailed,
+              ),
           ],
         ),
       UploadsFailed(error: final error) => Padding(
@@ -494,31 +518,40 @@ class _UploadedFilesCardState extends State<_UploadedFilesCard> {
 class _UploadEntryRow extends StatelessWidget {
   const _UploadEntryRow({
     required this.entry,
+    required this.onCancel,
     required this.onDismiss,
   });
 
   final DisplayUpload entry;
+  final void Function(String entryId) onCancel;
   final void Function(String entryId) onDismiss;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isFailed = entry is FailedUpload;
-    final (icon, color, errorMessage, dismissId) = switch (entry) {
+    final (icon, color, errorMessage) = switch (entry) {
       PersistedUpload() => (
           Icons.check_circle_outline,
           theme.colorScheme.primary,
           null,
-          null,
         ),
-      PendingUpload() => (null, theme.colorScheme.primary, null, null),
-      FailedUpload(id: final id, message: final m) => (
+      PendingUpload() => (null, theme.colorScheme.primary, null),
+      FailedUpload(message: final m) => (
           Icons.error_outline,
           theme.colorScheme.onErrorContainer,
           m,
-          id,
         ),
     };
+
+    final (closeTooltip, closeAction) = switch (entry) {
+      PendingUpload(:final id) => ('Cancel upload', () => onCancel(id)),
+      FailedUpload(:final id) => ('Dismiss', () => onDismiss(id)),
+      _ => (null, null),
+    };
+    final closeColor = isFailed
+        ? theme.colorScheme.onErrorContainer
+        : theme.colorScheme.outline;
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: SoliplexSpacing.s1),
@@ -536,10 +569,16 @@ class _UploadEntryRow extends StatelessWidget {
           if (icon != null)
             Icon(icon, size: 16, color: color)
           else
-            const SizedBox(
+            SizedBox(
               width: SoliplexSpacing.s4,
               height: SoliplexSpacing.s4,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                value: switch (entry) {
+                  PendingUpload(:final progress) => progress,
+                  _ => null,
+                },
+              ),
             ),
           const SizedBox(width: SoliplexSpacing.s2),
           Expanded(
@@ -562,11 +601,12 @@ class _UploadEntryRow extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-          if (dismissId != null)
+          if (closeAction != null)
             IconButton(
               icon: const Icon(Icons.close, size: 14),
-              color: theme.colorScheme.onErrorContainer,
-              onPressed: () => onDismiss(dismissId),
+              color: closeColor,
+              tooltip: closeTooltip,
+              onPressed: closeAction,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
               visualDensity: VisualDensity.compact,

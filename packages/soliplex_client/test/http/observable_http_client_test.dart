@@ -1337,6 +1337,89 @@ void main() {
         expect(body['password'], equals('[REDACTED]'));
       });
 
+      test(
+        'redacts WebMultipartFileBody as "<file upload: filename, N bytes>"',
+        () async {
+          when(
+            () => mockClient.request(
+              any(),
+              any(),
+              headers: any(named: 'headers'),
+              body: any<Object?>(named: 'body'),
+              timeout: any(named: 'timeout'),
+              cancelToken: any(named: 'cancelToken'),
+            ),
+          ).thenAnswer(
+            (_) async => HttpResponse(statusCode: 204, bodyBytes: Uint8List(0)),
+          );
+
+          const body = WebMultipartFileBody(
+            fieldName: 'file',
+            filename: 'doc.pdf',
+            fileBlob: Object(),
+            mimeType: 'application/pdf',
+            contentLength: 1024,
+          );
+
+          await observableClient.request(
+            'POST',
+            Uri.parse('https://example.com/upload'),
+            body: body,
+            headers: const {'content-type': 'multipart/form-data; boundary=x'},
+          );
+
+          final requestEvent = recorder.eventsOfType<HttpRequestEvent>().first;
+          expect(
+            requestEvent.body,
+            equals('<file upload: doc.pdf, 1024 bytes>'),
+          );
+        },
+      );
+
+      test('redacts Stream<List<int>> request body without consuming it',
+          () async {
+        // Capture the body that ObservableHttpClient passes through to the
+        // inner client, plus return a normal response. Configured with
+        // catch-all matchers including cancelToken.
+        Object? capturedBody;
+        when(
+          () => mockClient.request(
+            any(),
+            any(),
+            headers: any(named: 'headers'),
+            body: any<Object?>(named: 'body'),
+            timeout: any(named: 'timeout'),
+            cancelToken: any(named: 'cancelToken'),
+          ),
+        ).thenAnswer((invocation) async {
+          capturedBody = invocation.namedArguments[#body];
+          return HttpResponse(statusCode: 204, bodyBytes: Uint8List(0));
+        });
+
+        // Closed-but-empty stream: still a Stream<List<int>>, but never
+        // emits or blocks.
+        const streamBody = Stream<List<int>>.empty();
+
+        await observableClient.request(
+          'POST',
+          Uri.parse('https://example.com/upload'),
+          body: streamBody,
+          headers: {
+            'content-type': 'multipart/form-data; boundary=foo',
+            'content-length': '12345',
+          },
+        );
+
+        final requestEvent = recorder.eventsOfType<HttpRequestEvent>().first;
+        expect(
+          requestEvent.body,
+          equals('<stream upload: 12345 bytes>'),
+        );
+        // The same stream instance is forwarded to the inner client
+        // (observable did not consume or replace it).
+        expect(capturedBody, same(streamBody));
+      });
+
       test('captures and redacts request headers', () async {
         when(
           () => mockClient.request(

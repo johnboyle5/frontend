@@ -1,36 +1,27 @@
-/// Reproduction harness for two known bugs in the "$N events" bubble
-/// rendered above assistant messages by [ExecutionTimeline].
+/// Invariants for the "$N events" bubble rendered above assistant
+/// messages by [ExecutionTimeline].
 ///
-/// Each `test` documents the failure mode it reproduces and asserts the
-/// *correct* behavior. With the bugs present these assertions fail; once
-/// the underlying drops are fixed the assertions pass without other test
-/// changes.
+/// Nested-row completion
+/// ---------------------
+/// A logical sub-skill invocation arrives as two `ActivitySnapshotEvent`s
+/// sharing a `messageId`: a call phase
+/// (`activity_type='skill_tool_call'`, carrying `args`) and a result
+/// phase (`activity_type='skill_tool_result'`, carrying `result`,
+/// `replace=true`). The decoder dispatches on activityType so the
+/// result phase synthesizes `status='done'` and exposes
+/// `content['result']`, flipping the nested row out of its
+/// in-progress spinner.
 ///
-/// Bug 1 — Nested rows never get a checkmark
+/// Bubble survives reload after a tool-yield
 /// -----------------------------------------
-/// Backend sends an ACTIVITY_SNAPSHOT for `skill_tool_call` with status
-/// `in_progress`, then an ACTIVITY_DELTA jsonpatch (`replace /status →
-/// done`) when the sub-skill completes. The frontend drops every
-/// `ActivityDeltaEvent` at two layers:
-///
-/// * [bridgeBaseEvent] returns `null` for the variant
-///   (agent_session.dart:656).
-/// * [_processActivityDelta] in agui_event_processor.dart is a logged
-///   no-op (line 807).
-///
-/// Net effect: the nested row keeps the in-progress status it had on
-/// first paint, so its trailing icon never flips to a checkmark.
-///
-/// Bug 2 — Bubble disappears after reload
-/// --------------------------------------
 /// On thread reload, [replayToTrackers] keys events by assistant
 /// `TextMessageStart`. A run that ends with a `ToolCallStart` but no
 /// follow-up bundle (errored mid-tool, cancelled, server restart) hits
-/// the "trailing tool-yield" branch and silently drops its events; no
-/// tracker is produced for the run. If the chat-message processor
-/// synthesized a no-response tile for the same run via a different code
-/// path, that tile is rendered without a tracker — the "events bubble"
-/// vanishes on reload even though it was visible during the live run.
+/// the "trailing tool-yield" branch. If the chat-message processor
+/// synthesizes a no-response tile for the same run via a different
+/// code path, the replay must still produce a tracker keyed under the
+/// synthesized id so the bubble keeps rendering the thinking and
+/// tool-call timeline that was visible during the live run.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -43,34 +34,10 @@ import 'package:soliplex_frontend/src/modules/room/ui/execution/timeline_entry.d
 import '../../helpers/test_logger.dart';
 
 void main() {
-  group('Bug 1: ACTIVITY_DELTA status update is dropped', () {
+  group('skill_tool_result snapshot completes the nested row', () {
     test(
-      'bridgeBaseEvent drops ActivityDeltaEvent — nested rows never '
-      'receive the status change that drives the checkmark',
-      () {
-        final delta = ActivityDeltaEvent(
-          messageId: 'rag:call_1',
-          activityType: 'skill_tool_call',
-          patch: const [
-            {'op': 'replace', 'path': '/status', 'value': 'done'},
-          ],
-          timestamp: 200,
-        );
-
-        // Correct behavior: produce an ExecutionEvent the tracker can act
-        // on so the activity's status moves to "done". Currently null.
-        expect(
-          bridgeBaseEvent(delta),
-          isNotNull,
-          reason: 'Bug 1: ActivityDeltaEvent is dropped at the bridge; '
-              'the timeline never sees the status change.',
-        );
-      },
-    );
-
-    test(
-      'historical replay: snapshot(in_progress) + delta(status→done) '
-      'leaves the nested activity stuck at in_progress',
+      'historical replay: call snapshot + result snapshot leaves the '
+      'nested activity at status=done with the result text exposed',
       () {
         final runs = [
           RunEventBundle(
@@ -81,22 +48,27 @@ void main() {
                 toolCallId: 'tc-1',
                 toolCallName: 'execute_skill',
               ),
+              // Phase 1: call. The producer emits replace=false so the
+              // initial snapshot lands as a new record.
               ActivitySnapshotEvent(
                 messageId: 'rag:call_1',
                 activityType: 'skill_tool_call',
                 content: {
                   'tool_name': 'ask',
                   'args': '{"q":"hi"}',
-                  'status': 'in_progress',
                 },
+                replace: false,
                 timestamp: 100,
               ),
-              ActivityDeltaEvent(
+              // Phase 2: result. Different activity_type, same messageId,
+              // replace=true so the call record is overwritten in place.
+              ActivitySnapshotEvent(
                 messageId: 'rag:call_1',
-                activityType: 'skill_tool_call',
-                patch: [
-                  {'op': 'replace', 'path': '/status', 'value': 'done'},
-                ],
+                activityType: 'skill_tool_result',
+                content: {
+                  'tool_name': 'ask',
+                  'result': 'answer text',
+                },
                 timestamp: 150,
               ),
               ToolCallResultEvent(
@@ -110,79 +82,116 @@ void main() {
         ];
 
         final trackers = replayToTrackers(runs);
-        final step = trackers['asst-1']!.timeline.value.single as TimelineStep;
+        final tracker = trackers['asst-1']!;
+        final step = tracker.timeline.value.single as TimelineStep;
 
-        expect(step.activities, hasLength(1));
+        expect(step.activityIds, ['rag:call_1']);
+        final activity = tracker.skillToolCalls.value.single;
         expect(
-          step.activities.single.status,
-          'done',
-          reason: 'Bug 1: ACTIVITY_DELTA patches are dropped during replay; '
-              'the nested activity stays at its initial in_progress status.',
+          activity.status,
+          SkillToolCallStatus.done,
+          reason: 'Result snapshot must flip the row to done; otherwise '
+              'the nested icon stays at the in-progress spinner.',
+        );
+        expect(activity.result, 'answer text');
+        expect(
+          activity.args,
+          {'q': 'hi'},
+          reason: 'The application layer carries args from the call phase '
+              'onto the result-phase record so the unified row keeps '
+              'rendering the inputs across AG-UI replace-in-place.',
         );
       },
     );
 
     test(
-      'live tracker: ActivitySnapshot then ActivityDelta on the same '
-      'messageId does not advance the activity to done',
+      'live tracker: call ActivitySnapshot then result ActivitySnapshot '
+      'on the same messageId advances the activity to done',
       () {
         final events = Signal<ExecutionEvent?>(null);
+        final activities = Signal<List<ActivityRecord>>(const []);
         final tracker = ExecutionTracker(
           executionEvents: events,
+          activities: activities,
           logger: testLogger(),
         );
         addTearDown(tracker.dispose);
 
         // Bridge each AG-UI event through the production bridge, mirroring
-        // what AgentSession does at runtime. Anything the bridge drops
-        // never reaches the tracker — exactly the bug we're reproducing.
-        final ExecutionEvent? snapshot = bridgeBaseEvent(
+        // what AgentSession does at runtime. Push the same content into
+        // the activities signal so the tracker's computed skillToolCalls
+        // sees the decoded view, matching what _processActivitySnapshot
+        // does in production.
+        const callContent = {
+          'tool_name': 'ask',
+          'args': '{"q":"hi"}',
+        };
+        final ExecutionEvent? callSnapshot = bridgeBaseEvent(
           const ActivitySnapshotEvent(
             messageId: 'rag:call_1',
             activityType: 'skill_tool_call',
-            content: {
-              'tool_name': 'ask',
-              'args': '{"q":"hi"}',
-              'status': 'in_progress',
-            },
+            content: callContent,
+            replace: false,
             timestamp: 100,
           ),
         );
-        expect(snapshot, isNotNull);
-        events.value = snapshot;
-
-        final ExecutionEvent? delta = bridgeBaseEvent(
-          ActivityDeltaEvent(
+        expect(callSnapshot, isNotNull);
+        activities.value = const [
+          ActivityRecord(
             messageId: 'rag:call_1',
             activityType: 'skill_tool_call',
-            patch: const [
-              {'op': 'replace', 'path': '/status', 'value': 'done'},
-            ],
-            timestamp: 200,
+            content: callContent,
+            timestamp: 100,
           ),
-        );
-
-        expect(
-          delta,
-          isNotNull,
-          reason: 'Bug 1: the bridge drops the delta before it can reach '
-              'the live tracker.',
-        );
-        if (delta != null) events.value = delta;
+        ];
+        events.value = callSnapshot;
 
         final calls = tracker.skillToolCalls.value;
         expect(calls, hasLength(1));
         expect(
           calls.single.status,
-          'done',
-          reason: 'Bug 1: live tracker never sees the delta-driven '
-              'status change; the trailing icon stays as a spinner.',
+          SkillToolCallStatus.inProgress,
+          reason: 'The call phase carries no explicit status; the decoder '
+              'must synthesize inProgress so the spinner renders.',
         );
+
+        const resultContent = {
+          'tool_name': 'ask',
+          'result': 'answer text',
+        };
+        final ExecutionEvent? resultSnapshot = bridgeBaseEvent(
+          const ActivitySnapshotEvent(
+            messageId: 'rag:call_1',
+            activityType: 'skill_tool_result',
+            content: resultContent,
+            timestamp: 150,
+          ),
+        );
+        expect(resultSnapshot, isNotNull);
+        activities.value = const [
+          ActivityRecord(
+            messageId: 'rag:call_1',
+            activityType: 'skill_tool_result',
+            content: resultContent,
+            timestamp: 150,
+          ),
+        ];
+        events.value = resultSnapshot;
+
+        final updated = tracker.skillToolCalls.value;
+        expect(updated, hasLength(1));
+        expect(
+          updated.single.status,
+          SkillToolCallStatus.done,
+          reason: 'The result snapshot must replace the call record so '
+              'the trailing icon flips to the checkmark.',
+        );
+        expect(updated.single.result, 'answer text');
       },
     );
   });
 
-  group('Bug 2: bubble disappears after thread reload', () {
+  group('bubble survives reload after a tool-yield', () {
     test(
       'a run that yielded to a tool and never produced an assistant '
       'TextMessageStart (errored / cancelled mid-tool, trailing in '
@@ -222,27 +231,27 @@ void main() {
         expect(
           trackers,
           contains(expectedKey),
-          reason: 'Bug 2: trailing tool-yield drops its hoisted events; no '
-              'tracker is created for run-stuck so the bubble disappears '
-              'after a reload even though it was visible live.',
+          reason: 'A trailing tool-yield must still produce a tracker '
+              'keyed under the synthesized no-response id so the bubble '
+              'keeps rendering across the reload boundary.',
         );
         expect(
           trackers[expectedKey]!.steps.value.map((s) => s.label),
           containsAll(<String>['Thinking', 'search']),
-          reason: 'Bug 2: the recovered tracker must contain the same '
-              'steps the user saw live.',
+          reason: 'The recovered tracker must contain the same steps the '
+              'user saw live.',
         );
       },
     );
 
     test(
-      'multi-run thread where the LAST run is a trailing tool-yield: the '
-      'preceding assistant bubble is fine, but the last run loses its '
-      'tracker — confirms the bug is isolated to the trailing case',
+      'multi-run thread: a normal-bundle run followed by a trailing '
+      'tool-yield run — both must produce trackers',
       () {
-        // Useful baseline: the bug-free preceding run rules out a regression
-        // in the normal-bundle code path so we can attribute the missing
-        // tracker entirely to the trailing tool-yield.
+        // The first run exercises the normal-bundle code path; the second
+        // exercises the trailing tool-yield branch. Keeping both in one
+        // test pins that the recovery is scoped to the trailing case
+        // without disturbing the surrounding bundles.
         final runs = [
           RunEventBundle(
             runId: 'run-1',
@@ -275,8 +284,8 @@ void main() {
         expect(
           trackers.keys,
           contains(noResponseMessageId('run-stuck')),
-          reason: 'Bug 2: trailing tool-yield bundle silently drops its '
-              'events; the run loses its tracker on reload.',
+          reason: 'A trailing tool-yield bundle must still produce a '
+              'tracker; the second run must not lose it on reload.',
         );
       },
     );

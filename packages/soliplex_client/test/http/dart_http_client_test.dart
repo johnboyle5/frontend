@@ -129,6 +129,69 @@ void main() {
         );
       });
 
+      test('performs POST request with Stream<List<int>> body', () async {
+        final streamedResponse = _createStreamedResponse(
+          statusCode: 204,
+          body: [],
+        );
+
+        http.BaseRequest? capturedRequest;
+        when(() => mockClient.send(any())).thenAnswer((invocation) async {
+          capturedRequest =
+              invocation.positionalArguments[0] as http.BaseRequest;
+          // Consume the request body so the pipe's onDone fires and our
+          // sink-close callback resolves cleanly.
+          await capturedRequest!.finalize().toBytes();
+          return streamedResponse;
+        });
+
+        final bodyChunks = <List<int>>[
+          [1, 2, 3],
+          [4, 5, 6, 7],
+        ];
+        const totalLength = 7;
+
+        await client.request(
+          'POST',
+          Uri.parse('https://example.com/api'),
+          body: Stream<List<int>>.fromIterable(bodyChunks),
+          headers: {
+            'content-type': 'multipart/form-data; boundary=foo',
+            'content-length': '$totalLength',
+          },
+        );
+
+        expect(capturedRequest, isA<http.StreamedRequest>());
+        expect(capturedRequest?.contentLength, equals(totalLength));
+        expect(
+          capturedRequest?.headers['content-type'],
+          contains('multipart/form-data'),
+        );
+      });
+
+      test(
+          'Stream body request throws CancelledException when token already '
+          'cancelled', () async {
+        final token = CancelToken()..cancel('pre-dispatch');
+
+        when(() => mockClient.send(any())).thenAnswer(
+          (_) async => _createStreamedResponse(statusCode: 200, body: []),
+        );
+
+        expect(
+          client.request(
+            'POST',
+            Uri.parse('https://example.com/api'),
+            body: Stream<List<int>>.fromIterable([
+              [1, 2, 3],
+            ]),
+            headers: {'content-length': '3'},
+            cancelToken: token,
+          ),
+          throwsA(isA<CancelledException>()),
+        );
+      });
+
       test('includes custom headers in request', () async {
         final streamedResponse = _createStreamedResponse(
           statusCode: 200,
