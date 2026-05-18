@@ -8,13 +8,37 @@ import 'package:soliplex_client/soliplex_client.dart' show SoliplexApi;
 import '../../../shared/failed_image.dart';
 
 @visibleForTesting
-class PageImage {
-  const PageImage(this.bytes, this.width, this.height);
+sealed class PageImage {
+  const PageImage();
+}
+
+/// A successfully decoded page image with its raw PNG bytes and dimensions.
+/// [hasDimensions] is false when [readPngDimensions] could not parse an IHDR
+/// chunk — the bytes are still valid base64 but may not be a PNG; rendering
+/// falls back to an unconstrained [InteractiveViewer].
+@visibleForTesting
+final class PageImageDecoded extends PageImage {
+  const PageImageDecoded({
+    required this.bytes,
+    required this.width,
+    required this.height,
+  });
+
   final Uint8List bytes;
   final int width;
   final int height;
 
   bool get hasDimensions => width > 0 && height > 0;
+}
+
+/// A page whose base64 payload could not be decoded. Codec-time failures
+/// (bytes were valid base64 but not a valid image) are not represented here —
+/// they happen during paint and are caught by [Image.memory]'s `errorBuilder`.
+@visibleForTesting
+final class PageImageBroken extends PageImage {
+  const PageImageBroken({required this.reason});
+
+  final String reason;
 }
 
 /// Reads dimensions from a PNG IHDR chunk (bytes 16–23).
@@ -120,17 +144,16 @@ class _ChunkVisualizationPageState extends State<ChunkVisualizationPage> {
         .then((viz) => viz.imagesBase64.map(_decodePageImage).toList());
   }
 
-  /// Decodes one entry from `imagesBase64`. On a FormatException returns a
-  /// sentinel [PageImage] with empty bytes so a single corrupt image doesn't
-  /// collapse the entire visualization; [_buildPageImage] then renders a
-  /// [BrokenImagePlaceholder] for that slot.
+  /// Decodes one entry from `imagesBase64`. Returns a [PageImageDecoded] on
+  /// success or a [PageImageBroken] on FormatException so a single corrupt
+  /// image doesn't collapse the entire visualization.
   static PageImage _decodePageImage(String b64) {
     try {
       final bytes = base64Decode(b64);
       final (w, h) = readPngDimensions(bytes);
-      return PageImage(bytes, w, h);
+      return PageImageDecoded(bytes: bytes, width: w, height: h);
     } on FormatException {
-      return PageImage(Uint8List(0), 0, 0);
+      return const PageImageBroken(reason: 'base64 decode failed');
     }
   }
 
@@ -258,11 +281,15 @@ class _ChunkVisualizationPageState extends State<ChunkVisualizationPage> {
   }
 
   Widget _buildPageImage(PageImage page, int rotation) {
-    if (page.bytes.isEmpty) {
-      return const Center(
-        child: FailedImage(label: 'Page image failed to decode'),
-      );
-    }
+    return switch (page) {
+      PageImageBroken() => const Center(
+          child: FailedImage(label: 'Page image failed to decode'),
+        ),
+      PageImageDecoded() => _buildDecodedPageImage(page, rotation),
+    };
+  }
+
+  Widget _buildDecodedPageImage(PageImageDecoded page, int rotation) {
     final image = RotatedBox(
       quarterTurns: rotation,
       child: Image.memory(

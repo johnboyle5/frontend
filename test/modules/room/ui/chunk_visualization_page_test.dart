@@ -256,17 +256,36 @@ void main() {
     });
   });
 
-  group('PageImage.hasDimensions', () {
+  group('PageImageDecoded.hasDimensions', () {
     test('true when both dimensions are positive', () {
-      expect(PageImage(Uint8List(0), 100, 200).hasDimensions, isTrue);
+      expect(
+        PageImageDecoded(bytes: Uint8List(0), width: 100, height: 200)
+            .hasDimensions,
+        isTrue,
+      );
     });
 
     test('false when width is zero', () {
-      expect(PageImage(Uint8List(0), 0, 200).hasDimensions, isFalse);
+      expect(
+        PageImageDecoded(bytes: Uint8List(0), width: 0, height: 200)
+            .hasDimensions,
+        isFalse,
+      );
     });
 
     test('false when both are zero', () {
-      expect(PageImage(Uint8List(0), 0, 0).hasDimensions, isFalse);
+      expect(
+        PageImageDecoded(bytes: Uint8List(0), width: 0, height: 0)
+            .hasDimensions,
+        isFalse,
+      );
+    });
+  });
+
+  group('PageImageBroken', () {
+    test('carries a reason string', () {
+      const broken = PageImageBroken(reason: 'base64 decode failed');
+      expect(broken.reason, 'base64 decode failed');
     });
   });
 
