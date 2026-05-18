@@ -11,6 +11,7 @@ import '../platform/callback_params.dart';
 import '../pre_auth_state.dart';
 import '../server_entry.dart';
 import '../server_manager.dart';
+import '../../../design/design.dart';
 
 class AuthCallbackScreen extends ConsumerStatefulWidget {
   const AuthCallbackScreen({super.key, required this.serverManager});
@@ -105,14 +106,18 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
     return Scaffold(
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(SoliplexSpacing.s4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 16),
+              Icon(
+                Icons.error_outline,
+                size: 48,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(height: SoliplexSpacing.s4),
               Text(_error ?? 'An error occurred'),
-              const SizedBox(height: 16),
+              const SizedBox(height: SoliplexSpacing.s4),
               FilledButton(
                 onPressed: () => context.go(AppRoutes.home),
                 child: const Text('Back to home'),

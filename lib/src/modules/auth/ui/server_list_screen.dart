@@ -11,6 +11,7 @@ import '../auth_providers.dart';
 import '../auth_tokens.dart';
 import '../server_entry.dart';
 import '../server_manager.dart';
+import '../../../design/design.dart';
 
 class ServerListScreen extends ConsumerStatefulWidget {
   const ServerListScreen({super.key, required this.serverManager});
@@ -78,7 +79,8 @@ class _ServerListScreenState extends ConsumerState<ServerListScreen> {
 
   Widget _sectionHeader(ThemeData theme, String label) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      padding: const EdgeInsets.fromLTRB(SoliplexSpacing.s4, SoliplexSpacing.s4,
+          SoliplexSpacing.s4, SoliplexSpacing.s1),
       child: Text(
         label,
         style: theme.textTheme.titleSmall?.copyWith(
