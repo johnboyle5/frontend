@@ -5,6 +5,8 @@ import 'package:flutter_markdown_plus_latex/flutter_markdown_plus_latex.dart';
 import '../../../../shared/failed_image.dart';
 import 'code_block_builder.dart';
 import 'data_uri_image.dart';
+import 'file_image_loader.dart'
+    if (dart.library.io) 'file_image_loader_io.dart';
 import 'inline_code_builder.dart';
 import 'markdown_renderer.dart';
 import 'markdown_theme_extension.dart';
@@ -60,23 +62,49 @@ class FlutterMarkdownPlusRenderer extends MarkdownRenderer {
   }
 }
 
+/// Equal-or-better coverage vs `kDefaultImageBuilder` in `flutter_markdown_plus`:
+/// every scheme the default handles is handled here, with all failure paths
+/// routed to a visible [FailedImage] (default uses an invisible `SizedBox`).
+/// `file://` goes through [loadFileImage], which is conditional-imported —
+/// `Image.file` on native, [FailedImage] on web (no filesystem).
 Widget _buildImage(Uri uri, String? title, String? alt) {
   final rawUri = uri.toString();
-  if (uri.scheme == 'data') {
+  return switch (uri.scheme) {
+    'data' => _buildDataImage(uri, alt, rawUri),
+    'http' || 'https' => Image.network(
+        rawUri,
+        errorBuilder: (_, __, ___) => FailedImage(source: rawUri, label: alt),
+      ),
+    'resource' => Image.asset(
+        uri.path,
+        errorBuilder: (_, __, ___) => FailedImage(source: rawUri, label: alt),
+      ),
+    'file' => loadFileImage(uri, rawUri, alt),
+    _ => FailedImage(source: rawUri, label: alt),
+  };
+}
+
+Widget _buildDataImage(Uri uri, String? alt, String rawUri) {
+  final data = uri.data;
+  if (data == null) return FailedImage(source: rawUri, label: alt);
+
+  final mime = data.mimeType;
+  if (mime.startsWith('image/')) {
     final decoded = tryDecodeImageDataUri(rawUri);
-    if (decoded == null) {
-      return FailedImage(source: rawUri, label: alt);
-    }
+    if (decoded == null) return FailedImage(source: rawUri, label: alt);
     return Image.memory(
       decoded.bytes,
       errorBuilder: (_, __, ___) => FailedImage(source: rawUri, label: alt),
     );
   }
-  if (uri.scheme == 'http' || uri.scheme == 'https') {
-    return Image.network(
-      rawUri,
-      errorBuilder: (_, __, ___) => FailedImage(source: rawUri, label: alt),
-    );
+
+  if (mime.startsWith('text/')) {
+    try {
+      return Text(data.contentAsString());
+    } on FormatException {
+      return FailedImage(source: rawUri, label: alt);
+    }
   }
+
   return FailedImage(source: rawUri, label: alt);
 }

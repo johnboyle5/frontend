@@ -162,5 +162,126 @@ void main() {
       expect(find.byType(Image), findsOneWidget);
       expect(find.byType(FailedImage), findsNothing);
     });
+
+    testWidgets('data:text/plain URI renders the decoded text inline',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: FlutterMarkdownPlusRenderer(
+              data: '![ignored](data:text/plain,Hello%20there)',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(FailedImage), findsNothing);
+      expect(find.text('Hello there'), findsOneWidget);
+    });
+
+    testWidgets('data URI with non-image, non-text MIME renders a FailedImage',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: FlutterMarkdownPlusRenderer(
+              data: '![alt](data:application/pdf;base64,AAAA)',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(FailedImage), findsOneWidget);
+    });
+
+    testWidgets('http image with a failing URL surfaces via FailedImage',
+        (tester) async {
+      // Image.network's load will fail (no network in tests). The custom
+      // errorBuilder routes that failure to FailedImage so the user sees a
+      // visible broken-image badge plus a source toggle showing the URL.
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: FlutterMarkdownPlusRenderer(
+              data: '![alt](https://example.invalid/missing.png)',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      // Let the network request fail.
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(FailedImage), findsOneWidget);
+    });
+
+    testWidgets(
+        'file:// URI is routed through Image.file on native (parity with default)',
+        (tester) async {
+      // Tests run on native (host machine), so loadFileImage uses Image.file.
+      // The asynchronous file read does not resolve under the test scheduler,
+      // so we assert that an Image widget was constructed rather than waiting
+      // for errorBuilder. This is the parity claim: file:// no longer falls
+      // through to FailedImage; it goes through Image.file the same way
+      // kDefaultImageBuilder does.
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: FlutterMarkdownPlusRenderer(
+              data: '![alt](file:///nonexistent/path/that/will/not/load.png)',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.byType(FailedImage), findsNothing);
+    });
+
+    testWidgets(
+        'resource: URI is routed through Image.asset (failure -> FailedImage)',
+        (tester) async {
+      // Asset doesn't exist in the test bundle, so the load will fail and
+      // the custom errorBuilder routes to FailedImage. The important thing
+      // is that an Image widget is created (parity with kDefaultImageBuilder)
+      // rather than falling straight through to the unknown-scheme branch.
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: FlutterMarkdownPlusRenderer(
+              data: '![icon](resource:/assets/missing.png)',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(FailedImage), findsOneWidget);
+    });
+
+    testWidgets('unknown scheme (e.g. ftp://) renders a FailedImage',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: FlutterMarkdownPlusRenderer(
+              data: '![alt](ftp://example.com/foo.png)',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(FailedImage), findsOneWidget);
+    });
   });
 }
