@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:soliplex_logging/soliplex_logging.dart';
 
 import '../../../../shared/failed_image.dart';
+import 'log_source.dart';
 
 final _logger =
     LogManager.instance.getLogger('soliplex_frontend.markdown_image');
@@ -19,8 +20,10 @@ Widget loadFileImage(Uri uri, String rawUri, String? alt) {
     return Image.file(
       File.fromUri(uri),
       errorBuilder: (_, error, stack) {
-        _logger.warning(
-          'file image failed to load: $rawUri',
+        logFailedSourceOnce(
+          _logger,
+          'file image failed to load: ${safeSourceForLog(rawUri)}',
+          rawUri,
           error: error,
           stackTrace: stack,
         );
@@ -28,8 +31,11 @@ Widget loadFileImage(Uri uri, String rawUri, String? alt) {
       },
     );
   } on UnsupportedError catch (error, stack) {
-    _logger.warning(
-      'file: URI could not be converted to a file path: $rawUri',
+    logFailedSourceOnce(
+      _logger,
+      'file: URI could not be converted to a file path: '
+      '${safeSourceForLog(rawUri)}',
+      rawUri,
       error: error,
       stackTrace: stack,
     );

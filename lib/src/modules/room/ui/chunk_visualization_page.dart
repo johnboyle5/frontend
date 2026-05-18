@@ -19,7 +19,7 @@ sealed class PageImage {
 /// A successfully decoded page image with its raw PNG bytes and dimensions.
 /// [hasDimensions] is false when [readPngDimensions] could not parse an IHDR
 /// chunk — the bytes are still valid base64 but may not be a PNG; rendering
-/// falls back to an unconstrained [InteractiveViewer].
+/// uses [InteractiveViewer] without computed sizing from IHDR.
 @visibleForTesting
 final class PageImageDecoded extends PageImage {
   const PageImageDecoded({
@@ -143,9 +143,22 @@ class _ChunkVisualizationPageState extends State<ChunkVisualizationPage> {
   }
 
   void _loadVisualization() {
-    _future = widget.api
-        .getChunkVisualization(widget.roomId, widget.chunkId)
-        .then((viz) => viz.imagesBase64.map(_decodePageImage).toList());
+    _future = _fetchAndDecode();
+  }
+
+  Future<List<PageImage>> _fetchAndDecode() async {
+    try {
+      final viz =
+          await widget.api.getChunkVisualization(widget.roomId, widget.chunkId);
+      return viz.imagesBase64.map(_decodePageImage).toList();
+    } catch (error, stack) {
+      _logger.warning(
+        'chunk visualization fetch failed',
+        error: error,
+        stackTrace: stack,
+      );
+      rethrow;
+    }
   }
 
   /// Decodes one entry from `imagesBase64`. Returns a [PageImageDecoded] on
@@ -292,7 +305,13 @@ class _ChunkVisualizationPageState extends State<ChunkVisualizationPage> {
   Widget _buildPageImage(PageImage page, int rotation) {
     return switch (page) {
       PageImageBroken(:final reason) => Center(
-          child: FailedImage(label: 'Page image failed to decode: $reason'),
+          // FormatException messages are usually short but uncapped; bound
+          // the displayed reason so a long message doesn't blow out the
+          // placeholder.
+          child: FailedImage(
+            label: 'Page image failed to decode: '
+                '${reason.length <= 80 ? reason : '${reason.substring(0, 80)}…'}',
+          ),
         ),
       PageImageDecoded() => _buildDecodedPageImage(page, rotation),
     };

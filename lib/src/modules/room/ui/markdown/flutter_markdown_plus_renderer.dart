@@ -9,6 +9,7 @@ import 'data_uri_image.dart';
 import 'file_image_loader.dart'
     if (dart.library.io) 'file_image_loader_io.dart';
 import 'inline_code_builder.dart';
+import 'log_source.dart';
 import 'markdown_renderer.dart';
 import 'markdown_theme_extension.dart';
 
@@ -78,8 +79,10 @@ Widget _buildImage(Uri uri, String? title, String? alt) {
     'http' || 'https' => Image.network(
         rawUri,
         errorBuilder: (_, error, stack) {
-          _logger.warning(
-            'http image failed to load: ${_truncate(rawUri)}',
+          logFailedSourceOnce(
+            _logger,
+            'http image failed to load: ${safeSourceForLog(rawUri)}',
+            rawUri,
             error: error,
             stackTrace: stack,
           );
@@ -89,8 +92,10 @@ Widget _buildImage(Uri uri, String? title, String? alt) {
     'resource' => Image.asset(
         uri.path,
         errorBuilder: (_, error, stack) {
-          _logger.warning(
-            'resource image failed to load: ${_truncate(rawUri)}',
+          logFailedSourceOnce(
+            _logger,
+            'resource image failed to load: ${safeSourceForLog(rawUri)}',
+            rawUri,
             error: error,
             stackTrace: stack,
           );
@@ -98,12 +103,16 @@ Widget _buildImage(Uri uri, String? title, String? alt) {
         },
       ),
     'file' => loadFileImage(uri, rawUri, alt),
-    _ => _logUnsupportedScheme(uri, rawUri, alt),
+    _ => _unsupportedSchemeFallback(uri, rawUri, alt),
   };
 }
 
-Widget _logUnsupportedScheme(Uri uri, String rawUri, String? alt) {
-  _logger.warning('markdown image with unsupported scheme: ${uri.scheme}');
+Widget _unsupportedSchemeFallback(Uri uri, String rawUri, String? alt) {
+  logFailedSourceOnce(
+    _logger,
+    'markdown image with unsupported scheme: ${uri.scheme}',
+    'scheme:${uri.scheme}',
+  );
   return FailedImage(source: rawUri, label: alt);
 }
 
@@ -118,16 +127,20 @@ Widget _buildDataImage(Uri uri, String? alt, String rawUri) {
   if (mime.startsWith('image/')) {
     final decoded = tryDecodeImageDataUri(rawUri);
     if (decoded == null) {
-      _logger.warning(
-        'data:image/* URI failed to decode: ${_truncate(rawUri)}',
+      logFailedSourceOnce(
+        _logger,
+        'data:image/* URI failed to decode: ${safeSourceForLog(rawUri)}',
+        rawUri,
       );
       return FailedImage(source: rawUri, label: alt);
     }
     return Image.memory(
       decoded.bytes,
       errorBuilder: (_, error, stack) {
-        _logger.warning(
-          'data:image/* bytes failed to render: ${_truncate(rawUri)}',
+        logFailedSourceOnce(
+          _logger,
+          'data:image/* bytes failed to render: ${safeSourceForLog(rawUri)}',
+          rawUri,
           error: error,
           stackTrace: stack,
         );
@@ -140,8 +153,10 @@ Widget _buildDataImage(Uri uri, String? alt, String rawUri) {
     try {
       return Text(data.contentAsString());
     } on FormatException catch (error, stack) {
-      _logger.warning(
-        'data:text/* URI failed to decode: ${_truncate(rawUri)}',
+      logFailedSourceOnce(
+        _logger,
+        'data:text/* URI failed to decode: ${safeSourceForLog(rawUri)}',
+        rawUri,
         error: error,
         stackTrace: stack,
       );
@@ -149,12 +164,10 @@ Widget _buildDataImage(Uri uri, String? alt, String rawUri) {
     }
   }
 
-  _logger.warning(
-    'data: URI with unsupported MIME $mime: ${_truncate(rawUri)}',
+  logFailedSourceOnce(
+    _logger,
+    'data: URI with unsupported MIME $mime: ${safeSourceForLog(rawUri)}',
+    rawUri,
   );
   return FailedImage(source: rawUri, label: alt);
 }
-
-/// Truncates long URIs (mainly base64 data URIs) for log readability.
-String _truncate(String s, {int max = 120}) =>
-    s.length <= max ? s : '${s.substring(0, max)}…(${s.length} chars)';

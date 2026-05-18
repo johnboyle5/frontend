@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -258,6 +259,29 @@ void main() {
       final image = tester.widget<Image>(find.byType(Image));
       expect(image.image, isA<AssetImage>());
     });
+
+    testWidgets(
+        'file:// URI with a non-localhost authority hits the UnsupportedError catch',
+        (tester) async {
+      // `uri.toFilePath()` throws UnsupportedError on non-Windows when the
+      // URI has a non-localhost authority. This exercises the synchronous
+      // catch in `loadFileImage` (not the async Image.file errorBuilder
+      // path). Skipped on Windows because UNC paths are valid there.
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: FlutterMarkdownPlusRenderer(
+              data: '![alt](file://host/foo.png)',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(FailedImage), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
+    }, skip: Platform.isWindows);
 
     testWidgets('unknown scheme (e.g. ftp://) renders a FailedImage',
         (tester) async {
