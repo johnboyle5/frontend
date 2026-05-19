@@ -8,6 +8,7 @@ import '../../auth/server_manager.dart';
 import '../lobby_state.dart';
 import 'room_card.dart';
 import 'server_sidebar.dart';
+import '../../../design/design.dart';
 
 const double _sidebarWidth = 240;
 const double _wideBreakpoint = 600;
@@ -227,7 +228,7 @@ class _RoomContent extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('No servers connected'),
-            const SizedBox(height: 16),
+            const SizedBox(height: SoliplexSpacing.s4),
             FilledButton(
               onPressed: onAddServer,
               child: const Text('Add Server'),
@@ -275,7 +276,8 @@ class _ServerSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: const EdgeInsets.fromLTRB(SoliplexSpacing.s4,
+              SoliplexSpacing.s4, SoliplexSpacing.s4, SoliplexSpacing.s2),
           child: Text(
             heading,
             style: Theme.of(context).textTheme.titleMedium,
@@ -283,11 +285,12 @@ class _ServerSection extends StatelessWidget {
         ),
         switch (serverRooms) {
           RoomsLoading() => const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
+              padding: EdgeInsets.symmetric(horizontal: SoliplexSpacing.s4),
               child: LinearProgressIndicator(),
             ),
           RoomsFailed(:final error) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s4),
               child: Text('Failed to load rooms: $error'),
             ),
           RoomsLoaded(:final rooms) => Column(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../quiz_session.dart';
+import '../../../design/design.dart';
 
 class QuizResultsView extends StatelessWidget {
   const QuizResultsView({
@@ -29,14 +30,14 @@ class QuizResultsView extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 400),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(SoliplexSpacing.s4),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(scoreIcon, size: 64, color: scoreColor),
-              const SizedBox(height: 16),
+              const SizedBox(height: SoliplexSpacing.s4),
               Text('Quiz Complete!', style: theme.textTheme.headlineMedium),
-              const SizedBox(height: 8),
+              const SizedBox(height: SoliplexSpacing.s2),
               Text(
                 '${session.scorePercent}%',
                 style: theme.textTheme.displayLarge?.copyWith(
@@ -44,14 +45,14 @@ class QuizResultsView extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: SoliplexSpacing.s2),
               Text(
                 '${session.correctCount} of ${session.totalAnswered} correct',
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: SoliplexSpacing.s6),
               Wrap(
                 alignment: WrapAlignment.center,
                 spacing: 8,

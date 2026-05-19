@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../auth/server_entry.dart';
 import '../lobby_state.dart';
+import '../../../design/design.dart';
 
 class ServerSidebar extends StatelessWidget {
   const ServerSidebar({
@@ -63,7 +64,8 @@ class _ServerList extends StatelessWidget {
     return ListView(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: const EdgeInsets.fromLTRB(SoliplexSpacing.s4,
+              SoliplexSpacing.s4, SoliplexSpacing.s4, SoliplexSpacing.s2),
           child: Text(
             'Servers (${servers.length})',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -78,7 +80,7 @@ class _ServerList extends StatelessWidget {
             onTap: onServerTap,
           ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.symmetric(horizontal: SoliplexSpacing.s2),
           child: OutlinedButton.icon(
             onPressed: onAddServer,
             icon: const Icon(Icons.add, size: 18),

@@ -11,6 +11,7 @@ import '../quiz_session_controller.dart';
 import 'quiz_question.dart';
 import 'quiz_results.dart';
 import 'quiz_start.dart';
+import '../../../design/design.dart';
 
 class QuizScreen extends StatefulWidget {
   const QuizScreen({
@@ -123,12 +124,12 @@ class _QuizScreenState extends State<QuizScreen> {
               };
               return Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(SoliplexSpacing.s4),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(message),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: SoliplexSpacing.s4),
                       FilledButton(
                         onPressed: action,
                         child: Text(label),

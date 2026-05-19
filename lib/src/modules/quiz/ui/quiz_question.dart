@@ -4,6 +4,7 @@ import 'package:soliplex_client/soliplex_client.dart';
 import '../quiz_session.dart';
 import 'quiz_answer_input.dart';
 import 'quiz_feedback.dart';
+import '../../../design/design.dart';
 
 class QuizQuestionView extends StatelessWidget {
   const QuizQuestionView({
@@ -51,10 +52,11 @@ class QuizQuestionView extends StatelessWidget {
         ),
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(SoliplexSpacing.s4),
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 600),
+                constraints:
+                    const BoxConstraints(maxWidth: SoliplexBreakpoints.tablet),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -65,22 +67,22 @@ class QuizQuestionView extends StatelessWidget {
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: SoliplexSpacing.s2),
                     Text(question.text, style: theme.textTheme.titleLarge),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: SoliplexSpacing.s4),
                     _buildInput(question, questionState, selectedOption),
                     if (submissionError != null) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: SoliplexSpacing.s4),
                       QuizErrorFeedback(
                         message: submissionError!,
                         onRetry: onRetry,
                       ),
                     ],
                     if (questionState case Answered(:final result)) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: SoliplexSpacing.s4),
                       QuizAnswerFeedback(result: result),
                     ],
-                    const SizedBox(height: 16),
+                    const SizedBox(height: SoliplexSpacing.s4),
                     _buildActionButton(questionState),
                   ],
                 ),
